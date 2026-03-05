@@ -1,6 +1,6 @@
 import {
   SABOTAGES,
-  DEFENSES,
+  DEFENSE_DEFS,
   SABOTAGE_TYPES,
   DEFENSE_TYPES,
   type SabotageType,
@@ -88,24 +88,24 @@ describe('defense definitions', () => {
 
   test('all defense types have positive cost', () => {
     for (const type of DEFENSE_TYPES) {
-      expect(DEFENSES[type].cost).toBeGreaterThan(0);
+      expect(DEFENSE_DEFS[type].cost).toBeGreaterThan(0);
     }
   });
 
   test('shield costs 150', () => {
-    expect(DEFENSES.shield.cost).toBe(150);
+    expect(DEFENSE_DEFS.shield.cost).toBe(150);
   });
 
   test('deflect costs 200', () => {
-    expect(DEFENSES.deflect.cost).toBe(200);
+    expect(DEFENSE_DEFS.deflect.cost).toBe(200);
   });
 
   test('ghost_mode has 120s duration', () => {
-    expect(DEFENSES.ghost_mode.duration).toBe(120);
+    expect(DEFENSE_DEFS.ghost_mode.duration).toBe(120);
   });
 
   test('speed_boost has 60s duration', () => {
-    expect(DEFENSES.speed_boost.duration).toBe(60);
+    expect(DEFENSE_DEFS.speed_boost.duration).toBe(60);
   });
 });
 

@@ -1,3 +1,4 @@
+import { ATTACKS, DEFENSES } from './weapons';
 import type { AttackId, DefenseId } from './weapons';
 
 // ---------------------------------------------------------------------------
@@ -57,25 +58,16 @@ export interface CreditAllocation {
 // Definitions
 // ---------------------------------------------------------------------------
 
-export const SABOTAGES: Record<SabotageType, SabotageDefinition> = {
-  lockout: { cost: 200, duration: 90 },
-  fake_news: { cost: 150, duration: 8 },
-  margin_squeeze: { cost: 300, duration: null },
-  expose: { cost: 100, duration: 120 },
-  asset_freeze: { cost: 250, duration: 60 },
-  glitch: { cost: 50, duration: 10 },
-  forced_trade: { cost: 500, duration: null },
-};
+export const SABOTAGES: Record<SabotageType, SabotageDefinition> = Object.fromEntries(
+  ATTACKS.map(a => [a.id, { cost: a.cost, duration: a.duration || null }])
+) as Record<SabotageType, SabotageDefinition>;
 
-export const DEFENSES: Record<DefenseType, DefenseDefinition> = {
-  shield: { cost: 150 },
-  deflect: { cost: 200 },
-  ghost_mode: { cost: 300, duration: 120 },
-  speed_boost: { cost: 100, duration: 60 },
-};
+export const DEFENSE_DEFS: Record<DefenseType, DefenseDefinition> = Object.fromEntries(
+  DEFENSES.map(d => [d.id, { cost: d.cost, ...(d.duration ? { duration: d.duration } : {}) }])
+) as Record<DefenseType, DefenseDefinition>;
 
-export const SABOTAGE_TYPES = Object.keys(SABOTAGES) as SabotageType[];
-export const DEFENSE_TYPES = Object.keys(DEFENSES) as DefenseType[];
+export const SABOTAGE_TYPES = ATTACKS.map(a => a.id) as SabotageType[];
+export const DEFENSE_TYPES = DEFENSES.map(d => d.id) as DefenseType[];
 
 const COOLDOWN_SECONDS = 180; // 3 minutes
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import {
-  DEFENSES,
+  DEFENSE_DEFS,
   DEFENSE_TYPES,
   type DefenseType,
   getCredits,
@@ -26,7 +26,7 @@ export async function POST(
     return NextResponse.json({ error: `Invalid defense type: ${type}` }, { status: 400 });
   }
 
-  const defenseDef = DEFENSES[type as DefenseType];
+  const defenseDef = DEFENSE_DEFS[type as DefenseType];
 
   // Check credits
   const balance = await getCredits(trader_id, lobbyId);
