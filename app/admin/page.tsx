@@ -58,57 +58,60 @@ export default function AdminPage() {
     ]);
   }, []);
 
-  const adminFetch = useCallback(
-    async (action: string, extra: Record<string, unknown> = {}) => {
+  const adminPost = useCallback(
+    async (path: string, body: Record<string, unknown> = {}) => {
+      const label = path.split('/').pop() ?? path;
       try {
-        const res = await fetch(`/api/lobby/${lobbyId}/admin`, {
+        const res = await fetch(`/api/lobby/${lobbyId}/admin/${path}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: password,
           },
-          body: JSON.stringify({ action, ...extra }),
+          body: JSON.stringify(body),
         });
         const data = await res.json();
         if (!res.ok) {
-          addLog(`[${action}] ERROR: ${data.error}`, 'error');
+          addLog(`[${label}] ERROR: ${data.error}`, 'error');
           return null;
         }
-        addLog(`[${action}] OK`, 'action');
+        addLog(`[${label}] OK`, 'action');
         return data;
       } catch (err) {
-        addLog(`[${action}] FETCH ERROR: ${String(err)}`, 'error');
+        addLog(`[${label}] FETCH ERROR: ${String(err)}`, 'error');
         return null;
       }
     },
     [password, lobbyId, addLog]
   );
 
-  const fetchStandings = useCallback(async () => {
-    if (!currentRound || !lobbyId) return;
-    try {
-      const res = await fetch(
-        `/api/lobby/${lobbyId}/leaderboard?round_id=${currentRound.id}`,
-        { headers: { Authorization: password } }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setStandings(data.standings ?? []);
-      }
-    } catch {
-      // silent — polling
-    }
-  }, [currentRound, lobbyId, password]);
 
   const fetchCurrentRound = useCallback(async () => {
     if (!lobbyId) return;
     try {
-      const res = await fetch(`/api/lobby/${lobbyId}/admin?action=current_round`, {
+      const res = await fetch(`/api/lobby/${lobbyId}/admin/status`, {
         headers: { Authorization: password },
       });
       if (res.ok) {
         const data = await res.json();
         if (data.round) setCurrentRound(data.round);
+        if (data.traders) {
+          // Map status response traders to standings format
+          const mapped: TraderStanding[] = (data.traders as Array<Record<string, unknown>>)
+            .filter((t) => t.rank != null)
+            .map((t) => ({
+              trader: {
+                id: t.trader_id as string,
+                name: t.name as string,
+                team_id: (t.team_id as string) ?? null,
+                is_eliminated: t.is_eliminated as boolean,
+              },
+              portfolioValue: t.balance as number,
+              returnPct: t.return_pct as number,
+              rank: t.rank as number,
+            }));
+          setStandings(mapped);
+        }
       }
     } catch {
       // silent
@@ -124,11 +127,10 @@ export default function AdminPage() {
 
   // Poll standings every 2s
   useEffect(() => {
-    if (!authenticated || !currentRound) return;
-    fetchStandings();
-    const interval = setInterval(fetchStandings, 2000);
+    if (!authenticated || !lobbyId) return;
+    const interval = setInterval(fetchCurrentRound, 2000);
     return () => clearInterval(interval);
-  }, [authenticated, currentRound, fetchStandings]);
+  }, [authenticated, lobbyId, fetchCurrentRound]);
 
   // Round timer
   useEffect(() => {
@@ -158,33 +160,42 @@ export default function AdminPage() {
 
   const handleStartRound = async () => {
     if (!currentRound) return;
-    const result = await adminFetch('start_round', { round_id: currentRound.id });
+    const result = await adminPost('round/start', { round_id: currentRound.id });
     if (result?.round) setCurrentRound(result.round);
   };
 
   const handleFreezeRound = async () => {
     if (!currentRound) return;
-    const result = await adminFetch('freeze_round', { round_id: currentRound.id });
+    const result = await adminPost('round/freeze', { round_id: currentRound.id });
     if (result?.round) setCurrentRound(result.round);
   };
 
   const handleEndRound = async () => {
     if (!currentRound) return;
-    const result = await adminFetch('end_round', { round_id: currentRound.id });
-    if (result?.round) setCurrentRound(result.round);
+    // End round = next round without starting (completes current)
+    const result = await adminPost('round/next', {
+      settings: {
+        duration_seconds: currentRound.duration_seconds,
+        starting_balance: currentRound.starting_balance,
+      },
+    });
+    if (result?.round) {
+      setCurrentRound(result.round);
+      addLog(`Round ended, created Round ${result.round.round_number}`, 'action');
+    }
   };
 
   const handleEliminate = async (traderId: string, traderName: string) => {
-    const result = await adminFetch('eliminate_trader', { trader_id: traderId });
+    const result = await adminPost('round/eliminate', { trader_id: traderId });
     if (result) {
       addLog(`Eliminated: ${traderName}`, 'action');
-      fetchStandings();
+      fetchCurrentRound();
     }
   };
 
   const handleNextRound = async () => {
     if (!lobbyId) return;
-    const result = await adminFetch('next_round', {
+    const result = await adminPost('round/next', {
       settings: {
         duration_seconds: duration,
         starting_balance: currentRound?.starting_balance ?? 10000,
