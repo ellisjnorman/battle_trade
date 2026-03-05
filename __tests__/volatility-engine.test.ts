@@ -188,12 +188,12 @@ describe('event lifecycle', () => {
     expect(engine.getActiveEvent()).toBeNull();
   });
 
-  test('triggering new event completes previous one', () => {
+  test('concurrent events: both stay active', () => {
     const { engine } = makeEngine();
     const first = engine.triggerEvent('flash_crash', 'ALL', 0.1, 60000);
     const second = engine.triggerEvent('moon_shot', 'ALL', 0.1, 60000);
 
-    expect(first.status).toBe('complete');
+    expect(first.status).toBe('active');
     expect(second.status).toBe('active');
     expect(engine.getActiveEvent()?.id).toBe(second.id);
   });
