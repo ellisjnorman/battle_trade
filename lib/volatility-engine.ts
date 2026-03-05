@@ -209,7 +209,9 @@ export class VolatilityEngine {
 
   private events: Map<string, ActiveEvent> = new Map();
   private activeEvent: ActiveEvent | null = null;
+  private activeEvents: Map<string, ActiveEvent> = new Map(); // keyed by asset or 'ALL'
   private tickTimer: ReturnType<typeof setInterval> | null = null;
+  private eventTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private algoConfig: AlgoConfig;
   private lastAutoTrigger: number = 0;
   private basePrices: Record<string, number> = {};
@@ -242,6 +244,18 @@ export class VolatilityEngine {
 
   getModifiedPrice(asset: string, basePrice: number): number {
     this.basePrices[asset] = basePrice;
+
+    // Check concurrent per-asset events first
+    let price = basePrice;
+    for (const ev of this.activeEvents.values()) {
+      if (ev.status !== 'active') continue;
+      if (ev.asset !== 'ALL' && ev.asset !== asset) continue;
+      const elapsed = ev.triggered_at ? (Date.now() - ev.triggered_at) / 1000 : 0;
+      price = applyPriceModifier(price, ev, elapsed);
+    }
+    if (this.activeEvents.size > 0) return price;
+
+    // Legacy single-event fallback
     if (!this.activeEvent || this.activeEvent.status !== 'active') {
       return basePrice;
     }
@@ -256,11 +270,28 @@ export class VolatilityEngine {
 
   getModifiedPrices(rawPrices: Record<string, number>): Record<string, number> {
     this.basePrices = { ...rawPrices };
+    const out: Record<string, number> = {};
+
+    // Apply all concurrent active events
+    if (this.activeEvents.size > 0) {
+      for (const [sym, price] of Object.entries(rawPrices)) {
+        let modified = price;
+        for (const ev of this.activeEvents.values()) {
+          if (ev.status !== 'active') continue;
+          if (ev.asset !== 'ALL' && ev.asset !== sym) continue;
+          const elapsed = ev.triggered_at ? (Date.now() - ev.triggered_at) / 1000 : 0;
+          modified = applyPriceModifier(modified, ev, elapsed);
+        }
+        out[sym] = modified;
+      }
+      return out;
+    }
+
+    // Legacy single-event fallback
     if (!this.activeEvent || this.activeEvent.status !== 'active') {
       return { ...rawPrices };
     }
     const mod = this.activeEvent;
-    const out: Record<string, number> = {};
     for (const [sym, price] of Object.entries(rawPrices)) {
       if (mod.asset === 'ALL' || mod.asset === sym) {
         const elapsed = mod.triggered_at ? (Date.now() - mod.triggered_at) / 1000 : 0;
@@ -362,6 +393,10 @@ export class VolatilityEngine {
   // ----- public: lifecycle ------------------------------------------------
 
   cancelActiveEvent() {
+    // Cancel all active events
+    for (const ev of Array.from(this.activeEvents.values())) {
+      if (ev.status === 'active') this.completeEvent(ev);
+    }
     if (this.activeEvent && this.activeEvent.status === 'active') {
       this.completeEvent(this.activeEvent);
     }
@@ -372,7 +407,12 @@ export class VolatilityEngine {
       clearInterval(this.tickTimer);
       this.tickTimer = null;
     }
+    for (const timer of this.eventTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.eventTimers.clear();
     this.activeEvent = null;
+    this.activeEvents.clear();
     this.events.clear();
     this.firedTypes.clear();
     this.positionsLocked = false;
@@ -381,13 +421,11 @@ export class VolatilityEngine {
   // ----- internal ---------------------------------------------------------
 
   private activateEvent(event: ActiveEvent) {
-    if (this.activeEvent?.status === 'active') {
-      this.completeEvent(this.activeEvent);
-    }
-
+    // For concurrent events, don't cancel existing ones — add to the map
     event.status = 'active';
     event.triggered_at = Date.now();
     this.activeEvent = event;
+    this.activeEvents.set(event.id, event);
 
     if (event.type === 'lockout') {
       this.positionsLocked = true;
@@ -399,26 +437,40 @@ export class VolatilityEngine {
       secondsRemaining: event.duration_seconds,
     });
 
-    if (this.tickTimer) clearInterval(this.tickTimer);
-    this.tickTimer = setTimeout(() => {
-      this.completeEvent(event);
-    }, event.duration_seconds * 1000) as unknown as ReturnType<typeof setInterval>;
+    // Per-event timer
+    if (event.duration_seconds > 0) {
+      const timer = setTimeout(() => {
+        this.completeEvent(event);
+      }, event.duration_seconds * 1000);
+      this.eventTimers.set(event.id, timer);
+    } else {
+      // Instant events (duration 0) complete immediately after applying
+      // but stay in activeEvents briefly for the broadcast
+      setTimeout(() => this.completeEvent(event), 100);
+    }
   }
 
   private completeEvent(event: ActiveEvent) {
     event.status = 'complete';
     event.completed_at = Date.now();
 
+    this.activeEvents.delete(event.id);
     if (this.activeEvent?.id === event.id) {
       this.activeEvent = null;
     }
-    if (this.tickTimer) {
-      clearTimeout(this.tickTimer as unknown as number);
-      this.tickTimer = null;
+
+    const timer = this.eventTimers.get(event.id);
+    if (timer) {
+      clearTimeout(timer);
+      this.eventTimers.delete(event.id);
     }
 
     if (event.type === 'lockout') {
-      this.positionsLocked = false;
+      // Only unlock if no other lockout is active
+      const hasOtherLockout = Array.from(this.activeEvents.values()).some(e => e.type === 'lockout' && e.status === 'active');
+      if (!hasOtherLockout) {
+        this.positionsLocked = false;
+      }
     }
 
     this.broadcastFn(this.lobby_id, {

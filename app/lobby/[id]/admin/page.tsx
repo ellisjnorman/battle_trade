@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { PRESETS, PRESET_CATEGORIES } from '@/lib/event-presets';
+import type { EventPreset } from '@/lib/event-presets';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -139,6 +141,10 @@ export default function AdminPanel() {
 
   // Traders
   const [traders, setTraders] = useState<TraderStatus[]>([]);
+
+  // Presets
+  const [presetCategory, setPresetCategory] = useState<EventPreset['category']>('crash');
+  const [presetCooldown, setPresetCooldown] = useState(false);
 
   // Volatility
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
@@ -425,6 +431,25 @@ export default function AdminPanel() {
   const handleCancelEvent = async () => {
     setActiveEvent(null);
     setActiveEventEnd(null);
+  };
+
+  const handleFirePreset = async (preset: EventPreset) => {
+    if (presetCooldown) return;
+    const res = await fetch(`/api/lobby/${lobbyId}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: password },
+      body: JSON.stringify({ preset_id: preset.id }),
+    });
+    const data = await res.json();
+    if (data.preset_id) {
+      // Set active event display from the first event in the chain
+      const maxDuration = Math.max(...preset.events.map(e => (e.delay_seconds ?? 0) + e.duration_seconds));
+      setActiveEvent({ id: preset.id, type: preset.events[0].type, asset: null, magnitude: null, duration_seconds: maxDuration, fired_at: new Date().toISOString(), headline: preset.headline });
+      setActiveEventEnd(Date.now() + maxDuration * 1000);
+      setPresetCooldown(true);
+      setTimeout(() => setPresetCooldown(false), 5000);
+      fetchEvents();
+    }
   };
 
   const handleForceTrader = async (traderId: string) => {
@@ -739,6 +764,78 @@ export default function AdminPanel() {
                 </button>
               </div>
             )}
+
+            {/* Divider */}
+            <div style={{ height: 1, background: '#1A1A1A' }} />
+
+            {/* PRESET DJ BOOTH */}
+            <div>
+              <div style={{ fontFamily: bebas, fontSize: 18, color: '#444', letterSpacing: '0.1em' }}>PRESET CHAINS</div>
+              <div style={{ fontFamily: sans, fontSize: 10, color: '#555', marginBottom: 8 }}>ONE-CLICK EVENT CHAINS WITH TIMING</div>
+
+              {/* Category tabs */}
+              <div style={{ display: 'flex', gap: 4, marginBottom: 12, flexWrap: 'wrap' }}>
+                {PRESET_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setPresetCategory(cat)}
+                    style={{
+                      padding: '4px 12px',
+                      background: presetCategory === cat ? '#F5A0D0' : 'transparent',
+                      color: presetCategory === cat ? '#0A0A0A' : '#666',
+                      border: `1px solid ${presetCategory === cat ? '#F5A0D0' : '#333'}`,
+                      fontFamily: bebas,
+                      fontSize: 13,
+                      letterSpacing: '0.08em',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {cat.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+
+              {/* Preset cards grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                {PRESETS.filter(p => p.category === presetCategory).map((preset) => (
+                  <button
+                    key={preset.id}
+                    onClick={() => handleFirePreset(preset)}
+                    disabled={presetCooldown}
+                    style={{
+                      background: '#0D0D0D',
+                      border: '1px solid #1A1A1A',
+                      padding: 12,
+                      cursor: presetCooldown ? 'not-allowed' : 'pointer',
+                      textAlign: 'left',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                      opacity: presetCooldown ? 0.5 : 1,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 20 }}>{preset.emoji}</span>
+                      <span style={{ fontFamily: bebas, fontSize: 16, color: '#FFF', letterSpacing: '0.05em' }}>{preset.name}</span>
+                    </div>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: '#888' }}>{preset.narrative}</span>
+                    <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                      {preset.events.map((ev, i) => (
+                        <span key={i} style={{ fontFamily: mono, fontSize: 8, color: '#555', background: '#111', padding: '1px 4px' }}>
+                          {ev.type.replace(/_/g, ' ').toUpperCase()}{ev.delay_seconds ? ` +${ev.delay_seconds}s` : ''}
+                        </span>
+                      ))}
+                    </div>
+                    <span style={{ fontFamily: mono, fontSize: 8, color: '#333', marginTop: 2 }}>
+                      {preset.timing.toUpperCase()} ROUND
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div style={{ height: 1, background: '#1A1A1A' }} />
 
             {/* Active event display */}
             {activeEvent && (

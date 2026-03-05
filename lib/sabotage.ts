@@ -1,17 +1,11 @@
+import type { AttackId, DefenseId } from './weapons';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type SabotageType =
-  | 'lockout'
-  | 'fake_news'
-  | 'margin_squeeze'
-  | 'expose'
-  | 'asset_freeze'
-  | 'glitch'
-  | 'forced_trade';
-
-export type DefenseType = 'shield' | 'deflect' | 'ghost_mode' | 'speed_boost';
+export type SabotageType = AttackId;
+export type DefenseType = DefenseId;
 
 export interface SabotageDefinition {
   cost: number;
@@ -65,7 +59,7 @@ export interface CreditAllocation {
 
 export const SABOTAGES: Record<SabotageType, SabotageDefinition> = {
   lockout: { cost: 200, duration: 90 },
-  fake_news: { cost: 150, duration: 10 },
+  fake_news: { cost: 150, duration: 8 },
   margin_squeeze: { cost: 300, duration: null },
   expose: { cost: 100, duration: 120 },
   asset_freeze: { cost: 250, duration: 60 },

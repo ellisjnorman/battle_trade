@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { ATTACKS as WEAPONS_LIST } from '@/lib/weapons';
 
 // ---------------------------------------------------------------------------
 // Fonts
@@ -79,15 +80,13 @@ interface BetState {
 // Weapon definitions
 // ---------------------------------------------------------------------------
 
-const WEAPONS = [
-  { type: 'lockout', icon: '🔒', name: 'LOCKOUT', desc: "Can't open positions 90s", cost: 200 },
-  { type: 'fake_news', icon: '📰', name: 'FAKE NEWS', desc: 'Inject a headline', cost: 150 },
-  { type: 'margin_squeeze', icon: '💸', name: 'SQUEEZE', desc: 'Take 10% of their money', cost: 300 },
-  { type: 'expose', icon: '🎯', name: 'EXPOSE', desc: 'Show their positions publicly', cost: 100 },
-  { type: 'asset_freeze', icon: '🔀', name: 'FREEZE', desc: 'Lock them to one asset', cost: 250 },
-  { type: 'glitch', icon: '🌀', name: 'GLITCH', desc: 'Visual chaos on their screen', cost: 50 },
-  { type: 'forced_trade', icon: '⚡', name: 'FORCE', desc: 'Make them open a random trade', cost: 500 },
-] as const;
+const WEAPONS = WEAPONS_LIST.map(w => ({
+  type: w.id,
+  icon: w.icon,
+  name: w.name,
+  desc: w.desc,
+  cost: w.cost,
+} as const));
 
 // ---------------------------------------------------------------------------
 // Component

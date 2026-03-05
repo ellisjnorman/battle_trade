@@ -209,13 +209,13 @@ function PnlVelocity({ velocity }: { velocity: Team["pnlVelocity"] }) {
       case "up_slow": return { text: "↑", color: "#00FF88", opacity: 0.5 }
       case "down_fast": return { text: "↓↓", color: "#FF3333", opacity: 1 }
       case "down_slow": return { text: "↓", color: "#FF3333", opacity: 0.5 }
-      case "flat": return { text: "→", color: "#444444", opacity: 1 }
+      case "flat": return { text: "→", color: "#444", opacity: 1 }
     }
   }
   const arrow = getArrow()
   return (
     <span
-      className="font-display text-[14px] ml-2"
+      className="font-display tracking-[0.05em] text-[14px] ml-2"
       style={{ color: arrow.color, opacity: arrow.opacity }}
     >
       {arrow.text}
@@ -248,10 +248,10 @@ function CrowdHeatBar({ heat }: { heat: number }) {
 
 function TeamAvatar({ team, size = 44, isEliminated = false }: { team: Team; size?: number; isEliminated?: boolean }) {
   const getBorderColor = () => {
-    if (isEliminated) return "#444444"
+    if (isEliminated) return "#444"
     if (team.rank === 1) return "#F5A0D0"
     if (team.rank === 8) return "#FF3333"
-    return "#333333"
+    return "#333"
   }
 
   return (
@@ -305,20 +305,20 @@ function TeamAvatar({ team, size = 44, isEliminated = false }: { team: Team; siz
 function EventCountdownBar({ event }: { event: MarketEvent }) {
   return (
     <div
-      className="h-[36px] w-full flex items-center justify-center px-8"
+      className="h-[32px] w-full flex items-center justify-center px-8"
       style={{
-        backgroundColor: "#1A0000",
+        backgroundColor: "#0D0D0D",
         borderTop: "1px solid #FF3333",
         borderBottom: "1px solid #FF3333",
         animation: "pulse-bar 1s ease-in-out infinite"
       }}
     >
       <div className="flex items-center gap-4">
-        <span className="font-display text-[20px] text-white">
+        <span className="font-display tracking-[0.05em] text-[20px] text-white">
           ⚠ MARKET EVENT IN 0:{event.countdownSeconds.toString().padStart(2, "0")}
         </span>
-        <span className="text-[#555555]">·</span>
-        <span className="font-display text-[20px] text-[#FF3333]">
+        <span className="text-[#555]">·</span>
+        <span className="font-display tracking-[0.05em] text-[20px] text-[#FF3333]">
           {event.type.replace(/_/g, " ").toUpperCase()} · {event.asset} {event.percentChange}%
         </span>
       </div>
@@ -340,17 +340,17 @@ function EventActiveOverlay({ event }: { event: MarketEvent }) {
       }}
     >
       <div className="flex items-center gap-4">
-        <span className="font-display text-[18px] text-[#FF3333]">
+        <span className="font-display tracking-[0.05em] text-[18px] text-[#FF3333]">
           {event.type.replace(/_/g, " ").toUpperCase()} ACTIVE
         </span>
         <span
-          className="font-mono text-[24px] text-[#FF3333]"
-          style={{ textShadow: "0 0 15px rgba(255,51,51,0.6)" }}
+          className="font-mono tracking-[-0.02em] text-[24px] text-[#FF3333]"
+          style={{ letterSpacing: "-0.02em" }}
         >
           {event.asset} {event.percentChange}%
         </span>
       </div>
-      <span className="font-mono text-[18px] text-[#FF3333]">
+      <span className="font-mono tracking-[-0.02em] text-[18px] text-[#FF3333]">
         ENDS IN 0:{event.endSeconds?.toString().padStart(2, "0")}
       </span>
     </div>
@@ -371,13 +371,13 @@ function ScheduledEventsPanel({ events }: { events: ScheduledEvent[] }) {
 
   return (
     <div className="mt-3">
-      <span className="font-display text-[11px] text-[#222222]">NEXT EVENTS</span>
+      <span className="font-display tracking-[0.05em] text-[11px] text-[#1A1A1A]">NEXT EVENTS</span>
       <div className="mt-1 flex flex-col gap-1">
         {events.map((event, i) => (
           <div key={i} className="flex items-center gap-1">
             <span className="font-sans text-[10px]">{getIcon(event.type)}</span>
-            <span className="font-mono text-[10px] text-[#F5A0D0]">{event.time}</span>
-            <span className="font-sans text-[10px] text-[#444444]">· {event.type} · {event.asset}</span>
+            <span className="font-mono tracking-[-0.02em] text-[10px] text-[#F5A0D0]">{event.time}</span>
+            <span className="font-sans text-[10px] text-[#444]">· {event.type} · {event.asset}</span>
           </div>
         ))}
       </div>
@@ -393,18 +393,18 @@ function OddsBoard({ teams, oddsData, totalBets }: { teams: Team[]; oddsData: Od
   const getOddsColor = (rank: number) => {
     if (rank <= 3) return "#F5A0D0"
     if (rank >= 6) return "#FF3333"
-    return "#888888"
+    return "#888"
   }
 
   return (
     <div className="border-t border-[#1A1A1A] pt-3">
       <div className="flex items-center justify-between mb-1">
-        <span className="font-display text-[13px] text-[#333333]">LIVE ODDS</span>
-        <span className="font-mono text-[12px] text-[#F5A0D0]">{totalBets} BETS PLACED</span>
+        <span className="font-display tracking-[0.05em] text-[13px] text-[#333]">LIVE ODDS</span>
+        <span className="font-mono tracking-[-0.02em] text-[12px] text-[#F5A0D0]">{totalBets} BETS PLACED</span>
       </div>
 
       <div className="text-center mb-2">
-        <span className="font-sans text-[10px] text-[#444444]">WHO WINS THIS ROUND?</span>
+        <span className="font-sans text-[10px] text-[#444]">WHO WINS THIS ROUND?</span>
       </div>
 
       <div className="flex flex-col gap-[2px]">
@@ -422,11 +422,11 @@ function OddsBoard({ teams, oddsData, totalBets }: { teams: Team[]; oddsData: Od
                   <img src={avatarSrc(team.avatar)} alt={item.name} width={20} height={20} className="w-full h-full object-cover" />
                 </div>
               )}
-              <span className="font-sans text-[11px] text-[#555555] flex-shrink-0">{item.name}</span>
-              <span className="flex-1 text-[#222222] text-[10px] overflow-hidden whitespace-nowrap">
+              <span className="font-sans text-[11px] text-[#555] flex-shrink-0">{item.name}</span>
+              <span className="flex-1 text-[#1A1A1A] text-[10px] overflow-hidden whitespace-nowrap">
                 {"·".repeat(20)}
               </span>
-              <span className="font-display text-[18px] flex-shrink-0" style={{ color }}>
+              <span className="font-display tracking-[0.05em] text-[18px] flex-shrink-0" style={{ color }}>
                 {item.odds.toFixed(1)}X
               </span>
               <span className="font-sans text-[10px] flex-shrink-0" style={{ color }}>
@@ -452,15 +452,15 @@ function OddsBoard({ teams, oddsData, totalBets }: { teams: Team[]; oddsData: Od
 
 function RoundHistoryBar({ history }: { history: RoundHistory[] }) {
   return (
-    <div className="h-[32px] w-full bg-[#080808] border-b border-[#1A1A1A] flex items-center px-8 gap-6">
+    <div className="h-[32px] w-full bg-[#0A0A0A] border-b border-[#1A1A1A] flex items-center px-8 gap-6">
       {history.map((round, i) => (
         <div key={round.round} className="flex items-center gap-2">
-          {i > 0 && <div className="w-[1px] h-4 bg-[#222222]" />}
-          <span className="font-display text-[11px] text-[#444444]">ROUND {round.round}</span>
+          {i > 0 && <div className="w-[1px] h-4 bg-[#1A1A1A]" />}
+          <span className="font-display tracking-[0.05em] text-[11px] text-[#444]">ROUND {round.round}</span>
           {round.events?.map((event, j) => (
             <span
               key={j}
-              className="font-display text-[10px] text-[#FF3333] border border-[#FF3333] px-2 py-[1px]"
+              className="font-display tracking-[0.05em] text-[10px] text-[#FF3333] border border-[#FF3333] px-2 py-px"
             >
               {event.type} @ {event.time}
             </span>
@@ -468,11 +468,11 @@ function RoundHistoryBar({ history }: { history: RoundHistory[] }) {
           {round.isCurrent ? (
             <div className="flex items-center gap-1">
               <div className="w-[6px] h-[6px] bg-[#F5A0D0] animate-pulse" />
-              <span className="font-display text-[11px] text-[#F5A0D0]">ACTIVE</span>
+              <span className="font-display tracking-[0.05em] text-[11px] text-[#F5A0D0]">ACTIVE</span>
             </div>
           ) : (
             round.eliminatedTeam && (
-              <span className="font-display text-[11px] text-[#FF3333]">[ELIMINATED: {round.eliminatedTeam}]</span>
+              <span className="font-display tracking-[0.05em] text-[11px] text-[#FF3333]">[ELIMINATED: {round.eliminatedTeam}]</span>
             )
           )}
         </div>
@@ -503,33 +503,33 @@ function TopBar({ timeRemaining, spectators, biggestTrade, roundInfo, lobbyName 
           <div className="w-2 h-2 bg-[#FF3333]" />
           <span className="font-sans text-[11px] text-white">LIVE</span>
         </div>
-        <span className="text-[#333333]">|</span>
-        <span className="font-sans text-[11px] text-[#555555]">{spectators.toLocaleString()} WATCHING</span>
-        <span className="text-[#333333]">|</span>
+        <span className="text-[#333]">|</span>
+        <span className="font-sans text-[11px] text-[#555]">{spectators.toLocaleString()} WATCHING</span>
+        <span className="text-[#333]">|</span>
         <div className="flex flex-col">
-          <span className="font-sans text-[9px] text-[#444444] uppercase">TOP TRADE</span>
-          <span className="font-mono text-[12px] text-[#00FF88]">{biggestTrade.team} +${biggestTrade.amount.toLocaleString()}</span>
+          <span className="font-sans text-[9px] text-[#444] uppercase">TOP TRADE</span>
+          <span className="font-mono tracking-[-0.02em] text-[12px] text-[#00FF88]">{biggestTrade.team} +${biggestTrade.amount.toLocaleString()}</span>
         </div>
       </div>
 
       <div className="flex items-center gap-3">
-        <span className="font-display text-[22px] text-[#888888]">
+        <span className="font-display tracking-[0.05em] text-[22px] text-[#888]">
           ROUND {roundInfo?.number ?? 1} OF {roundInfo?.total ?? 4}
         </span>
-        <span className="text-[#444444]">|</span>
-        <span className="font-display text-[22px] text-[#F5A0D0]">
+        <span className="text-[#444]">|</span>
+        <span className="font-display tracking-[0.05em] text-[22px] text-[#F5A0D0]">
           LEVERAGE {roundInfo?.maxLeverage ?? 5}X
         </span>
       </div>
 
       <div className="flex items-center gap-6">
         <div className="flex flex-col items-end">
-          <span className="font-sans text-[9px] text-[#555555] uppercase tracking-[0.2em]">ROUND ENDS</span>
-          <span className={`font-mono text-[56px] leading-none ${isUrgent ? "text-[#FF3333]" : "text-white"}`}>
+          <span className="font-sans text-[9px] text-[#555] uppercase tracking-[0.2em]">ROUND ENDS</span>
+          <span className={`font-mono tracking-[-0.02em] text-[56px] leading-none ${isUrgent ? "text-[#FF3333]" : "text-white"}`}>
             {timeString}
           </span>
         </div>
-        <span className="font-sans text-[11px] text-[#444444]">{lobbyName}</span>
+        <span className="font-sans text-[11px] text-[#444]">{lobbyName}</span>
       </div>
     </div>
   )
@@ -543,7 +543,7 @@ function ExposedBadge({ asset }: { asset: string }) {
   return (
     <span
       className="font-sans text-[10px] text-[#FF3333] border border-[#FF3333] ml-2"
-      style={{ padding: "2px 6px" }}
+      style={{ padding: "4px 8px" }}
     >
       ⚠ {asset} EXPOSED
     </span>
@@ -561,38 +561,38 @@ function TeamRow({ team, isEliminated = false, eventActive = false, totalTeams =
   const isExposed = team.btcExposed && eventActive
 
   const getBorderColor = () => {
-    if (team.isComeback) return "#FF6B00"
+    if (team.isComeback) return "#FF3333"
     if (isFirst) return "#F5A0D0"
     if (isLast) return "#FF3333"
-    return "#222222"
+    return "#1A1A1A"
   }
 
   const getBackground = () => {
     if (isExposed) {
       return "linear-gradient(90deg, rgba(255,51,51,0.06) 0%, transparent 50%)"
     }
-    if (isFirst) return "#111111"
-    if (isLast) return "#150000"
+    if (isFirst) return "#111"
+    if (isLast) return "#0D0D0D"
     return "#0D0D0D"
   }
 
   const getRankColor = () => {
     if (team.rank === 1) return "#FFFFFF"
-    if (team.rank <= 4) return "#888888"
-    if (team.rank <= 7) return "#444444"
+    if (team.rank <= 4) return "#888"
+    if (team.rank <= 7) return "#444"
     return "#FF3333"
   }
 
   const getMovementColor = () => {
     if (team.movement.includes("▲")) return "#00FF88"
     if (team.movement.includes("▼")) return "#FF3333"
-    return "#444444"
+    return "#444"
   }
 
   const getOddsColor = () => {
     if (team.rank <= 3) return "#F5A0D0"
     if (isLast) return "#FF3333"
-    return "#888888"
+    return "#888"
   }
 
   return (
@@ -606,7 +606,7 @@ function TeamRow({ team, isEliminated = false, eventActive = false, totalTeams =
       }}
     >
       <div className="w-[70px] flex-shrink-0 flex items-center justify-center">
-        <span className="font-display text-[64px] leading-none" style={{ color: getRankColor() }}>
+        <span className="font-display tracking-[0.05em] text-[64px] leading-none" style={{ color: getRankColor() }}>
           {team.rank}
         </span>
       </div>
@@ -616,65 +616,63 @@ function TeamRow({ team, isEliminated = false, eventActive = false, totalTeams =
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
             <span
-              className={`font-display text-[26px] tracking-[0.06em] leading-tight ${isEliminated ? "line-through text-[#FF3333]" : "text-white"}`}
+              className={`font-display tracking-[0.05em] text-[26px] leading-tight ${isEliminated ? "line-through text-[#FF3333]" : "text-white"}`}
             >
               {team.teamName}
             </span>
             {team.isComeback && !isEliminated && (
               <span
-                className="font-display text-[11px] text-white px-2 py-[2px]"
-                style={{ background: "linear-gradient(90deg, #FF6B00, #FF3333)" }}
+                className="font-display tracking-[0.05em] text-[11px] text-white px-2 py-0.5"
+                style={{ backgroundColor: "#FF3333" }}
               >
                 COMEBACK
               </span>
             )}
             {isFirst && !isEliminated && !team.isComeback && (
-              <span className="font-sans text-[10px] text-[#F5A0D0] border border-[#F5A0D0] px-2 py-[2px]">
+              <span className="font-sans text-[10px] text-[#F5A0D0] border border-[#F5A0D0] px-2 py-0.5">
                 LEADING
               </span>
             )}
             {isLast && !isEliminated && (
-              <span className="font-sans text-[10px] text-[#FF3333] border border-[#FF3333] px-2 py-[2px]">
+              <span className="font-sans text-[10px] text-[#FF3333] border border-[#FF3333] px-2 py-0.5">
                 DANGER
               </span>
             )}
             {isEliminated && (
-              <span className="font-sans text-[10px] text-white bg-[#FF3333] px-2 py-[2px]">
+              <span className="font-sans text-[10px] text-white bg-[#FF3333] px-2 py-0.5">
                 ELIMINATED
               </span>
             )}
           </div>
           <div className="flex items-center gap-2">
-            <span className="font-sans text-[11px] text-[#444444]">{team.xHandle}</span>
+            <span className="font-sans text-[11px] text-[#444]">{team.xHandle}</span>
             {team.streak >= 3 && (
-              <span className="font-sans text-[10px] text-[#FF6B00]">x{team.streak}</span>
+              <span className="font-sans text-[10px] text-[#FF3333]">x{team.streak}</span>
             )}
           </div>
         </div>
       </div>
 
       <div className="w-[80px] flex-shrink-0 flex flex-col">
-        <span className="font-sans text-[8px] text-[#333333] uppercase">ODDS</span>
-        <span className="font-display text-[20px]" style={{ color: getOddsColor() }}>
+        <span className="font-sans text-[8px] text-[#333] uppercase">ODDS</span>
+        <span className="font-display tracking-[0.05em] text-[20px]" style={{ color: getOddsColor() }}>
           {team.odds.toFixed(1)}x
         </span>
       </div>
 
       <div className="w-[140px] flex-shrink-0">
-        <span className="font-mono text-[22px] text-[#777777]">
+        <span className="font-mono tracking-[-0.02em] text-[22px] text-[#888]">
           ${team.balance.toLocaleString()}
         </span>
       </div>
 
       <div className="w-[180px] flex-shrink-0 flex items-center flex-wrap">
         <span
-          className="font-display leading-none"
+          className="font-display tracking-[0.05em] leading-none"
           style={{
             fontSize: isLast ? "72px" : "64px",
             color: isPositive ? "#00FF88" : "#FF3333",
-            textShadow: isPositive
-              ? "0 0 30px rgba(0,255,136,0.6), 0 0 60px rgba(0,255,136,0.2)"
-              : "0 0 30px rgba(255,51,51,0.6), 0 0 60px rgba(255,51,51,0.2)",
+            letterSpacing: "0.05em",
             animation: isExposed ? "pulse-return 500ms ease-in-out infinite" : "none"
           }}
         >
@@ -712,7 +710,7 @@ function LiveTradesColumn({ trades, teams, eventActive, eventFeed, oddsData, tot
   return (
     <div className="w-[480px] flex-shrink-0 border-l border-[#1A1A1A] flex flex-col h-full">
       <div className="px-4 py-2 border-b border-[#1A1A1A]">
-        <span className="font-display text-[13px] text-[#333333]">LIVE TRADES</span>
+        <span className="font-display tracking-[0.05em] text-[13px] text-[#333]">LIVE TRADES</span>
       </div>
       <div className="overflow-hidden px-4 py-2" style={{ maxHeight: "220px" }}>
         {eventActive && eventFeed?.map((item, i) => (
@@ -727,15 +725,15 @@ function LiveTradesColumn({ trades, teams, eventActive, eventFeed, oddsData, tot
           >
             {item.type === "event_active" ? (
               <>
-                <span className="font-display text-[13px] text-[#FF3333] block">💥 {item.text}</span>
+                <span className="font-display tracking-[0.05em] text-[13px] text-[#FF3333] block">💥 {item.text}</span>
                 <span className="font-sans text-[11px] text-[#FF3333]">{item.subtext}</span>
               </>
             ) : item.type === "position_wiped" ? (
-              <span className="font-mono text-[12px] text-[#FF3333]">💀 {item.text} · {item.subtext}</span>
+              <span className="font-mono tracking-[-0.02em] text-[12px] text-[#FF3333]">💀 {item.text} · {item.subtext}</span>
             ) : item.type === "held_through" ? (
               <span className="font-sans text-[12px] text-[#00FF88]">🔥 {item.text} · {item.subtext}</span>
             ) : item.type === "closed_position" ? (
-              <span className="font-mono text-[12px] text-[#888888]">📉 {item.text} · {item.subtext}</span>
+              <span className="font-mono tracking-[-0.02em] text-[12px] text-[#888]">📉 {item.text} · {item.subtext}</span>
             ) : null}
           </div>
         ))}
@@ -745,10 +743,10 @@ function LiveTradesColumn({ trades, teams, eventActive, eventFeed, oddsData, tot
           return (
             <div key={i} className={`py-1 ${big ? "py-2" : ""}`}>
               {big && (
-                <span className="font-display text-[10px] text-[#F5A0D0] block">BIG TRADE</span>
+                <span className="font-display tracking-[0.05em] text-[10px] text-[#F5A0D0] block">BIG TRADE</span>
               )}
               <span
-                className={`font-mono ${big ? "text-[14px]" : "text-[11px]"}`}
+                className={`font-mono tracking-[-0.02em] ${big ? "text-[14px]" : "text-[11px]"}`}
                 style={{ color: trade.pnl >= 0 ? "#00FF88" : "#FF3333" }}
               >
                 {trade.team} · {trade.asset} {trade.direction} · {trade.pnl >= 0 ? "+" : ""}${Math.abs(trade.pnl)} · {trade.secondsAgo}s
@@ -763,15 +761,15 @@ function LiveTradesColumn({ trades, teams, eventActive, eventFeed, oddsData, tot
         <ScheduledEventsPanel events={scheduledEvents} />
 
         <div className="mt-3 flex flex-col items-center">
-          <span className="font-sans text-[9px] text-[#333333] uppercase">MARKETS BY</span>
-          <div className="w-[120px] h-[28px] border border-[#222222] flex items-center justify-center mt-1">
-            <span className="font-sans text-[9px] text-[#333333]">PARTNER LOGO</span>
+          <span className="font-sans text-[9px] text-[#333] uppercase">MARKETS BY</span>
+          <div className="w-[120px] h-[28px] border border-[#1A1A1A] flex items-center justify-center mt-1">
+            <span className="font-sans text-[9px] text-[#333]">PARTNER LOGO</span>
           </div>
           <div className="flex flex-col items-center mt-2">
             <div className="w-[56px] h-[56px] bg-[#1A1A1A] flex items-center justify-center">
-              <span className="font-sans text-[8px] text-[#333333]">QR</span>
+              <span className="font-sans text-[8px] text-[#333]">QR</span>
             </div>
-            <span className="font-sans text-[9px] text-[#444444] mt-1">scan to bet</span>
+            <span className="font-sans text-[9px] text-[#444] mt-1">scan to bet</span>
           </div>
         </div>
       </div>
@@ -789,7 +787,7 @@ function EliminationLine({ dangerTeamName, timeRemaining }: { dangerTeamName?: s
     <div className="relative w-full h-10 flex flex-col items-center justify-center">
       <div className="absolute inset-x-0 top-1/2 border-t-2 border-dashed border-[#FF3333]" />
       <div className="relative bg-[#0D0D0D] px-4 z-10 flex flex-col items-center">
-        <span className="font-display text-[11px] tracking-[0.3em] text-[#FF3333]">
+        <span className="font-display tracking-[0.05em] text-[11px] text-[#FF3333]">
           ELIMINATION ZONE
         </span>
         {dangerTeamName && (
@@ -816,24 +814,24 @@ function BottomBar({ lastUpdate, teamCount, totalTrades, prices, lobbyName }: {
   }
 
   return (
-    <div className="h-[44px] w-full flex items-center justify-between px-8 border-t border-[#1A1A1A]">
+    <div className="h-[40px] w-full flex items-center justify-between px-8 border-t border-[#1A1A1A]">
       <div className="flex items-center gap-2">
-        <span className="font-sans text-[12px] text-[#444444]">{teamCount} TEAMS ACTIVE</span>
-        <span className="text-[#333333]">|</span>
-        <span className="font-sans text-[12px] text-[#444444]">{totalTrades} TRADES THIS ROUND</span>
+        <span className="font-sans text-[12px] text-[#444]">{teamCount} TEAMS ACTIVE</span>
+        <span className="text-[#333]">|</span>
+        <span className="font-sans text-[12px] text-[#444]">{totalTrades} TRADES THIS ROUND</span>
       </div>
 
       <div className="flex items-center gap-4">
-        <span className="font-mono text-[13px] text-[#F5A0D0]">
+        <span className="font-mono tracking-[-0.02em] text-[13px] text-[#F5A0D0]">
           BTC {fmtPrice("BTCUSDT")} · ETH {fmtPrice("ETHUSDT")} · SOL {fmtPrice("SOLUSDT")}
         </span>
       </div>
 
       <div className="flex items-center gap-4">
-        <span className="font-sans text-[12px] text-[#333333]">{lobbyName}</span>
+        <span className="font-sans text-[12px] text-[#333]">{lobbyName}</span>
         <span
-          className="font-mono text-[11px]"
-          style={{ color: lastUpdate > 10 ? "#FF3333" : "#333333" }}
+          className="font-mono tracking-[-0.02em] text-[11px]"
+          style={{ color: lastUpdate > 10 ? "#FF3333" : "#333" }}
         >
           LAST UPDATE {lastUpdate}s AGO
         </span>
@@ -934,8 +932,8 @@ function EliminationMomentView({ teams, timeRemaining, lastUpdate, spectators, r
     <div className="relative w-[1920px] h-[1080px] bg-[#0D0D0D] flex flex-col overflow-hidden">
       <style dangerouslySetInnerHTML={{ __html: cssAnimations }} />
       <div className="absolute top-0 left-0 right-0 z-50 flex flex-col items-center pt-4">
-        <span className="font-display text-[120px] text-[#FF3333] leading-none">ELIMINATED</span>
-        <span className="font-display text-[48px] text-white">{eliminatedTeam?.teamName}</span>
+        <span className="font-display tracking-[0.05em] text-[120px] text-[#FF3333] leading-none">ELIMINATED</span>
+        <span className="font-display tracking-[0.05em] text-[48px] text-white">{eliminatedTeam?.teamName}</span>
       </div>
 
       <div className="opacity-20">
@@ -954,7 +952,7 @@ function EliminationMomentView({ teams, timeRemaining, lastUpdate, spectators, r
             <EliminationLine />
           </div>
           {eliminatedTeam && (
-            <div className="flex-1" style={{ background: "#1A0000" }}>
+            <div className="flex-1" style={{ background: "#0D0D0D" }}>
               <TeamRow team={eliminatedTeam} isEliminated totalTeams={totalTeams} />
             </div>
           )}
@@ -980,26 +978,26 @@ function RoundCompleteView({ teams, roundNumber }: { teams: Team[]; roundNumber:
   return (
     <div className="relative w-[1920px] h-[1080px] bg-[#0D0D0D] flex flex-col items-center justify-center overflow-hidden">
       <div className="flex flex-col items-center">
-        <span className="font-display text-[96px] text-white leading-none">ROUND {roundNumber} COMPLETE</span>
+        <span className="font-display tracking-[0.05em] text-[96px] text-white leading-none">ROUND {roundNumber} COMPLETE</span>
 
         <div className="mt-8 flex flex-col items-center">
-          <span className="font-display text-[32px] text-[#FF3333]">ELIMINATED:</span>
-          <span className="font-display text-[64px] text-[#FF3333] leading-tight">{eliminatedTeam?.teamName}</span>
-          <span className="font-sans text-[20px] text-[#555555]">{eliminatedTeam?.traderName}</span>
+          <span className="font-display tracking-[0.05em] text-[32px] text-[#FF3333]">ELIMINATED:</span>
+          <span className="font-display tracking-[0.05em] text-[64px] text-[#FF3333] leading-tight">{eliminatedTeam?.teamName}</span>
+          <span className="font-sans text-[20px] text-[#555]">{eliminatedTeam?.traderName}</span>
         </div>
 
-        <div className="w-[400px] h-[1px] bg-[#222222] my-8" />
+        <div className="w-[400px] h-[1px] bg-[#1A1A1A] my-8" />
 
-        <span className="font-display text-[28px] text-[#888888]">NEXT ROUND BEGINS SOON</span>
+        <span className="font-display tracking-[0.05em] text-[28px] text-[#888]">NEXT ROUND BEGINS SOON</span>
       </div>
 
       <div className="absolute bottom-12 left-0 right-0 flex justify-center gap-12">
         {remainingTeams.map(team => (
           <div key={team.rank} className="flex items-center gap-3">
-            <span className="font-display text-[24px] text-[#444444]">{team.rank}</span>
-            <span className="font-display text-[24px] text-white">{team.teamName}</span>
+            <span className="font-display tracking-[0.05em] text-[24px] text-[#444]">{team.rank}</span>
+            <span className="font-display tracking-[0.05em] text-[24px] text-white">{team.teamName}</span>
             <span
-              className="font-display text-[24px]"
+              className="font-display tracking-[0.05em] text-[24px]"
               style={{ color: team.returnPct >= 0 ? "#00FF88" : "#FF3333" }}
             >
               {team.returnPct >= 0 ? "+" : ""}{team.returnPct.toFixed(1)}%
@@ -1015,9 +1013,9 @@ function ConnectionLostView({ lastUpdate }: { lastUpdate: number }) {
   return (
     <div className="relative w-[1920px] h-[1080px] overflow-hidden">
       <div className="absolute inset-0 bg-black flex flex-col items-center justify-center">
-        <span className="font-display text-[96px] text-[#FF3333] leading-none">CONNECTION LOST</span>
-        <span className="font-mono text-[24px] text-[#555555] mt-6">LAST UPDATED {lastUpdate}s AGO</span>
-        <span className="font-sans text-[16px] text-[#444444] mt-4">ATTEMPTING RECONNECT...</span>
+        <span className="font-display tracking-[0.05em] text-[96px] text-[#FF3333] leading-none">CONNECTION LOST</span>
+        <span className="font-mono tracking-[-0.02em] text-[24px] text-[#555] mt-6">LAST UPDATED {lastUpdate}s AGO</span>
+        <span className="font-sans text-[16px] text-[#444] mt-4">ATTEMPTING RECONNECT...</span>
       </div>
     </div>
   )
@@ -1051,7 +1049,7 @@ function ShareCardView({ teams, lobbyName, roundNumber }: { teams: Team[]; lobby
 
       <div className="flex flex-col items-center mb-8">
         <Image src="/logo.png" alt="Battle Trade" width={320} height={80} className="h-[60px] w-auto" />
-        <span className="font-display text-[24px] text-[#555555]">ROUND {roundNumber} RESULTS</span>
+        <span className="font-display tracking-[0.05em] text-[24px] text-[#555]">ROUND {roundNumber} RESULTS</span>
       </div>
 
       <div className="flex flex-col items-center flex-1">
@@ -1063,37 +1061,37 @@ function ShareCardView({ teams, lobbyName, roundNumber }: { teams: Team[]; lobby
           <img src={avatarSrc(winner.avatar)} alt={winner.teamName} width={120} height={120} className="w-full h-full object-cover" />
         </div>
 
-        <span className="font-display text-[96px] text-white leading-none">{winner.teamName}</span>
-        <span className="font-sans text-[18px] text-[#555555]">{winner.xHandle}</span>
+        <span className="font-display tracking-[0.05em] text-[96px] text-white leading-none">{winner.teamName}</span>
+        <span className="font-sans text-[18px] text-[#555]">{winner.xHandle}</span>
 
         <span
-          className="font-display text-[120px] text-[#00FF88] leading-none mt-4"
-          style={{ textShadow: "0 0 40px rgba(0,255,136,0.6)" }}
+          className="font-display tracking-[0.05em] text-[120px] text-[#00FF88] leading-none mt-4"
+          style={{ letterSpacing: "0.05em" }}
         >
           +{winner.returnPct.toFixed(1)}%
         </span>
 
-        <div className="bg-[#F5A0D0] text-[#0A0A0A] font-display text-[18px] px-4 py-1 mt-4">
+        <div className="bg-[#F5A0D0] text-[#0A0A0A] font-display tracking-[0.05em] text-[18px] px-[16px] py-[8px] mt-[8px]">
           ROUND WINNER
         </div>
 
-        <span className="font-mono text-[16px] text-[#F5A0D0] mt-3">OPENING ODDS: {winner.odds.toFixed(1)}X</span>
-        <span className="font-sans text-[11px] text-[#444444] mt-1">BATTLE TRADE MARKETS</span>
+        <span className="font-mono tracking-[-0.02em] text-[16px] text-[#F5A0D0] mt-3">OPENING ODDS: {winner.odds.toFixed(1)}X</span>
+        <span className="font-sans text-[11px] text-[#444] mt-1">BATTLE TRADE MARKETS</span>
       </div>
 
-      <div className="w-full h-[1px] bg-[#222222] my-6" />
+      <div className="w-full h-[1px] bg-[#1A1A1A] my-6" />
 
       <div className="flex gap-8 justify-center mb-8">
         <div className="flex flex-col gap-2">
           {leftColumn.map(team => (
             <div key={team.rank} className="flex items-center gap-3">
-              <span className="font-display text-[18px] text-[#444444] w-[20px]">{team.rank}</span>
+              <span className="font-display tracking-[0.05em] text-[18px] text-[#444] w-[20px]">{team.rank}</span>
               <div className="w-[28px] h-[28px] overflow-hidden flex-shrink-0" style={{ borderRadius: "50%", border: "1px solid #333" }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={avatarSrc(team.avatar)} alt={team.teamName} width={28} height={28} className="w-full h-full object-cover" />
               </div>
-              <span className="font-display text-[18px] text-white w-[140px]">{team.teamName}</span>
-              <span className="font-mono text-[16px]" style={{ color: team.returnPct >= 0 ? "#00FF88" : "#FF3333" }}>
+              <span className="font-display tracking-[0.05em] text-[18px] text-white w-[140px]">{team.teamName}</span>
+              <span className="font-mono tracking-[-0.02em] text-[16px]" style={{ color: team.returnPct >= 0 ? "#00FF88" : "#FF3333" }}>
                 {team.returnPct >= 0 ? "+" : ""}{team.returnPct.toFixed(1)}%
               </span>
             </div>
@@ -1102,13 +1100,13 @@ function ShareCardView({ teams, lobbyName, roundNumber }: { teams: Team[]; lobby
         <div className="flex flex-col gap-2">
           {rightColumn.map(team => (
             <div key={team.rank} className="flex items-center gap-3">
-              <span className="font-display text-[18px] text-[#444444] w-[20px]">{team.rank}</span>
+              <span className="font-display tracking-[0.05em] text-[18px] text-[#444] w-[20px]">{team.rank}</span>
               <div className="w-[28px] h-[28px] overflow-hidden flex-shrink-0" style={{ borderRadius: "50%", border: "1px solid #333" }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={avatarSrc(team.avatar)} alt={team.teamName} width={28} height={28} className="w-full h-full object-cover" />
               </div>
-              <span className="font-display text-[18px] text-white w-[140px]">{team.teamName}</span>
-              <span className="font-mono text-[16px]" style={{ color: team.returnPct >= 0 ? "#00FF88" : "#FF3333" }}>
+              <span className="font-display tracking-[0.05em] text-[18px] text-white w-[140px]">{team.teamName}</span>
+              <span className="font-mono tracking-[-0.02em] text-[16px]" style={{ color: team.returnPct >= 0 ? "#00FF88" : "#FF3333" }}>
                 {team.returnPct >= 0 ? "+" : ""}{team.returnPct.toFixed(1)}%
               </span>
             </div>
@@ -1118,12 +1116,12 @@ function ShareCardView({ teams, lobbyName, roundNumber }: { teams: Team[]; lobby
 
       <div className="flex items-center justify-between w-full">
         <div className="flex-1 text-center">
-          <span className="font-sans text-[13px] text-[#444444]">{lobbyName} · battle.fyi</span>
+          <span className="font-sans text-[13px] text-[#444]">{lobbyName} · battle.fyi</span>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex flex-col items-center">
             <div className="w-[72px] h-[72px] bg-[#1A1A1A] flex items-center justify-center">
-              <span className="font-sans text-[9px] text-[#333333]">QR</span>
+              <span className="font-sans text-[9px] text-[#333]">QR</span>
             </div>
           </div>
           <Image src="/logo.png" alt="Battle Trade" width={100} height={25} className="h-[24px] w-auto opacity-60" />
@@ -1143,7 +1141,7 @@ function LoadingView() {
       <Image src="/logo.png" alt="Battle Trade" width={400} height={100} className="h-[80px] w-auto mb-8" />
       <div className="flex items-center gap-3">
         <div className="w-3 h-3 bg-[#F5A0D0] animate-pulse" />
-        <span className="font-display text-[24px] text-[#555555]">CONNECTING TO LIVE DATA...</span>
+        <span className="font-display tracking-[0.05em] text-[24px] text-[#555]">CONNECTING TO LIVE DATA...</span>
       </div>
     </div>
   )
@@ -1392,7 +1390,7 @@ function useLobbyData(lobbyId: string) {
           setEventFeedItems(prev => [{
             type: "event_ended",
             text: "EVENT ENDED",
-            color: "#888888",
+            color: "#888",
           }, ...prev.slice(0, 5)])
         }
       })
@@ -1774,10 +1772,10 @@ export default function BattleTradeLeaderboard() {
           <button
             key={state}
             onClick={() => setCurrentState(state)}
-            className={`font-display text-[12px] md:text-[14px] tracking-wider px-3 py-2 border ${
+            className={`font-display tracking-[0.05em] text-[12px] md:text-[14px] px-3 py-2 border ${
               currentState === state
                 ? "border-[#F5A0D0] text-[#F5A0D0] bg-[#1A1A1A]"
-                : "border-[#333333] text-[#555555] hover:border-[#555555] bg-[#0A0A0A]"
+                : "border-[#333] text-[#555] hover:border-[#555] bg-[#0A0A0A]"
             }`}
           >
             {state.toUpperCase().replace("_", " ")}
@@ -1794,7 +1792,7 @@ export default function BattleTradeLeaderboard() {
           height: 1080,
         }}
       >
-        <div className="border border-[#333333]">
+        <div className="border border-[#333]">
           {currentState === "active" && (
             <ActiveRoundView
               teams={teams}
