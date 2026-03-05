@@ -9,6 +9,7 @@ values (
     "available_symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
     "leverage_tiers": [1, 2, 5, 10],
     "volatility_engine": "manual",
-    "round_duration_seconds": 1200
+    "round_duration_seconds": 1200,
+    "trade_execution_mode": "paper_only"
   }'::jsonb
 );

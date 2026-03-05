@@ -22,6 +22,12 @@ export interface LobbyConfig {
   leverage_tiers: number[];
   volatility_engine: 'manual' | 'algorithmic' | 'off';
   round_duration_seconds: number;
+  trade_execution_mode?: 'paper_only' | 'paper_plus_onchain' | 'live';
+  sponsor_api?: {
+    base_url: string;
+    api_key: string;
+    testnet: boolean;
+  };
 }
 
 export interface Profile {

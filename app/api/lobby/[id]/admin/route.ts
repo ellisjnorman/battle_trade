@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { createMarket, MockProvider } from '@/lib/prediction-markets';
+import { startParticipationLoop } from '@/lib/participation-rules';
+
+// Track active participation loops per lobby
+const participationCleanups = new Map<string, () => void>();
 
 function unauthorized() {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -65,6 +69,18 @@ export async function POST(
         // Market creation is best-effort — don't fail the round start
       }
 
+      // Start participation enforcement loop
+      try {
+        // Clean up any previous loop for this lobby
+        const prevCleanup = participationCleanups.get(lobbyId);
+        if (prevCleanup) prevCleanup();
+
+        const cleanup = await startParticipationLoop(lobbyId, round_id);
+        participationCleanups.set(lobbyId, cleanup);
+      } catch {
+        // Participation loop is best-effort
+      }
+
       return NextResponse.json({ action, round: data });
     }
 
@@ -100,6 +116,13 @@ export async function POST(
         .single();
 
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+      // Stop participation loop
+      const cleanup = participationCleanups.get(lobbyId);
+      if (cleanup) {
+        cleanup();
+        participationCleanups.delete(lobbyId);
+      }
 
       // Auto-resolve prediction market for this round
       try {

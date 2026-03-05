@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { calcUnrealizedPnl } from '@/lib/pnl';
 import { getLobbyConfig } from '@/lib/lobby';
+import { getExecutor } from '@/lib/trade-executor';
 import type { Position } from '@/types';
 
 export async function POST(
@@ -53,45 +54,7 @@ export async function POST(
     return NextResponse.json({ error: 'Round not found in this lobby' }, { status: 404 });
   }
 
-  // Check sabotage: positions_locked
-  const { data: session } = await supabase
-    .from('sessions')
-    .select('positions_locked, frozen_asset')
-    .eq('trader_id', trader_id)
-    .eq('lobby_id', lobbyId)
-    .single();
-
-  if (session?.positions_locked) {
-    // Find remaining lockout time
-    const { data: lockoutSabotage } = await supabase
-      .from('sabotages')
-      .select('expires_at')
-      .eq('target_id', trader_id)
-      .eq('lobby_id', lobbyId)
-      .eq('type', 'lockout')
-      .eq('status', 'active')
-      .order('fired_at', { ascending: false })
-      .limit(1)
-      .single();
-
-    const remaining = lockoutSabotage?.expires_at
-      ? Math.ceil((new Date(lockoutSabotage.expires_at).getTime() - Date.now()) / 1000)
-      : 0;
-
-    return NextResponse.json(
-      { error: 'LOCKED_OUT', remaining: Math.max(0, remaining) },
-      { status: 403 },
-    );
-  }
-
-  // Check sabotage: asset_freeze
-  if (session?.frozen_asset && symbol !== session.frozen_asset) {
-    return NextResponse.json(
-      { error: 'ASSET_FROZEN', asset: session.frozen_asset },
-      { status: 403 },
-    );
-  }
-
+  // Get current price
   const { data: priceRow, error: priceError } = await supabase
     .from('prices')
     .select('price')
@@ -102,26 +65,71 @@ export async function POST(
     return NextResponse.json({ error: 'Price not available for symbol' }, { status: 404 });
   }
 
-  const { data: position, error } = await supabase
-    .from('positions')
-    .insert({
-      trader_id,
-      round_id,
-      symbol,
-      direction,
-      size,
-      leverage,
-      entry_price: priceRow.price,
-      opened_at: new Date().toISOString(),
-    })
-    .select()
-    .single();
+  // Execute via trade executor abstraction
+  const executor = getExecutor(config);
+  const result = await executor.execute({
+    lobby_id: lobbyId,
+    trader_id,
+    round_id,
+    asset: symbol,
+    direction,
+    size_usd: size,
+    entry_price: priceRow.price,
+    leverage,
+  });
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!result.success) {
+    if (result.error === 'LOCKED_OUT') {
+      // Find remaining lockout time for client
+      const { data: lockoutSabotage } = await supabase
+        .from('sabotages')
+        .select('expires_at')
+        .eq('target_id', trader_id)
+        .eq('lobby_id', lobbyId)
+        .eq('type', 'lockout')
+        .eq('status', 'active')
+        .order('fired_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      const remaining = lockoutSabotage?.expires_at
+        ? Math.ceil((new Date(lockoutSabotage.expires_at).getTime() - Date.now()) / 1000)
+        : 0;
+
+      return NextResponse.json(
+        { error: 'LOCKED_OUT', remaining: Math.max(0, remaining) },
+        { status: 403 },
+      );
+    }
+
+    if (result.error === 'ASSET_FROZEN') {
+      return NextResponse.json(
+        { error: 'ASSET_FROZEN' },
+        { status: 403 },
+      );
+    }
+
+    if (result.error === 'MAX_POSITIONS_REACHED') {
+      return NextResponse.json(
+        { error: 'Maximum 3 open positions allowed' },
+        { status: 400 },
+      );
+    }
+
+    return NextResponse.json({ error: result.error }, { status: 500 });
   }
 
-  return NextResponse.json(position, { status: 201 });
+  // Fetch the created position to return full data
+  const { data: position } = await supabase
+    .from('positions')
+    .select('*')
+    .eq('id', result.position_id)
+    .single();
+
+  return NextResponse.json(
+    { ...position, external_tx_id: result.external_tx_id },
+    { status: 201 },
+  );
 }
 
 export async function DELETE(
