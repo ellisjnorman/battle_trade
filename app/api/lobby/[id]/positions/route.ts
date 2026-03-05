@@ -53,6 +53,45 @@ export async function POST(
     return NextResponse.json({ error: 'Round not found in this lobby' }, { status: 404 });
   }
 
+  // Check sabotage: positions_locked
+  const { data: session } = await supabase
+    .from('sessions')
+    .select('positions_locked, frozen_asset')
+    .eq('trader_id', trader_id)
+    .eq('lobby_id', lobbyId)
+    .single();
+
+  if (session?.positions_locked) {
+    // Find remaining lockout time
+    const { data: lockoutSabotage } = await supabase
+      .from('sabotages')
+      .select('expires_at')
+      .eq('target_id', trader_id)
+      .eq('lobby_id', lobbyId)
+      .eq('type', 'lockout')
+      .eq('status', 'active')
+      .order('fired_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    const remaining = lockoutSabotage?.expires_at
+      ? Math.ceil((new Date(lockoutSabotage.expires_at).getTime() - Date.now()) / 1000)
+      : 0;
+
+    return NextResponse.json(
+      { error: 'LOCKED_OUT', remaining: Math.max(0, remaining) },
+      { status: 403 },
+    );
+  }
+
+  // Check sabotage: asset_freeze
+  if (session?.frozen_asset && symbol !== session.frozen_asset) {
+    return NextResponse.json(
+      { error: 'ASSET_FROZEN', asset: session.frozen_asset },
+      { status: 403 },
+    );
+  }
+
   const { data: priceRow, error: priceError } = await supabase
     .from('prices')
     .select('price')
