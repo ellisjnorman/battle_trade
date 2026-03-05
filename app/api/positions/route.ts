@@ -3,6 +3,8 @@ import { supabase } from '@/lib/supabase';
 import { calcUnrealizedPnl } from '@/lib/pnl';
 import type { Position } from '@/types';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   const body = await request.json();
   const { trader_id, round_id, symbol, direction, size, leverage } = body;

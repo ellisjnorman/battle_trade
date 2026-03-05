@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { MockProvider, createMarket } from '@/lib/prediction-markets';
 
+export const dynamic = 'force-dynamic';
+
 function checkAuth(request: NextRequest): boolean {
   const authHeader = request.headers.get('Authorization');
   if (!authHeader) return false;

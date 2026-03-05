@@ -6,6 +6,8 @@ import { checkParticipation } from '@/lib/participation-rules';
 import type { Position, Trader } from '@/types';
 import { checkAuth, unauthorized } from '../auth';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },

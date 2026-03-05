@@ -4,6 +4,8 @@ import { calcPortfolioValue } from '@/lib/pnl';
 import { getRoundStandings } from '@/lib/scoring';
 import type { Position, Trader } from '@/types';
 
+export const dynamic = 'force-dynamic';
+
 function checkAuth(request: NextRequest): boolean {
   const authHeader = request.headers.get('Authorization');
   if (!authHeader) return false;

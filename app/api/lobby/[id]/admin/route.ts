@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { checkAuth, unauthorized } from './auth';
 
+export const dynamic = 'force-dynamic';
+
 // Legacy action-based POST — kept for backward compatibility.
 // New callers should use the sub-routes:
 //   POST /api/lobby/[id]/admin/round/start

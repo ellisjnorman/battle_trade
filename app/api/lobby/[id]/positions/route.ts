@@ -5,6 +5,8 @@ import { getLobbyConfig } from '@/lib/lobby';
 import { getExecutor } from '@/lib/trade-executor';
 import type { Position } from '@/types';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },

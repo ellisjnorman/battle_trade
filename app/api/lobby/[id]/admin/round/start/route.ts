@@ -5,6 +5,8 @@ import { startParticipationLoop } from '@/lib/participation-rules';
 import { checkAuth, unauthorized } from '../../auth';
 import { getCleanup, setCleanup } from '../../participation';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },

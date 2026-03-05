@@ -1,7 +1,9 @@
 import { supabase } from './supabase';
 
 const SYMBOLS = ['btcusdt', 'ethusdt', 'solusdt'];
-const BINANCE_WS_URL = 'wss://stream.binance.com:9443/ws';
+const BINANCE_WS_URL = process.env.BINANCE_WS_URL
+  ? `${process.env.BINANCE_WS_URL}/ws`
+  : 'wss://stream.binance.com:9443/ws';
 
 const latestPrices: Record<string, number> = {};
 let ws: WebSocket | null = null;
