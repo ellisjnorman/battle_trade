@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import crypto from 'crypto';
 
+export const dynamic = 'force-dynamic';
+
 function generateCode(): string {
   return crypto.randomBytes(4).toString('base64url').slice(0, 6).toUpperCase();
 }
@@ -140,7 +142,7 @@ export async function POST(
       .eq('id', profileId);
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://battle.fyi';
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://battle.fyi';
 
   return NextResponse.json(
     {
