@@ -115,6 +115,13 @@ export default function AdminPage() {
     }
   }, [lobbyId, password]);
 
+  // Auto-fetch round when lobbyId is set
+  useEffect(() => {
+    if (lobbyId && authenticated) {
+      fetchCurrentRound();
+    }
+  }, [lobbyId, authenticated, fetchCurrentRound]);
+
   // Poll standings every 2s
   useEffect(() => {
     if (!authenticated || !currentRound) return;
@@ -236,7 +243,7 @@ export default function AdminPage() {
             className="text-4xl tracking-widest text-center mb-8"
             style={{
               color: '#F5A0D0',
-              fontFamily: "'Bebas Neue', sans-serif",
+              fontFamily: "var(--font-bebas), sans-serif",
               letterSpacing: '0.2em',
             }}
           >
@@ -259,7 +266,7 @@ export default function AdminPage() {
               background: '#111',
               border: '2px solid #333',
               color: '#F5A0D0',
-              fontFamily: "'JetBrains Mono', monospace",
+              fontFamily: "var(--font-jetbrains), monospace",
             }}
           />
           <button
@@ -269,7 +276,7 @@ export default function AdminPage() {
               background: '#F5A0D0',
               color: '#0A0A0A',
               border: 'none',
-              fontFamily: "'Bebas Neue', sans-serif",
+              fontFamily: "var(--font-bebas), sans-serif",
               fontSize: '1.1rem',
               letterSpacing: '0.15em',
             }}
@@ -284,13 +291,6 @@ export default function AdminPage() {
   // MAIN ADMIN PANEL
   return (
     <div className="min-h-screen" style={{ background: '#0A0A0A', color: '#EEE' }}>
-      {/* Google Fonts */}
-      {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-      <link
-        href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;700&display=swap"
-        rel="stylesheet"
-      />
-
       {/* TOP BAR */}
       <div
         className="flex items-center justify-between px-6 py-4"
@@ -300,7 +300,7 @@ export default function AdminPage() {
           className="text-3xl tracking-widest"
           style={{
             color: '#F5A0D0',
-            fontFamily: "'Bebas Neue', sans-serif",
+            fontFamily: "var(--font-bebas), sans-serif",
             letterSpacing: '0.2em',
           }}
         >
@@ -318,7 +318,7 @@ export default function AdminPage() {
               className="text-xl"
               style={{
                 color: '#F5A0D0',
-                fontFamily: "'JetBrains Mono', monospace",
+                fontFamily: "var(--font-jetbrains), monospace",
                 fontWeight: 700,
               }}
             >
@@ -341,7 +341,7 @@ export default function AdminPage() {
                   : currentRound?.status === 'frozen'
                     ? '#FFD700'
                     : '#666',
-              fontFamily: "'JetBrains Mono', monospace",
+              fontFamily: "var(--font-jetbrains), monospace",
             }}
           >
             {currentRound?.status?.toUpperCase() ?? 'NO ROUND'}
@@ -349,7 +349,7 @@ export default function AdminPage() {
           <div
             className="text-2xl"
             style={{
-              fontFamily: "'JetBrains Mono', monospace",
+              fontFamily: "var(--font-jetbrains), monospace",
               fontWeight: 700,
               color:
                 currentRound?.status === 'active' && remaining <= 30
@@ -367,6 +367,7 @@ export default function AdminPage() {
         {!lobbyId && (
           <div className="flex gap-3">
             <input
+              id="lobby-input"
               type="text"
               placeholder="LOBBY ID"
               className="flex-1 p-3 text-sm tracking-widest outline-none"
@@ -374,7 +375,7 @@ export default function AdminPage() {
                 background: '#111',
                 border: '2px solid #333',
                 color: '#F5A0D0',
-                fontFamily: "'JetBrains Mono', monospace",
+                fontFamily: "var(--font-jetbrains), monospace",
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -382,11 +383,30 @@ export default function AdminPage() {
                   if (val) {
                     setLobbyId(val);
                     addLog(`Lobby set: ${val}`, 'info');
-                    fetchCurrentRound();
                   }
                 }
               }}
             />
+            <button
+              onClick={() => {
+                const val = (document.getElementById('lobby-input') as HTMLInputElement)?.value.trim();
+                if (val) {
+                  setLobbyId(val);
+                  addLog(`Lobby set: ${val}`, 'info');
+                }
+              }}
+              className="px-6 py-3 text-sm uppercase tracking-widest font-bold cursor-pointer"
+              style={{
+                background: '#F5A0D0',
+                color: '#0A0A0A',
+                border: 'none',
+                fontFamily: "var(--font-bebas), sans-serif",
+                fontSize: '1.1rem',
+                letterSpacing: '0.15em',
+              }}
+            >
+              CONNECT
+            </button>
           </div>
         )}
 
@@ -400,7 +420,7 @@ export default function AdminPage() {
               background: '#00FF88',
               color: '#0A0A0A',
               border: 'none',
-              fontFamily: "'Bebas Neue', sans-serif",
+              fontFamily: "var(--font-bebas), sans-serif",
               fontSize: '1.4rem',
               letterSpacing: '0.15em',
             }}
@@ -415,7 +435,7 @@ export default function AdminPage() {
               background: '#FFD700',
               color: '#0A0A0A',
               border: 'none',
-              fontFamily: "'Bebas Neue', sans-serif",
+              fontFamily: "var(--font-bebas), sans-serif",
               fontSize: '1.4rem',
               letterSpacing: '0.15em',
             }}
@@ -430,7 +450,7 @@ export default function AdminPage() {
               background: '#FF4444',
               color: '#0A0A0A',
               border: 'none',
-              fontFamily: "'Bebas Neue', sans-serif",
+              fontFamily: "var(--font-bebas), sans-serif",
               fontSize: '1.4rem',
               letterSpacing: '0.15em',
             }}
@@ -448,7 +468,7 @@ export default function AdminPage() {
             <span
               className="text-xl tracking-widest"
               style={{
-                fontFamily: "'Bebas Neue', sans-serif",
+                fontFamily: "var(--font-bebas), sans-serif",
                 color: '#F5A0D0',
                 letterSpacing: '0.15em',
               }}
@@ -458,7 +478,7 @@ export default function AdminPage() {
             <span
               className="text-xs"
               style={{
-                fontFamily: "'JetBrains Mono', monospace",
+                fontFamily: "var(--font-jetbrains), monospace",
                 color: '#666',
               }}
             >
@@ -472,7 +492,7 @@ export default function AdminPage() {
             style={{
               gridTemplateColumns: '60px 1fr 120px 140px 120px 100px',
               color: '#666',
-              fontFamily: "'JetBrains Mono', monospace",
+              fontFamily: "var(--font-jetbrains), monospace",
               borderBottom: '1px solid #1A1A1A',
             }}
           >
@@ -490,7 +510,7 @@ export default function AdminPage() {
               className="px-4 py-8 text-center text-sm"
               style={{
                 color: '#444',
-                fontFamily: "'JetBrains Mono', monospace",
+                fontFamily: "var(--font-jetbrains), monospace",
               }}
             >
               NO TRADERS
@@ -504,7 +524,7 @@ export default function AdminPage() {
                   className="grid px-4 py-3 items-center"
                   style={{
                     gridTemplateColumns: '60px 1fr 120px 140px 120px 100px',
-                    fontFamily: "'JetBrains Mono', monospace",
+                    fontFamily: "var(--font-jetbrains), monospace",
                     fontSize: '0.85rem',
                     borderBottom: '1px solid #1A1A1A',
                     background: isBottom ? 'rgba(255, 68, 68, 0.1)' : 'transparent',
@@ -548,7 +568,7 @@ export default function AdminPage() {
                         background: 'transparent',
                         border: '1px solid #FF4444',
                         color: '#FF4444',
-                        fontFamily: "'JetBrains Mono', monospace",
+                        fontFamily: "var(--font-jetbrains), monospace",
                         fontSize: '0.65rem',
                       }}
                     >
@@ -571,7 +591,7 @@ export default function AdminPage() {
               className="text-xs uppercase tracking-widest block mb-2"
               style={{
                 color: '#666',
-                fontFamily: "'JetBrains Mono', monospace",
+                fontFamily: "var(--font-jetbrains), monospace",
               }}
             >
               Max Leverage
@@ -586,7 +606,7 @@ export default function AdminPage() {
                     background: leverageTier === lev ? '#F5A0D0' : 'transparent',
                     color: leverageTier === lev ? '#0A0A0A' : '#888',
                     border: `2px solid ${leverageTier === lev ? '#F5A0D0' : '#333'}`,
-                    fontFamily: "'JetBrains Mono', monospace",
+                    fontFamily: "var(--font-jetbrains), monospace",
                     fontWeight: 700,
                   }}
                 >
@@ -601,7 +621,7 @@ export default function AdminPage() {
               className="text-xs uppercase tracking-widest block mb-2"
               style={{
                 color: '#666',
-                fontFamily: "'JetBrains Mono', monospace",
+                fontFamily: "var(--font-jetbrains), monospace",
               }}
             >
               Duration
@@ -621,7 +641,7 @@ export default function AdminPage() {
                     background: duration === opt.value ? '#F5A0D0' : 'transparent',
                     color: duration === opt.value ? '#0A0A0A' : '#888',
                     border: `2px solid ${duration === opt.value ? '#F5A0D0' : '#333'}`,
-                    fontFamily: "'JetBrains Mono', monospace",
+                    fontFamily: "var(--font-jetbrains), monospace",
                     fontWeight: 700,
                   }}
                 >
@@ -640,7 +660,7 @@ export default function AdminPage() {
                 background: 'transparent',
                 border: '2px solid #F5A0D0',
                 color: '#F5A0D0',
-                fontFamily: "'Bebas Neue', sans-serif",
+                fontFamily: "var(--font-bebas), sans-serif",
                 fontSize: '1.3rem',
                 letterSpacing: '0.15em',
               }}
@@ -659,7 +679,7 @@ export default function AdminPage() {
             <span
               className="text-xl tracking-widest"
               style={{
-                fontFamily: "'Bebas Neue', sans-serif",
+                fontFamily: "var(--font-bebas), sans-serif",
                 color: '#F5A0D0',
                 letterSpacing: '0.15em',
               }}
@@ -669,7 +689,7 @@ export default function AdminPage() {
             <span
               className="text-xs"
               style={{
-                fontFamily: "'JetBrains Mono', monospace",
+                fontFamily: "var(--font-jetbrains), monospace",
                 color: '#666',
               }}
             >
@@ -698,7 +718,7 @@ export default function AdminPage() {
                       style={{
                         border: `1px solid ${color}`,
                         color,
-                        fontFamily: "'JetBrains Mono', monospace",
+                        fontFamily: "var(--font-jetbrains), monospace",
                         fontSize: '0.6rem',
                       }}
                     >
@@ -717,12 +737,12 @@ export default function AdminPage() {
                           key={preset.id}
                           onClick={() => handleFirePreset(preset)}
                           disabled={isDisabled || !lobbyId || !currentRound || currentRound.status !== 'active'}
-                          className="text-left cursor-pointer disabled:cursor-not-allowed disabled:opacity-30"
+                          className="text-left cursor-pointer disabled:cursor-not-allowed disabled:opacity-30 hover:border-[#F5A0D0]"
                           style={{
                             background: isFiring ? 'rgba(245,160,208,0.08)' : '#0D0D0D',
                             border: `2px solid ${isFiring ? '#F5A0D0' : '#1A1A1A'}`,
                             padding: '12px',
-                            transition: 'border-color 0.2s',
+                            transition: 'border-color 0.2s, background 0.2s',
                           }}
                         >
                           {/* Header */}
@@ -731,7 +751,7 @@ export default function AdminPage() {
                               <span style={{ fontSize: '1.2rem' }}>{preset.emoji}</span>
                               <span
                                 style={{
-                                  fontFamily: "'Bebas Neue', sans-serif",
+                                  fontFamily: "var(--font-bebas), sans-serif",
                                   fontSize: '1.1rem',
                                   color: isFiring ? '#F5A0D0' : '#FFF',
                                   letterSpacing: '0.05em',
@@ -746,7 +766,7 @@ export default function AdminPage() {
                                 style={{
                                   border: `1px solid ${color}`,
                                   color,
-                                  fontFamily: "'JetBrains Mono', monospace",
+                                  fontFamily: "var(--font-jetbrains), monospace",
                                   fontSize: '0.55rem',
                                 }}
                               >
@@ -757,7 +777,7 @@ export default function AdminPage() {
                                 style={{
                                   border: '1px solid #444',
                                   color: '#666',
-                                  fontFamily: "'JetBrains Mono', monospace",
+                                  fontFamily: "var(--font-jetbrains), monospace",
                                   fontSize: '0.55rem',
                                 }}
                               >
@@ -775,7 +795,7 @@ export default function AdminPage() {
                                 style={{
                                   background: '#111',
                                   border: '1px solid #222',
-                                  fontFamily: "'JetBrains Mono', monospace",
+                                  fontFamily: "var(--font-jetbrains), monospace",
                                   fontSize: '0.6rem',
                                   color: '#888',
                                 }}
@@ -789,7 +809,7 @@ export default function AdminPage() {
                           {/* Narrative */}
                           <p
                             style={{
-                              fontFamily: "'JetBrains Mono', monospace",
+                              fontFamily: "var(--font-jetbrains), monospace",
                               fontSize: '0.65rem',
                               color: '#444',
                               lineHeight: 1.4,
@@ -801,14 +821,13 @@ export default function AdminPage() {
                           {/* Firing indicator */}
                           {isFiring && (
                             <div
-                              className="mt-2 py-1 text-center text-xs uppercase tracking-widest"
+                              className="mt-2 py-1 text-center text-xs uppercase tracking-widest animate-pulse"
                               style={{
                                 background: 'rgba(245,160,208,0.15)',
                                 color: '#F5A0D0',
-                                fontFamily: "'Bebas Neue', sans-serif",
+                                fontFamily: "var(--font-bebas), sans-serif",
                                 fontSize: '0.8rem',
                                 letterSpacing: '0.1em',
-                                animation: 'pulse 1s ease-in-out infinite',
                               }}
                             >
                               FIRING...
@@ -836,7 +855,7 @@ export default function AdminPage() {
             <span
               className="text-xl tracking-widest"
               style={{
-                fontFamily: "'Bebas Neue', sans-serif",
+                fontFamily: "var(--font-bebas), sans-serif",
                 color: '#F5A0D0',
                 letterSpacing: '0.15em',
               }}
@@ -853,7 +872,7 @@ export default function AdminPage() {
                 className="px-4 py-4 text-sm"
                 style={{
                   color: '#444',
-                  fontFamily: "'JetBrains Mono', monospace",
+                  fontFamily: "var(--font-jetbrains), monospace",
                 }}
               >
                 No events yet.
@@ -864,7 +883,7 @@ export default function AdminPage() {
                   key={i}
                   className="px-4 py-1.5 flex gap-4 text-xs"
                   style={{
-                    fontFamily: "'JetBrains Mono', monospace",
+                    fontFamily: "var(--font-jetbrains), monospace",
                     borderBottom: '1px solid #111',
                   }}
                 >
