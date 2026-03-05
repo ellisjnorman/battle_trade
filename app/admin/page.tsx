@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { PRESETS, PRESET_CATEGORIES } from '@/lib/event-presets';
+import type { EventPreset } from '@/lib/event-presets';
 
 interface TraderStanding {
   trader: {
@@ -45,6 +47,7 @@ export default function AdminPage() {
 
   const [leverageTier, setLeverageTier] = useState(10);
   const [duration, setDuration] = useState(300);
+  const [firingPreset, setFiringPreset] = useState<string | null>(null);
 
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -183,6 +186,31 @@ export default function AdminPage() {
     if (result?.round) {
       setCurrentRound(result.round);
       addLog(`Created Round ${result.round.round_number}`, 'action');
+    }
+  };
+
+  const handleFirePreset = async (preset: EventPreset) => {
+    if (!lobbyId || firingPreset) return;
+    setFiringPreset(preset.id);
+    try {
+      const res = await fetch(`/api/lobby/${lobbyId}/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: password },
+        body: JSON.stringify({ preset_id: preset.id }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        addLog(`[DJ] ${preset.emoji} ${preset.name} — ${data.events_fired} events fired`, 'action');
+        // Keep firing state for total chain duration
+        const maxDelay = Math.max(...preset.events.map(e => (e.delay_seconds ?? 0) + e.duration_seconds));
+        setTimeout(() => setFiringPreset(null), maxDelay * 1000);
+      } else {
+        addLog(`[DJ] ${preset.name} FAILED: ${data.error}`, 'error');
+        setFiringPreset(null);
+      }
+    } catch (err) {
+      addLog(`[DJ] ${preset.name} ERROR: ${String(err)}`, 'error');
+      setFiringPreset(null);
     }
   };
 
@@ -619,6 +647,180 @@ export default function AdminPage() {
             >
               NEXT ROUND
             </button>
+          </div>
+        </div>
+
+        {/* DJ BOOTH */}
+        <div style={{ border: '2px solid #222' }}>
+          <div
+            className="px-4 py-3 flex items-center justify-between"
+            style={{ borderBottom: '2px solid #222', background: '#111' }}
+          >
+            <span
+              className="text-xl tracking-widest"
+              style={{
+                fontFamily: "'Bebas Neue', sans-serif",
+                color: '#F5A0D0',
+                letterSpacing: '0.15em',
+              }}
+            >
+              DJ BOOTH
+            </span>
+            <span
+              className="text-xs"
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                color: '#666',
+              }}
+            >
+              {PRESETS.length} PRESETS
+            </span>
+          </div>
+
+          <div className="p-4 flex flex-col gap-6">
+            {PRESET_CATEGORIES.map((cat) => {
+              const presets = PRESETS.filter((p) => p.category === cat);
+              const catColors: Record<string, string> = {
+                crash: '#FF4444',
+                pump: '#00FF88',
+                chaos: '#FFD700',
+                punish: '#FF6B35',
+                comeback: '#00BFFF',
+                drama: '#F5A0D0',
+              };
+              const color = catColors[cat] ?? '#888';
+
+              return (
+                <div key={cat}>
+                  <div className="flex items-center gap-3 mb-3">
+                    <span
+                      className="px-2 py-0.5 text-xs uppercase tracking-widest"
+                      style={{
+                        border: `1px solid ${color}`,
+                        color,
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: '0.6rem',
+                      }}
+                    >
+                      {cat}
+                    </span>
+                    <div style={{ flex: 1, height: 1, background: '#1A1A1A' }} />
+                  </div>
+
+                  <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
+                    {presets.map((preset) => {
+                      const isFiring = firingPreset === preset.id;
+                      const isDisabled = !!firingPreset && !isFiring;
+
+                      return (
+                        <button
+                          key={preset.id}
+                          onClick={() => handleFirePreset(preset)}
+                          disabled={isDisabled || !lobbyId || !currentRound || currentRound.status !== 'active'}
+                          className="text-left cursor-pointer disabled:cursor-not-allowed disabled:opacity-30"
+                          style={{
+                            background: isFiring ? 'rgba(245,160,208,0.08)' : '#0D0D0D',
+                            border: `2px solid ${isFiring ? '#F5A0D0' : '#1A1A1A'}`,
+                            padding: '12px',
+                            transition: 'border-color 0.2s',
+                          }}
+                        >
+                          {/* Header */}
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span style={{ fontSize: '1.2rem' }}>{preset.emoji}</span>
+                              <span
+                                style={{
+                                  fontFamily: "'Bebas Neue', sans-serif",
+                                  fontSize: '1.1rem',
+                                  color: isFiring ? '#F5A0D0' : '#FFF',
+                                  letterSpacing: '0.05em',
+                                }}
+                              >
+                                {preset.name}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="px-1.5 py-0.5 text-xs uppercase"
+                                style={{
+                                  border: `1px solid ${color}`,
+                                  color,
+                                  fontFamily: "'JetBrains Mono', monospace",
+                                  fontSize: '0.55rem',
+                                }}
+                              >
+                                {cat}
+                              </span>
+                              <span
+                                className="px-1.5 py-0.5 text-xs uppercase"
+                                style={{
+                                  border: '1px solid #444',
+                                  color: '#666',
+                                  fontFamily: "'JetBrains Mono', monospace",
+                                  fontSize: '0.55rem',
+                                }}
+                              >
+                                {preset.timing}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Event chain */}
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {preset.events.map((ev, i) => (
+                              <span
+                                key={i}
+                                className="px-1.5 py-0.5"
+                                style={{
+                                  background: '#111',
+                                  border: '1px solid #222',
+                                  fontFamily: "'JetBrains Mono', monospace",
+                                  fontSize: '0.6rem',
+                                  color: '#888',
+                                }}
+                              >
+                                {ev.type.replace(/_/g, ' ').toUpperCase()}
+                                {ev.delay_seconds ? ` +${ev.delay_seconds}s` : ''}
+                              </span>
+                            ))}
+                          </div>
+
+                          {/* Narrative */}
+                          <p
+                            style={{
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontSize: '0.65rem',
+                              color: '#444',
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            {preset.narrative}
+                          </p>
+
+                          {/* Firing indicator */}
+                          {isFiring && (
+                            <div
+                              className="mt-2 py-1 text-center text-xs uppercase tracking-widest"
+                              style={{
+                                background: 'rgba(245,160,208,0.15)',
+                                color: '#F5A0D0',
+                                fontFamily: "'Bebas Neue', sans-serif",
+                                fontSize: '0.8rem',
+                                letterSpacing: '0.1em',
+                                animation: 'pulse 1s ease-in-out infinite',
+                              }}
+                            >
+                              FIRING...
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
