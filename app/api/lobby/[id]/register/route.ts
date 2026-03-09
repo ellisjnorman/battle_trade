@@ -14,11 +14,25 @@ export async function POST(
 ) {
   const { id: lobbyId } = await params;
   const body = await request.json();
-  const { display_name, handle, is_competitor } = body;
+  const { display_name, handle, is_competitor, wallet_address, team_name, trading_assets, monthly_volume, wants_whitelist } = body;
 
   if (!display_name) {
     return NextResponse.json({ error: 'Missing display_name' }, { status: 400 });
   }
+
+  // Capture geo from Vercel/Cloudflare headers (works in production)
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    ?? request.headers.get('x-real-ip')
+    ?? null;
+  const country = request.headers.get('x-vercel-ip-country')
+    ?? request.headers.get('cf-ipcountry')
+    ?? null;
+  const city = request.headers.get('x-vercel-ip-city')
+    ?? request.headers.get('cf-ipcity')
+    ?? null;
+  const region = request.headers.get('x-vercel-ip-country-region')
+    ?? request.headers.get('cf-region')
+    ?? null;
 
   // Verify lobby exists
   const { data: lobby } = await supabase
@@ -42,6 +56,17 @@ export async function POST(
 
     if (existing) {
       profileId = existing.id;
+      // Update profile with new data + geo
+      await supabase.from('profiles').update({
+        is_active_trader: is_competitor !== false,
+        trading_assets: trading_assets ?? null,
+        monthly_volume: monthly_volume ?? null,
+        wants_whitelist: wants_whitelist ?? false,
+        ip_address: ip,
+        country,
+        city,
+        region,
+      }).eq('id', profileId);
     } else {
       const { data: newProfile } = await supabase
         .from('profiles')
@@ -49,6 +74,14 @@ export async function POST(
           display_name,
           handle,
           credits: 0,
+          is_active_trader: is_competitor !== false,
+          trading_assets: trading_assets ?? null,
+          monthly_volume: monthly_volume ?? null,
+          wants_whitelist: wants_whitelist ?? false,
+          ip_address: ip,
+          country,
+          city,
+          region,
         })
         .select()
         .single();
@@ -60,6 +93,14 @@ export async function POST(
       .insert({
         display_name,
         credits: 0,
+        is_active_trader: is_competitor !== false,
+        trading_assets: trading_assets ?? null,
+        monthly_volume: monthly_volume ?? null,
+        wants_whitelist: wants_whitelist ?? false,
+        ip_address: ip,
+        country,
+        city,
+        region,
       })
       .select()
       .single();
@@ -80,17 +121,40 @@ export async function POST(
   // Generate unique code
   const code = generateCode();
 
+  // Find or create team if team_name provided
+  let teamId: string | null = null;
+  if (team_name && is_competitor !== false) {
+    const { data: existingTeam } = await supabase
+      .from('teams')
+      .select('id')
+      .eq('name', team_name)
+      .eq('event_id', eventId)
+      .single();
+
+    if (existingTeam) {
+      teamId = existingTeam.id;
+    } else {
+      const { data: newTeam } = await supabase
+        .from('teams')
+        .insert({ name: team_name, event_id: eventId })
+        .select()
+        .single();
+      if (newTeam) teamId = newTeam.id;
+    }
+  }
+
   // Create trader record
   const { data: trader, error: traderError } = await supabase
     .from('traders')
     .insert({
       name: display_name,
+      code,
       lobby_id: lobbyId,
       event_id: eventId,
       is_eliminated: false,
-      wallet_address: null,
+      wallet_address: wallet_address || null,
       avatar_url: null,
-      team_id: null,
+      team_id: teamId,
     })
     .select()
     .single();

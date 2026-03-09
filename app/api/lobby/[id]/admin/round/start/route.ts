@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { createMarket } from '@/lib/prediction-markets';
-import { startParticipationLoop } from '@/lib/participation-rules';
+import { startPriceFeed } from '@/lib/prices';
 import { checkAuth, unauthorized } from '../../auth';
-import { getCleanup, setCleanup } from '../../participation';
+
+// Track if price feed is already running
+let priceFeedStarted = false;
 
 export const dynamic = 'force-dynamic';
 
@@ -57,16 +59,22 @@ export async function POST(
     // Market creation is best-effort
   }
 
-  // Start participation enforcement loop
-  try {
-    const prevCleanup = getCleanup(lobbyId);
-    if (prevCleanup) prevCleanup();
-
-    const cleanup = await startParticipationLoop(lobbyId, round_id);
-    setCleanup(lobbyId, cleanup);
-  } catch {
-    // Participation loop is best-effort
+  // Start price feed if not already running
+  if (!priceFeedStarted) {
+    startPriceFeed();
+    priceFeedStarted = true;
   }
+
+  // Participation enforcement disabled — let traders trade at their own pace
+  // To re-enable, uncomment below:
+  // try {
+  //   const prevCleanup = getCleanup(lobbyId);
+  //   if (prevCleanup) prevCleanup();
+  //   const cleanup = await startParticipationLoop(lobbyId, round_id);
+  //   setCleanup(lobbyId, cleanup);
+  // } catch {
+  //   // Participation loop is best-effort
+  // }
 
   // Broadcast round start
   try {

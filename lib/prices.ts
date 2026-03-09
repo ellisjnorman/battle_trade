@@ -1,45 +1,58 @@
 import { supabase } from './supabase';
+import { PYTH_FEEDS, feedIdToSymbol, denormalizeSymbol } from './pyth-feeds';
 
-const SYMBOLS = ['btcusdt', 'ethusdt', 'solusdt'];
-const BINANCE_WS_URL = process.env.BINANCE_WS_URL
-  ? `${process.env.BINANCE_WS_URL}/ws`
-  : 'wss://stream.binance.com:9443/ws';
+const PYTH_BASE_URL = 'https://hermes.pyth.network/v2/updates/price/latest';
+const BATCH_SIZE = 50; // Pyth max per request
 
 const latestPrices: Record<string, number> = {};
-let ws: WebSocket | null = null;
-let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-let flushInterval: ReturnType<typeof setInterval> | null = null;
+let pollInterval: ReturnType<typeof setInterval> | null = null;
+let running = false;
 
-function buildStreamUrl(): string {
-  const streams = SYMBOLS.map((s) => `${s}@trade`).join('/');
-  return `${BINANCE_WS_URL}/${streams}`;
+function buildPythUrls(): string[] {
+  const allIds = Object.values(PYTH_FEEDS).map((f) => f.id);
+  const urls: string[] = [];
+  for (let i = 0; i < allIds.length; i += BATCH_SIZE) {
+    const batch = allIds.slice(i, i + BATCH_SIZE);
+    const params = batch.map((id) => `ids[]=${id}`).join('&');
+    urls.push(`${PYTH_BASE_URL}?${params}`);
+  }
+  return urls;
 }
 
-function connect() {
-  ws = new WebSocket(buildStreamUrl());
+async function fetchPythPrices() {
+  try {
+    const urls = buildPythUrls();
+    const responses = await Promise.allSettled(
+      urls.map((url) =>
+        fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(5000) }),
+      ),
+    );
 
-  ws.onmessage = (event) => {
-    const data = JSON.parse(String(event.data));
-    if (data.s && data.p) {
-      latestPrices[data.s] = parseFloat(data.p);
+    for (const res of responses) {
+      if (res.status !== 'fulfilled' || !res.value.ok) continue;
+      const data = await res.value.json();
+      const parsed: Array<{
+        id: string;
+        price: { price: string; expo: number };
+      }> = data.parsed ?? [];
+
+      for (const feed of parsed) {
+        const symbol = feedIdToSymbol[feed.id];
+        if (!symbol) continue;
+        const raw = parseInt(feed.price.price, 10);
+        const expo = feed.price.expo;
+        const price = raw * Math.pow(10, expo);
+        if (price > 0) {
+          latestPrices[symbol] = price;
+          // Also store USDT-suffixed alias for backwards compat
+          const usdt = denormalizeSymbol(symbol);
+          if (usdt !== symbol) latestPrices[usdt] = price;
+        }
+      }
     }
-  };
-
-  ws.onclose = () => {
-    scheduleReconnect();
-  };
-
-  ws.onerror = () => {
-    ws?.close();
-  };
-}
-
-function scheduleReconnect() {
-  if (reconnectTimeout) return;
-  reconnectTimeout = setTimeout(() => {
-    reconnectTimeout = null;
-    connect();
-  }, 3000);
+  } catch {
+    // Network error — will retry next tick
+  }
 }
 
 async function flushPricesToSupabase() {
@@ -52,25 +65,32 @@ async function flushPricesToSupabase() {
     updated_at: new Date().toISOString(),
   }));
 
-  await supabase.from('prices').upsert(rows, { onConflict: 'symbol' });
+  // Batch upsert in chunks to avoid payload size issues
+  for (let i = 0; i < rows.length; i += 50) {
+    await supabase.from('prices').upsert(rows.slice(i, i + 50), { onConflict: 'symbol' });
+  }
 }
 
 export function startPriceFeed() {
-  connect();
-  flushInterval = setInterval(flushPricesToSupabase, 1000);
+  if (running) return;
+  running = true;
+
+  // Initial fetch
+  fetchPythPrices().then(flushPricesToSupabase);
+
+  // Poll every 2 seconds
+  pollInterval = setInterval(async () => {
+    await fetchPythPrices();
+    await flushPricesToSupabase();
+  }, 2000);
 }
 
 export function stopPriceFeed() {
-  if (flushInterval) {
-    clearInterval(flushInterval);
-    flushInterval = null;
+  running = false;
+  if (pollInterval) {
+    clearInterval(pollInterval);
+    pollInterval = null;
   }
-  if (reconnectTimeout) {
-    clearTimeout(reconnectTimeout);
-    reconnectTimeout = null;
-  }
-  ws?.close();
-  ws = null;
 }
 
 export function getLatestPrice(symbol: string): number | undefined {

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { calcUnrealizedPnl, calcPortfolioValue, calcReturnPct } from '@/lib/pnl';
+import { PYTH_FEEDS } from '@/lib/pyth-feeds';
 import type { Position } from '@/types';
 
 // ---------------------------------------------------------------------------
@@ -75,36 +76,188 @@ const mono: React.CSSProperties = { fontFamily: "'JetBrains Mono', monospace", l
 const sans: React.CSSProperties = { fontFamily: "'DM Sans', sans-serif" };
 
 // ---------------------------------------------------------------------------
-// Price Ticker
+// Asset Selector
 // ---------------------------------------------------------------------------
 
-function PriceTicker({ prices, selectedSymbol, onSelect }: {
+const ASSET_CATEGORIES = [
+  { key: 'crypto', label: 'CRYPTO' },
+  { key: 'equity', label: 'STOCKS' },
+  { key: 'commodity', label: 'RWA' },
+] as const;
+
+// Build grouped options from feed catalog (USDT suffixed for position compat)
+const ASSET_OPTIONS = Object.entries(PYTH_FEEDS).map(([sym, feed]) => ({
+  symbol: sym.replace('USD', 'USDT'), // e.g. BTCUSDT
+  ticker: sym.replace('USD', ''),      // e.g. BTC
+  label: feed.label,
+  category: feed.category,
+}));
+
+function AssetSelector({ prices, selectedSymbol, onSelect }: {
   prices: Record<string, number>;
   selectedSymbol: string;
   onSelect: (sym: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState('');
+  const [catFilter, setCatFilter] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    if (open) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const selected = ASSET_OPTIONS.find(a => a.symbol === selectedSymbol);
+  const price = prices[selectedSymbol];
+
+  const filtered = ASSET_OPTIONS.filter(a => {
+    if (catFilter && a.category !== catFilter) return false;
+    if (filter) {
+      const q = filter.toUpperCase();
+      return a.ticker.includes(q) || a.label.toUpperCase().includes(q);
+    }
+    return true;
+  });
+
   return (
-    <div className="flex gap-[8px]">
-      {Object.entries(prices).map(([sym, price]) => {
-        const label = sym.replace('USDT', '');
-        const isSelected = sym === selectedSymbol;
-        return (
-          <button
-            key={sym}
-            onClick={() => onSelect(sym)}
-            className="flex items-center gap-[8px] border px-[12px] py-[8px]"
-            style={{
-              borderColor: isSelected ? '#F5A0D0' : '#333',
-              backgroundColor: isSelected ? '#111' : '#0D0D0D',
-            }}
-          >
-            <span style={bebas} className="text-[14px] text-[#444]">{label}</span>
-            <span style={mono} className="text-[16px] text-white">
-              ${price.toLocaleString(undefined, { maximumFractionDigits: price > 100 ? 0 : 2 })}
+    <div ref={dropdownRef} className="relative">
+      {/* Selected asset button */}
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between border-2 px-[16px] py-[12px]"
+        style={{
+          borderColor: open ? '#F5A0D0' : '#333',
+          backgroundColor: '#0D0D0D',
+        }}
+      >
+        <div className="flex items-center gap-[12px]">
+          <span style={bebas} className="text-[24px] text-white">
+            {selected?.ticker ?? selectedSymbol.replace('USDT', '')}
+          </span>
+          <span style={sans} className="text-[12px] text-[#555]">
+            {selected?.label ?? ''}
+          </span>
+        </div>
+        <div className="flex items-center gap-[12px]">
+          {price !== undefined && (
+            <span style={mono} className="text-[20px] text-white">
+              ${price.toLocaleString(undefined, { maximumFractionDigits: price > 100 ? 0 : price > 1 ? 2 : 6 })}
             </span>
-          </button>
-        );
-      })}
+          )}
+          <span style={bebas} className="text-[16px] text-[#555]">
+            {open ? '▲' : '▼'}
+          </span>
+        </div>
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div
+          className="absolute top-full left-0 right-0 z-50 border-2 border-[#F5A0D0] mt-[-2px]"
+          style={{ backgroundColor: '#0A0A0A', maxHeight: 400, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+        >
+          {/* Search */}
+          <div className="p-[8px] border-b border-[#1A1A1A]">
+            <input
+              type="text"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="SEARCH ASSETS..."
+              autoFocus
+              className="w-full bg-[#111] border border-[#333] text-white px-[12px] py-[8px] text-[13px] outline-none focus:border-[#F5A0D0]"
+              style={mono}
+            />
+          </div>
+
+          {/* Category tabs */}
+          <div className="flex border-b border-[#1A1A1A]">
+            <button
+              onClick={() => setCatFilter(null)}
+              className="flex-1 py-[8px] text-[12px]"
+              style={{
+                ...bebas,
+                color: catFilter === null ? '#0A0A0A' : '#555',
+                backgroundColor: catFilter === null ? '#F5A0D0' : 'transparent',
+                border: 'none',
+                letterSpacing: '0.08em',
+              }}
+            >
+              ALL
+            </button>
+            {ASSET_CATEGORIES.map(cat => (
+              <button
+                key={cat.key}
+                onClick={() => setCatFilter(cat.key)}
+                className="flex-1 py-[8px] text-[12px]"
+                style={{
+                  ...bebas,
+                  color: catFilter === cat.key ? '#0A0A0A' : '#555',
+                  backgroundColor: catFilter === cat.key ? '#F5A0D0' : 'transparent',
+                  border: 'none',
+                  letterSpacing: '0.08em',
+                }}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Asset list */}
+          <div style={{ overflowY: 'auto', maxHeight: 300 }}>
+            {filtered.map(asset => {
+              const assetPrice = prices[asset.symbol];
+              const isActive = asset.symbol === selectedSymbol;
+              return (
+                <button
+                  key={asset.symbol}
+                  onClick={() => { onSelect(asset.symbol); setOpen(false); setFilter(''); }}
+                  className="w-full flex items-center justify-between px-[16px] py-[10px] border-b border-[#111]"
+                  style={{
+                    backgroundColor: isActive ? '#111' : 'transparent',
+                    borderLeft: isActive ? '3px solid #F5A0D0' : '3px solid transparent',
+                  }}
+                >
+                  <div className="flex items-center gap-[10px]">
+                    <span style={bebas} className="text-[16px] text-white w-[60px] text-left">
+                      {asset.ticker}
+                    </span>
+                    <span style={sans} className="text-[11px] text-[#555]">
+                      {asset.label}
+                    </span>
+                    <span
+                      className="text-[8px] px-[6px] py-[2px]"
+                      style={{
+                        ...sans,
+                        color: '#444',
+                        border: '1px solid #222',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                      }}
+                    >
+                      {asset.category}
+                    </span>
+                  </div>
+                  {assetPrice !== undefined && (
+                    <span style={mono} className="text-[13px] text-[#888]">
+                      ${assetPrice.toLocaleString(undefined, { maximumFractionDigits: assetPrice > 100 ? 0 : assetPrice > 1 ? 2 : 6 })}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+            {filtered.length === 0 && (
+              <div className="px-[16px] py-[24px] text-center">
+                <span style={sans} className="text-[12px] text-[#333]">No assets found</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -534,7 +687,7 @@ export default function TradingTerminal() {
         name: lobbyRow.name,
         config: {
           starting_balance: (config.starting_balance as number) ?? 10000,
-          available_symbols: (config.available_symbols as string[]) ?? ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
+          available_symbols: (config.available_symbols as string[]) ?? Object.keys(PYTH_FEEDS).map(s => s.replace('USD', 'USDT')),
           leverage_tiers: (config.leverage_tiers as number[]) ?? [2, 5, 10],
         },
       });
@@ -896,16 +1049,16 @@ export default function TradingTerminal() {
 
         {/* Center: Price + Trade */}
         <div className="flex-1 p-[16px] flex flex-col gap-[16px] overflow-y-auto">
-          {/* Price ticker */}
-          <PriceTicker prices={prices} selectedSymbol={selectedSymbol} onSelect={setSelectedSymbol} />
+          {/* Asset selector */}
+          <AssetSelector prices={prices} selectedSymbol={selectedSymbol} onSelect={setSelectedSymbol} />
 
           {/* Price display */}
-          <div className="border border-[#1A1A1A] bg-[#0D0D0D] p-[16px] flex flex-col items-center gap-[8px]">
+          <div className="border border-[#1A1A1A] bg-[#0D0D0D] p-[24px] flex flex-col items-center gap-[8px]">
             <span style={bebas} className="text-[20px] text-[#444]">
               {selectedSymbol.replace('USDT', '')}
             </span>
             <span style={mono} className="text-[64px] text-white leading-none">
-              ${(prices[selectedSymbol] ?? 0).toLocaleString(undefined, { maximumFractionDigits: prices[selectedSymbol] > 100 ? 0 : 2 })}
+              ${(prices[selectedSymbol] ?? 0).toLocaleString(undefined, { maximumFractionDigits: (prices[selectedSymbol] ?? 0) > 100 ? 0 : (prices[selectedSymbol] ?? 0) > 1 ? 2 : 6 })}
             </span>
           </div>
 

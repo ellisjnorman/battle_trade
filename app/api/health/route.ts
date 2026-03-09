@@ -1,9 +1,18 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { startPriceFeed } from '@/lib/prices';
 
 export const dynamic = 'force-dynamic';
 
+let priceFeedStarted = false;
+
 export async function GET() {
+  // Boot price feed on first health check
+  if (!priceFeedStarted) {
+    startPriceFeed();
+    priceFeedStarted = true;
+  }
+
   let supabaseOk = false;
   let priceFeedOk = false;
   let activeLobbies = 0;
