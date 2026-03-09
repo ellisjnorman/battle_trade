@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { getServerSupabase } from './supabase-server';
 import { PYTH_FEEDS, feedIdToSymbol, denormalizeSymbol } from './pyth-feeds';
 
 const PYTH_BASE_URL = 'https://hermes.pyth.network/v2/updates/price/latest';
@@ -62,12 +62,12 @@ async function flushPricesToSupabase() {
   const rows = entries.map(([symbol, price]) => ({
     symbol,
     price,
-    updated_at: new Date().toISOString(),
+    recorded_at: new Date().toISOString(),
   }));
 
   // Batch upsert in chunks to avoid payload size issues
   for (let i = 0; i < rows.length; i += 50) {
-    await supabase.from('prices').upsert(rows.slice(i, i + 50), { onConflict: 'symbol' });
+    await getServerSupabase().from('prices').upsert(rows.slice(i, i + 50), { onConflict: 'symbol' });
   }
 }
 

@@ -27,13 +27,13 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from('prices')
-      .select('updated_at')
-      .order('updated_at', { ascending: false })
+      .select('recorded_at')
+      .order('recorded_at', { ascending: false })
       .limit(1)
       .single();
 
-    if (!error && data?.updated_at) {
-      const age = Date.now() - new Date(data.updated_at).getTime();
+    if (!error && data?.recorded_at) {
+      const age = Date.now() - new Date(data.recorded_at).getTime();
       priceFeedOk = age < 30_000; // stale if older than 30s
     }
   } catch {

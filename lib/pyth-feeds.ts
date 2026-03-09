@@ -70,7 +70,7 @@ export const PYTH_FEEDS: Record<string, FeedEntry> = {
   TSLAUSD: equity('42676a595d0099c381687124805c8bb22c75424dffcaa55e3dc6549854ebe20a', 'Tesla'),
   NVDAUSD: equity('61c4ca5b9731a79e285a01e24432d57d89f0ecdd4cd7828196ca8992d5eafef6', 'Nvidia'),
   MSFTUSD: equity('8f98f8267ddddeeb61b4fd11f21dc0c2842c417622b4d685243fa73b5830131f', 'Microsoft'),
-  GOGUSD:  equity('e65ff435be42630439c96396653a342829e877e2aafaeaf1a10d0ee5fd2cf3f2', 'Alphabet'),
+  GOGUSD:  equity('e65ff435be42630439c96396653a342829e877e2aafaeaf1a10d0ee5fd2cf3f2', 'Alphabet (GOOG)'),
   AMZNUSD: equity('82c59e36a8e0247e15283748d6cd51f5fa1019d73fbf3ab6d927e17d9e357a7f', 'Amazon'),
   METAUSD: equity('399f1e8f1c4a517859963b56f104727a7a3c7f0f8fee56d34fa1f72e5a4b78ef', 'Meta'),
   AMDUSD:  equity('7178689d88cdd76574b64438fc57f4e57efaf0bf5f9593ee19c10e46a3c5b5cf', 'AMD'),

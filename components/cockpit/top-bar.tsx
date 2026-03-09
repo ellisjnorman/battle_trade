@@ -1,7 +1,5 @@
 'use client'
 
-import Image from 'next/image'
-
 interface TopBarProps {
   trader: { name: string; handle: string; avatar: string; rank: number; totalTraders: number; balance: number; returnPct: number }
   round: { current: number; total: number; leverage: string; timeRemaining: string; isUrgent: boolean }
@@ -11,11 +9,17 @@ interface TopBarProps {
 
 export function TopBar({ trader, round, credits, activityStatus }: TopBarProps) {
   const isProfit = trader.returnPct >= 0
+  const initial = trader.name.charAt(0).toUpperCase()
   return (
     <header className="h-[48px] bg-[#0D0D0D] border-b border-[#1A1A1A] flex items-center justify-between px-[16px]">
       <div className="flex items-center gap-[12px]">
-        <div className="w-[32px] h-[32px] overflow-hidden" style={{ borderRadius: '50%', border: '2px solid #F5A0D0' }}>
-          <Image src={trader.avatar} alt={trader.name} width={32} height={32} className="w-full h-full object-cover" />
+        <div className="w-[32px] h-[32px] overflow-hidden flex items-center justify-center" style={{ border: '2px solid #F5A0D0', backgroundColor: '#1A1A1A' }}>
+          {trader.avatar && !trader.avatar.includes('logo-icon') ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img src={trader.avatar} alt={trader.name} width={32} height={32} className="w-full h-full object-cover" />
+          ) : (
+            <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, color: '#F5A0D0' }}>{initial}</span>
+          )}
         </div>
         <div className="flex flex-col">
           <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em' }} className="text-[20px] text-white leading-none">{trader.name}</span>
