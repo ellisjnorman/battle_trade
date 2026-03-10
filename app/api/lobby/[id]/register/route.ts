@@ -210,6 +210,8 @@ export async function POST(
   // Charge entry fee (if configured — skipped for IRL / free lobbies)
   const lobbyConfig = lobby.config as LobbyConfig;
   const entryFee = getEntryFee(lobbyConfig);
+  let feeCharged = 0;
+  let balanceAfterFee = creditBalance;
   if (entryFee > 0 && is_competitor !== false) {
     const feeResult = await chargeEntryFee({
       trader_id: trader.id,
@@ -217,8 +219,26 @@ export async function POST(
       config: lobbyConfig,
     });
     if (feeResult.error) {
-      return NextResponse.json({ error: feeResult.error }, { status: 400 });
+      // Rollback: delete trader, session, and credit allocation
+      await supabase.from('credit_allocations').delete().eq('trader_id', trader.id).eq('lobby_id', realLobbyId);
+      await supabase.from('sessions').delete().eq('trader_id', trader.id).eq('lobby_id', realLobbyId);
+      await supabase.from('traders').delete().eq('id', trader.id);
+      return NextResponse.json({
+        error: feeResult.error,
+        insufficient_credits: true,
+        entry_fee: entryFee,
+        balance: creditBalance,
+      }, { status: 400 });
     }
+    feeCharged = entryFee;
+    // Read back the actual balance after fee deduction
+    const { data: updatedAlloc } = await supabase
+      .from('credit_allocations')
+      .select('balance')
+      .eq('trader_id', trader.id)
+      .eq('lobby_id', realLobbyId)
+      .single();
+    balanceAfterFee = updatedAlloc?.balance ?? (creditBalance - entryFee);
   }
 
   // Update profile credits
@@ -246,7 +266,8 @@ export async function POST(
       display_name: trimmedName,
       handle: safeHandle,
       is_competitor: is_competitor !== false,
-      credits: creditBalance,
+      credits: balanceAfterFee,
+      entry_fee: feeCharged,
       trade_url: `${baseUrl}/lobby/${realLobbyId}/trade?code=${code}`,
       spectate_url: `${baseUrl}/lobby/${realLobbyId}/spectate?code=${code}`,
     },

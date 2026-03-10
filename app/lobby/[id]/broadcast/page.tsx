@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { type LobbyState, type VolatilityEvent } from '@/lib/battle-trade-types'
 import { useBroadcastData } from '@/hooks/use-broadcast-data'
 import { Scanlines } from '@/components/broadcast/scanlines'
 import { ConnectionBanner } from '@/components/broadcast/connection-banner'
+import PredictionPanel from '@/components/prediction-panel'
 
 // Top Bar Component - Broadcast Grade
 function TopBar({ lobbyState, sponsorLogo }: { lobbyState: LobbyState; sponsorLogo: string | null }) {
@@ -197,66 +198,14 @@ function LeftPanel({ lobbyState }: { lobbyState: LobbyState }) {
   )
 }
 
-// Prediction Market Component
-function RightPanel({ lobbyState }: { lobbyState: LobbyState }) {
-  const totalBets = lobbyState.predictionMarket.reduce((sum, e) => sum + e.totalBets, 0)
-
+// Prediction Market Component — uses PredictionPanel in compact/view-only mode
+function RightPanel({ lobbyId }: { lobbyId: string }) {
   return (
-    <div className="absolute right-0 bottom-[56px] w-[300px] h-[420px] flex flex-col broadcast-panel">
-      {/* Header */}
-      <div className="px-[20px] py-[16px] border-b border-[#1A1A1A]">
-        <span className="font-heading text-[13px] tracking-[0.15em] text-[#555555]">
-          WHO WINS THIS ROUND?
-        </span>
-      </div>
-
-      {/* Prediction Entries */}
-      <div className="flex-1 px-[20px] py-[16px] flex flex-col gap-[20px]">
-        {lobbyState.predictionMarket.map((entry, idx) => {
-          const maxOdds = Math.max(...lobbyState.predictionMarket.map(e => e.odds))
-          const barWidth = (entry.odds / maxOdds) * 100
-          const isLeading = idx === 0
-
-          return (
-            <div key={entry.traderId} className={`flex flex-col gap-[8px] animate-fade-in stagger-${idx + 1}`}>
-              <div className="flex items-center justify-between">
-                <span className={`font-heading text-[16px] tracking-[0.05em] ${isLeading ? 'text-[#F5A0D0]' : 'text-white'}`}>
-                  {entry.traderName}
-                </span>
-                <span className="font-heading text-[20px] tracking-[0.02em] text-white">
-                  {entry.odds.toFixed(1)}<span className="text-[14px] text-[#555555]">X</span>
-                </span>
-              </div>
-              {/* Progress Bar */}
-              <div className="h-[4px] w-full bg-[#1A1A1A] overflow-hidden">
-                <div
-                  className="h-full transition-all duration-700 ease-out"
-                  style={{
-                    width: `${barWidth}%`,
-                    background: isLeading
-                      ? 'linear-gradient(90deg, #F5A0D0 0%, #E080B8 100%)'
-                      : 'linear-gradient(90deg, #444444 0%, #333333 100%)',
-                    boxShadow: isLeading ? '0 0 12px rgba(245, 160, 208, 0.4)' : 'none',
-                  }}
-                />
-              </div>
-              <span className="font-mono text-[10px] text-[#444444]">
-                {entry.totalBets.toLocaleString()} CR
-              </span>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Total */}
-      <div className="px-[20px] py-[14px] border-t border-[#1A1A1A] flex items-center justify-between">
-        <span className="font-heading text-[11px] tracking-[0.1em] text-[#444444]">
-          TOTAL POOL
-        </span>
-        <span className="font-mono text-[14px] text-[#F5A0D0] number-display">
-          {totalBets.toLocaleString()} CR
-        </span>
-      </div>
+    <div className="absolute right-0 bottom-[56px] w-[300px] h-[420px] flex flex-col broadcast-panel overflow-hidden">
+      <PredictionPanel
+        lobbyId={lobbyId}
+        compact
+      />
     </div>
   )
 }
@@ -533,10 +482,256 @@ function WinnerOverlay({
 }
 
 // Main Broadcast Page
+// ---------------------------------------------------------------------------
+// Stream Control Panel (admin only — shown when ?admin_pw=xxx is in the URL)
+// ---------------------------------------------------------------------------
+function StreamControlPanel({ lobbyId, adminPw }: { lobbyId: string; adminPw: string }) {
+  const [streamStatus, setStreamStatus] = useState<'none' | 'idle' | 'active' | 'disconnected'>('none')
+  const [streamKey, setStreamKey] = useState<string | null>(null)
+  const [rtmpUrl, setRtmpUrl] = useState<string | null>(null)
+  const [playbackUrl, setPlaybackUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [copied, setCopied] = useState<string | null>(null)
+  const [collapsed, setCollapsed] = useState(false)
+
+  const headers = { Authorization: adminPw }
+
+  const fetchStreamInfo = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/lobby/${lobbyId}/stream`)
+      const data = await res.json()
+      if (data.stream) {
+        setStreamStatus(data.stream.status)
+        setPlaybackUrl(data.stream.playback_url)
+        // Fetch key info (admin only)
+        const keyRes = await fetch(`/api/lobby/${lobbyId}/stream/key`, { headers })
+        if (keyRes.ok) {
+          const keyData = await keyRes.json()
+          setStreamKey(keyData.stream_key)
+          setRtmpUrl(keyData.rtmp_url)
+        }
+      } else {
+        setStreamStatus('none')
+        setStreamKey(null)
+        setRtmpUrl(null)
+        setPlaybackUrl(null)
+      }
+    } catch {
+      // ignore
+    }
+  }, [lobbyId, adminPw])
+
+  useEffect(() => {
+    fetchStreamInfo()
+    const interval = setInterval(fetchStreamInfo, 10000)
+    return () => clearInterval(interval)
+  }, [fetchStreamInfo])
+
+  const handleGoLive = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/lobby/${lobbyId}/stream`, {
+        method: 'POST',
+        headers,
+      })
+      if (res.ok) await fetchStreamInfo()
+    } catch { /* ignore */ }
+    setLoading(false)
+  }
+
+  const handleEndStream = async () => {
+    setLoading(true)
+    try {
+      await fetch(`/api/lobby/${lobbyId}/stream`, {
+        method: 'DELETE',
+        headers,
+      })
+      setStreamStatus('none')
+      setStreamKey(null)
+      setRtmpUrl(null)
+      setPlaybackUrl(null)
+    } catch { /* ignore */ }
+    setLoading(false)
+  }
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text)
+    setCopied(label)
+    setTimeout(() => setCopied(null), 2000)
+  }
+
+  const statusColor = streamStatus === 'active' ? '#00FF88' : streamStatus === 'idle' ? '#F5A0D0' : streamStatus === 'disconnected' ? '#FF3333' : '#555'
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: 16,
+        right: 16,
+        width: collapsed ? 48 : 340,
+        background: '#0A0A0A',
+        border: '1px solid #222',
+        zIndex: 9999,
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 12,
+        overflow: 'hidden',
+        transition: 'width 0.2s ease',
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          padding: '10px 14px',
+          borderBottom: collapsed ? 'none' : '1px solid #1A1A1A',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          cursor: 'pointer',
+        }}
+        onClick={() => setCollapsed(!collapsed)}
+      >
+        {!collapsed && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 8, height: 8, background: statusColor, boxShadow: `0 0 8px ${statusColor}` }} />
+            <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 14, letterSpacing: '0.1em', color: '#888' }}>
+              STREAM
+            </span>
+            <span style={{ fontSize: 10, color: statusColor, textTransform: 'uppercase' }}>
+              {streamStatus}
+            </span>
+          </div>
+        )}
+        <span style={{ color: '#555', fontSize: 14 }}>{collapsed ? '◀' : '▶'}</span>
+      </div>
+
+      {!collapsed && (
+        <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {streamStatus === 'none' ? (
+            <button
+              onClick={handleGoLive}
+              disabled={loading}
+              style={{
+                width: '100%',
+                height: 44,
+                background: '#F5A0D0',
+                color: '#0A0A0A',
+                border: 'none',
+                fontFamily: "'Bebas Neue', sans-serif",
+                fontSize: 18,
+                letterSpacing: '0.08em',
+                cursor: loading ? 'wait' : 'pointer',
+                opacity: loading ? 0.5 : 1,
+              }}
+            >
+              {loading ? 'CREATING...' : 'GO LIVE'}
+            </button>
+          ) : (
+            <>
+              {/* RTMP URL */}
+              {rtmpUrl && (
+                <div>
+                  <div style={{ color: '#555', fontSize: 10, marginBottom: 4, letterSpacing: '0.05em' }}>RTMP URL</div>
+                  <div
+                    onClick={() => copyToClipboard(rtmpUrl, 'rtmp')}
+                    style={{
+                      padding: '8px 10px',
+                      background: '#111',
+                      border: '1px solid #222',
+                      color: '#999',
+                      cursor: 'pointer',
+                      wordBreak: 'break-all',
+                      fontSize: 11,
+                    }}
+                  >
+                    {rtmpUrl}
+                    <span style={{ color: copied === 'rtmp' ? '#00FF88' : '#F5A0D0', marginLeft: 8 }}>
+                      {copied === 'rtmp' ? 'COPIED' : 'CLICK TO COPY'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Stream Key */}
+              {streamKey && (
+                <div>
+                  <div style={{ color: '#555', fontSize: 10, marginBottom: 4, letterSpacing: '0.05em' }}>STREAM KEY</div>
+                  <div
+                    onClick={() => copyToClipboard(streamKey, 'key')}
+                    style={{
+                      padding: '8px 10px',
+                      background: '#111',
+                      border: '1px solid #222',
+                      color: '#999',
+                      cursor: 'pointer',
+                      wordBreak: 'break-all',
+                      fontSize: 11,
+                    }}
+                  >
+                    {'•'.repeat(Math.min(streamKey.length, 24))}
+                    <span style={{ color: copied === 'key' ? '#00FF88' : '#F5A0D0', marginLeft: 8 }}>
+                      {copied === 'key' ? 'COPIED' : 'CLICK TO COPY'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Playback URL */}
+              {playbackUrl && (
+                <div>
+                  <div style={{ color: '#555', fontSize: 10, marginBottom: 4, letterSpacing: '0.05em' }}>HLS PLAYBACK</div>
+                  <div
+                    onClick={() => copyToClipboard(playbackUrl, 'hls')}
+                    style={{
+                      padding: '8px 10px',
+                      background: '#111',
+                      border: '1px solid #222',
+                      color: '#666',
+                      cursor: 'pointer',
+                      wordBreak: 'break-all',
+                      fontSize: 10,
+                    }}
+                  >
+                    {playbackUrl}
+                    <span style={{ color: copied === 'hls' ? '#00FF88' : '#F5A0D0', marginLeft: 8 }}>
+                      {copied === 'hls' ? 'COPIED' : 'COPY'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* End Stream */}
+              <button
+                onClick={handleEndStream}
+                disabled={loading}
+                style={{
+                  width: '100%',
+                  height: 36,
+                  background: 'transparent',
+                  color: '#FF3333',
+                  border: '1px solid #FF3333',
+                  fontFamily: "'Bebas Neue', sans-serif",
+                  fontSize: 14,
+                  letterSpacing: '0.08em',
+                  cursor: loading ? 'wait' : 'pointer',
+                  opacity: loading ? 0.5 : 1,
+                }}
+              >
+                {loading ? 'ENDING...' : 'END STREAM'}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Main Broadcast Page
 export default function BroadcastPage() {
   const { id: lobbyId } = useParams<{ id: string }>()
   const searchParams = useSearchParams()
   const sponsorLogo = searchParams.get('sponsor_logo')
+  const adminPw = searchParams.get('admin_pw')
   const { lobbyState, connected } = useBroadcastData(lobbyId)
 
   const currentEvent = lobbyState.currentEvent ?? null
@@ -560,7 +755,7 @@ export default function BroadcastPage() {
         <>
           <TopBar lobbyState={lobbyState} sponsorLogo={sponsorLogo} />
           <LeftPanel lobbyState={lobbyState} />
-          <RightPanel lobbyState={lobbyState} />
+          <RightPanel lobbyId={lobbyId} />
           <BottomTicker lobbyState={lobbyState} />
         </>
       )}
@@ -586,6 +781,9 @@ export default function BroadcastPage() {
       )}
 
       <Scanlines />
+
+      {/* Stream control panel — only visible when admin_pw query param is provided */}
+      {adminPw && <StreamControlPanel lobbyId={lobbyId} adminPw={adminPw} />}
     </div>
   )
 }

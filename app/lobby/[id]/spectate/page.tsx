@@ -6,6 +6,10 @@ import { supabase } from '@/lib/supabase';
 import { ATTACKS as WEAPONS_LIST } from '@/lib/weapons';
 import { CREDIT_PACKAGES, totalCredits, type CreditPackage, type PaymentMethod } from '@/lib/payments';
 import { useToastStore } from '@/lib/toast-store';
+import LobbyChat from '@/components/lobby-chat';
+import { StreamPlayer } from '@/components/stream-player';
+import PredictionPanel from '@/components/prediction-panel';
+import type { BetConfirmation } from '@/components/prediction-panel';
 
 // ---------------------------------------------------------------------------
 // Fonts
@@ -103,6 +107,7 @@ export default function SpectatePage() {
 
   const [tab, setTab] = useState<Tab>('watch');
   const [spectatorId, setSpectatorId] = useState<string | null>(null);
+  const [spectatorName, setSpectatorName] = useState('Spectator');
   const [initialLoading, setInitialLoading] = useState(true);
   const [needsJoin, setNeedsJoin] = useState(false);
   const [joinName, setJoinName] = useState('');
@@ -144,6 +149,10 @@ export default function SpectatePage() {
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [purchaseLoading, setPurchaseLoading] = useState<string | null>(null);
 
+  // Stream
+  const [streamPlaybackUrl, setStreamPlaybackUrl] = useState<string | null>(null);
+  const [streamView, setStreamView] = useState(false);
+
   // Reactions
   const [floatingReactions, setFloatingReactions] = useState<Array<{ id: number; emoji: string; x: number }>>([]);
   const reactionCounter = useRef(0);
@@ -179,6 +188,7 @@ export default function SpectatePage() {
       const data = await res.json();
       if (res.ok && data.trader_id) {
         setSpectatorId(data.trader_id);
+        setSpectatorName(joinName || data.name || 'Spectator');
         setCredits(data.credits ?? 500);
         setNeedsJoin(false);
         // Save to localStorage so they don't need to rejoin
@@ -205,19 +215,19 @@ export default function SpectatePage() {
       if (spectatorCode && lobbyId) {
         const { data } = await supabase
           .from('traders')
-          .select('id')
+          .select('id, name')
           .eq('lobby_id', lobbyId)
           .eq('code', spectatorCode)
           .single();
-        if (data) { setSpectatorId(data.id); return; }
+        if (data) { setSpectatorId(data.id); setSpectatorName(data.name ?? 'Spectator'); return; }
         // Fallback: try as trader_id
         const { data: byId } = await supabase
           .from('traders')
-          .select('id')
+          .select('id, name')
           .eq('lobby_id', lobbyId)
           .eq('id', spectatorCode)
           .single();
-        if (byId) { setSpectatorId(byId.id); return; }
+        if (byId) { setSpectatorId(byId.id); setSpectatorName(byId.name ?? 'Spectator'); return; }
       }
 
       // 2. Try localStorage (returning spectator)
@@ -228,11 +238,11 @@ export default function SpectatePage() {
             const { id } = JSON.parse(saved);
             const { data } = await supabase
               .from('traders')
-              .select('id')
+              .select('id, name')
               .eq('id', id)
               .eq('lobby_id', lobbyId)
               .single();
-            if (data) { setSpectatorId(data.id); return; }
+            if (data) { setSpectatorId(data.id); setSpectatorName(data.name ?? 'Spectator'); return; }
           }
         } catch { /* ignore */ }
       }
@@ -447,6 +457,26 @@ export default function SpectatePage() {
     }, 3000);
     return () => clearInterval(interval);
   }, [fetchStatus, fetchCredits, fetchMarket]);
+
+  // Fetch stream info
+  useEffect(() => {
+    let cancelled = false;
+    const fetchStream = async () => {
+      try {
+        const res = await fetch(`/api/lobby/${lobbyId}/stream`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!cancelled && json.stream?.playback_url) {
+          setStreamPlaybackUrl(json.stream.playback_url);
+        }
+      } catch {
+        // ignore — stream is optional
+      }
+    };
+    fetchStream();
+    const si = setInterval(fetchStream, 15000);
+    return () => { cancelled = true; clearInterval(si); };
+  }, [lobbyId]);
 
   // Generate feed items from trader data changes
   const prevTradersRef = useRef<TraderInfo[]>([]);
@@ -807,6 +837,40 @@ export default function SpectatePage() {
           {/* WATCH TAB                                                    */}
           {/* =========================================================== */}
           <div style={{ display: tab === 'watch' ? 'flex' : 'none', flexDirection: 'column' }}>
+            {/* Stream / Data toggle */}
+            {streamPlaybackUrl && (
+              <div style={{ display: 'flex', borderBottom: '1px solid #1A1A1A' }}>
+                <button
+                  onClick={() => setStreamView(false)}
+                  style={{
+                    flex: 1, padding: '8px 0', background: 'transparent', border: 'none',
+                    borderBottom: !streamView ? '2px solid #F5A0D0' : '2px solid transparent',
+                    fontFamily: bebas, fontSize: 13, letterSpacing: '0.1em',
+                    color: !streamView ? '#F5A0D0' : '#555', cursor: 'pointer',
+                  }}
+                >
+                  DATA FEED
+                </button>
+                <button
+                  onClick={() => setStreamView(true)}
+                  style={{
+                    flex: 1, padding: '8px 0', background: 'transparent', border: 'none',
+                    borderBottom: streamView ? '2px solid #F5A0D0' : '2px solid transparent',
+                    fontFamily: bebas, fontSize: 13, letterSpacing: '0.1em',
+                    color: streamView ? '#F5A0D0' : '#555', cursor: 'pointer',
+                  }}
+                >
+                  LIVE STREAM
+                </button>
+              </div>
+            )}
+
+            {/* Stream player */}
+            {streamPlaybackUrl && streamView && (
+              <StreamPlayer playbackUrl={streamPlaybackUrl} autoplay muted />
+            )}
+          </div>
+          <div style={{ display: tab === 'watch' && !(streamPlaybackUrl && streamView) ? 'flex' : 'none', flexDirection: 'column' }}>
             {/* Feed */}
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {feed.length === 0 && (
@@ -1006,24 +1070,7 @@ export default function SpectatePage() {
           {/* PREDICT TAB                                                  */}
           {/* =========================================================== */}
           <div style={{ display: tab === 'predict' ? 'flex' : 'none', flexDirection: 'column' }}>
-            {/* Header */}
-            <div style={{ padding: '16px 16px 12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ fontFamily: bebas, fontSize: 28, color: '#FFF', letterSpacing: '0.03em' }}>WHO WINS ROUND {round?.round_number ?? '-'}?</div>
-                {isLowTime && !currentBet?.locked && (
-                  <div style={{ fontFamily: mono, fontSize: 14, color: '#FF3333', animation: 'pulse 1s infinite', fontWeight: 700 }}>
-                    {remainingStr}
-                  </div>
-                )}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
-                <span style={{ fontFamily: mono, fontSize: 12, color: '#999' }}>{totalBets} BETS PLACED</span>
-                {betStreak > 0 && <span style={{ fontFamily: bebas, fontSize: 12, color: '#F5A0D0' }}>🔥 {betStreak} STREAK</span>}
-                <span style={{ fontFamily: mono, fontSize: 10, color: '#444', animation: 'pulse 2s infinite' }}>● LIVE ODDS</span>
-              </div>
-            </div>
-
-            {/* Bet result */}
+            {/* Bet result overlays (streak/result UI kept in spectate) */}
             {currentBet?.result === 'won' && (
               <div style={{ padding: 32, textAlign: 'center', background: 'rgba(0,255,136,0.08)', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ fontSize: 56, animation: 'bounceIn 0.5s ease-out' }}>🏆</div>
@@ -1043,129 +1090,26 @@ export default function SpectatePage() {
               </div>
             )}
 
-            {/* Locked bet display */}
-            {currentBet?.locked && !currentBet.result && (
-              <div style={{ padding: '16px', borderBottom: '1px solid #1A1A1A', background: 'rgba(245,160,208,0.05)' }}>
-                <div style={{ fontFamily: bebas, fontSize: 16, color: '#FFF' }}>YOU BET {currentBet.amount}CR ON {currentBet.team_name}</div>
-                <div style={{ fontFamily: bebas, fontSize: 20, color: '#00FF88', marginTop: 4 }}>POTENTIAL: +{currentBet.potential_payout}CR</div>
-                <div style={{ fontFamily: mono, fontSize: 12, color: '#999', marginTop: 2 }}>
-                  LIVE ODDS: {outcomes.find((o) => o.id === currentBet.outcome_id)?.odds.toFixed(1) ?? '?'}X · BET LOCKED
-                </div>
-              </div>
-            )}
-
-            {/* Team cards */}
-            {!currentBet?.locked && outcomes.map((o, idx) => {
-              const trader = activeTraders.find((t) => t.team_id === o.team_id);
-              const isTop = idx === 0;
-              const isLongShot = idx === outcomes.length - 1 && outcomes.length > 1;
-              const isSelected = selectedOutcome === o.id;
-
-              return (
-                <button
-                  key={o.id}
-                  onClick={() => { setSelectedOutcome(isSelected ? null : o.id); setConfirmBet(false); }}
-                  style={{
-                    display: 'flex', alignItems: 'center', height: 64, padding: '0 16px',
-                    background: isSelected ? '#111' : 'transparent', border: 'none',
-                    borderBottom: '1px solid #111', borderLeft: isSelected ? '1px solid #F5A0D0' : '1px solid transparent',
-                    cursor: 'pointer', width: '100%', textAlign: 'left', position: 'relative',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-                    <span style={{ fontFamily: mono, fontSize: 11, color: '#666', width: 20 }}>#{trader?.rank ?? idx + 1}</span>
-                    <div style={{ width: 36, height: 36, background: '#1A1A1A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: bebas, fontSize: 16, color: '#999', flexShrink: 0 }}>
-                      {o.team_name.charAt(0)}
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontFamily: bebas, fontSize: 18, color: '#FFF', letterSpacing: '0.03em' }}>{o.team_name}</span>
-                        {isTop && <span style={{ fontFamily: bebas, fontSize: 9, color: '#00FF88', border: '1px solid #00FF88', padding: '1px 5px' }}>POPULAR</span>}
-                        {isLongShot && <span style={{ fontFamily: bebas, fontSize: 9, color: '#F5A0D0', border: '1px solid #F5A0D0', padding: '1px 5px' }}>LONG SHOT</span>}
-                      </div>
-                      <span style={{ fontFamily: mono, fontSize: 14, color: (trader?.return_pct ?? 0) >= 0 ? '#00FF88' : '#FF3333' }}>
-                        {(trader?.return_pct ?? 0) >= 0 ? '+' : ''}{(trader?.return_pct ?? 0).toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontFamily: bebas, fontSize: 24, color: '#FFF' }}>{o.odds.toFixed(1)}X</div>
-                    <div style={{ fontFamily: mono, fontSize: 10, color: '#999' }}>{(o.probability * 100).toFixed(0)}%</div>
-                  </div>
-                  <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: '#111' }}>
-                    <div style={{ height: 3, background: '#F5A0D0', width: `${(o.volume / maxVolume) * 100}%`, transition: 'width 0.3s' }} />
-                  </div>
-                </button>
-              );
-            })}
-
-            {/* Bet placement with confirmation — FIX #6 */}
-            {selectedOutcome && !currentBet?.locked && (
-              <div className="slideUp" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12, borderTop: '1px solid #1A1A1A' }}>
-                <div style={{ fontFamily: sans, fontSize: 9, color: '#999', textTransform: 'uppercase', letterSpacing: '0.1em' }}>YOUR BET</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {[50, 100, 200].map((amt) => (
-                    <button
-                      key={amt}
-                      onClick={() => { setBetAmount(betAmount === amt ? null : amt); setConfirmBet(false); }}
-                      style={{
-                        flex: 1, padding: '10px 0',
-                        background: betAmount === amt ? '#F5A0D0' : 'transparent',
-                        color: betAmount === amt ? '#0A0A0A' : '#666',
-                        border: `1px solid ${betAmount === amt ? '#F5A0D0' : '#333'}`,
-                        fontFamily: bebas, fontSize: 16,
-                        cursor: credits >= amt ? 'pointer' : 'not-allowed',
-                        opacity: credits >= amt ? 1 : 0.4,
-                      }}
-                    >
-                      {amt}CR
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => { setBetAmount(betAmount === credits ? null : credits); setConfirmBet(false); }}
-                    style={{
-                      flex: 1, padding: '10px 0',
-                      background: betAmount === credits ? '#F5A0D0' : 'transparent',
-                      color: betAmount === credits ? '#0A0A0A' : '#666',
-                      border: `1px solid ${betAmount === credits ? '#F5A0D0' : '#333'}`,
-                      fontFamily: bebas, fontSize: 16, cursor: 'pointer',
-                    }}
-                  >
-                    ALL IN
-                  </button>
-                </div>
-
-                {betAmount && (
-                  <>
-                    <div style={{
-                      fontFamily: bebas, fontSize: 28, color: '#00FF88', textAlign: 'center',
-                      textShadow: '0 0 20px rgba(0,255,136,0.4)',
-                    }}>
-                      POTENTIAL PAYOUT: +{potentialPayout}CR
-                    </div>
-
-                    {confirmBet && (
-                      <div style={{ fontFamily: mono, fontSize: 11, color: '#999', textAlign: 'center' }}>
-                        {betAmount}CR on {selectedOutcomeData?.team_name} at {selectedOutcomeData?.odds.toFixed(1)}X odds. You&apos;ll have {credits - betAmount}CR left.
-                      </div>
-                    )}
-
-                    <button
-                      onClick={handlePlaceBet}
-                      style={{
-                        width: '100%', height: 64,
-                        background: confirmBet ? '#FF3333' : '#F5A0D0',
-                        color: confirmBet ? '#FFF' : '#0A0A0A',
-                        border: 'none', fontFamily: bebas, fontSize: 24, letterSpacing: '0.08em', cursor: 'pointer',
-                      }}
-                    >
-                      {confirmBet ? `🎲 CONFIRM ${betAmount}CR BET` : '🎲 PLACE BET'}
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
+            {/* PredictionPanel component — handles markets, outcomes, betting via /api/lobby/{id}/predictions */}
+            <PredictionPanel
+              lobbyId={lobbyId}
+              bettorId={spectatorId ?? undefined}
+              credits={credits}
+              onCreditsChange={(newBal) => setCredits(newBal)}
+              onBetPlaced={(bet: BetConfirmation) => {
+                setCurrentBet({
+                  outcome_id: bet.outcome_id,
+                  team_name: bet.team_name,
+                  amount: bet.amount,
+                  potential_payout: bet.potential_payout,
+                  locked: true,
+                });
+                fetchCredits();
+              }}
+            />
           </div>
+
+          {/* OLD PREDICT TAB — removed (replaced by PredictionPanel above) */}
         </div>
 
         {/* ============================================================= */}
@@ -1233,6 +1177,16 @@ export default function SpectatePage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Chat */}
+      {spectatorId && (
+        <LobbyChat
+          lobbyId={lobbyId}
+          userId={spectatorId}
+          userName={spectatorName}
+          userRole="spectator"
+        />
       )}
     </>
   );

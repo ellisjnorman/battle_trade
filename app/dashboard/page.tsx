@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { usePrivy } from '@privy-io/react-auth'
@@ -85,11 +85,7 @@ export default function DashboardPage() {
     return true
   })
 
-  const handlePlay = useCallback(() => {
-    if (live.length > 0) router.push(`/lobby/${live[0].id}`)
-    else if (lobbies.length > 0) router.push(`/lobby/${lobbies[0].id}`)
-    else router.push('/create')
-  }, [live, lobbies, router])
+  const playHref = live.length > 0 ? `/lobby/${live[0].id}` : lobbies.length > 0 ? `/lobby/${lobbies[0].id}` : '/create'
 
   const tCol = tierColor(profile?.rank_tier)
   const wr = profile ? profile.win_rate * 100 : 0
@@ -113,14 +109,14 @@ export default function DashboardPage() {
         .fpill:hover{border-color:#333!important}
         .tag{font-family:${font.mono};font-size:9px;font-weight:600;padding:2px 7px;border-radius:3px;letter-spacing:.03em}
         .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
-        .play-btn{position:relative;overflow:hidden;cursor:pointer;border:none;width:100%;padding:16px;font-family:${font.display};font-size:22px;letter-spacing:.05em;color:#0A0A0A;background:linear-gradient(135deg,#F5A0D0,#E88BC0);animation:breathe 3s ease-in-out infinite;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .12s;border-radius:12px;flex-shrink:0}
+        .play-btn{position:relative;overflow:hidden;cursor:pointer;border:none;text-decoration:none;width:100%;padding:16px;font-family:${font.display};font-size:22px;letter-spacing:.05em;color:#0A0A0A;background:linear-gradient(135deg,#F5A0D0,#E88BC0);animation:breathe 3s ease-in-out infinite;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .12s;border-radius:12px;flex-shrink:0}
         .play-btn:hover{filter:brightness(1.08)}
         .play-btn:active{transform:scale(.98);animation:none}
         .play-btn::after{content:'';position:absolute;top:0;left:-100%;width:40%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent);animation:shine 4s ease-in-out infinite}
         .card{background:#111;border:1px solid #1E1E1E;border-radius:12px;overflow:hidden}
         .card-hd{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #1A1A1A}
         .sec-t{font-family:${font.sans};font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.06em}
-        .sec-a{font-family:${font.sans};font-size:10px;color:#666;text-decoration:none}
+        .sec-a{font-family:${font.sans};font-size:10px;color:#999;text-decoration:none}
         .sec-a:hover{color:#CCC}
         .tab-btn{font-family:${font.sans};font-size:11px;font-weight:600;padding:6px 14px;border-radius:8px;cursor:pointer;border:none;transition:all .12s}
 
@@ -147,7 +143,7 @@ export default function DashboardPage() {
           </Link>
           <div style={{ display: 'flex', gap: 16 }}>
             {[{ l: 'Home', href: '/dashboard', on: true }, { l: 'Lab', href: '/lab', on: false }, { l: 'Learn', href: '/learn', on: false }].map(n => (
-              <Link key={n.l} href={n.href} style={{ fontFamily: font.sans, fontSize: 13, fontWeight: n.on ? 600 : 400, color: n.on ? '#FFF' : '#777', textDecoration: 'none' }}>{n.l}</Link>
+              <Link key={n.l} href={n.href} style={{ fontFamily: font.sans, fontSize: 13, fontWeight: n.on ? 600 : 400, color: n.on ? '#FFF' : '#999', textDecoration: 'none' }}>{n.l}</Link>
             ))}
           </div>
         </div>
@@ -192,7 +188,7 @@ export default function DashboardPage() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
                     <span style={{ fontFamily: font.mono, fontSize: 44, fontWeight: 700, color: '#FFF', lineHeight: 1 }}>{profile.tr_score}</span>
-                    <span style={{ fontFamily: font.sans, fontSize: 10, color: '#777' }}>TR</span>
+                    <span style={{ fontFamily: font.sans, fontSize: 10, color: '#999' }}>TR</span>
                   </div>
                   <div style={{ height: 3, background: '#1A1A1A', borderRadius: 99, overflow: 'hidden' }}>
                     <div style={{ height: '100%', background: `linear-gradient(90deg, ${tCol}, ${tCol}66)`, width: `${Math.min(100, profile.tr_score % 100)}%` }} />
@@ -209,28 +205,28 @@ export default function DashboardPage() {
                 ].map(s => (
                   <div key={s.l} className="card" style={{ padding: '10px', textAlign: 'center' }}>
                     <div style={{ fontFamily: font.mono, fontSize: 18, fontWeight: 700, color: s.col, lineHeight: 1 }}>{s.v}</div>
-                    <div style={{ fontFamily: font.sans, fontSize: 8, color: '#777', textTransform: 'uppercase', marginTop: 4 }}>{s.l}</div>
+                    <div style={{ fontFamily: font.sans, fontSize: 8, color: '#999', textTransform: 'uppercase', marginTop: 4 }}>{s.l}</div>
                   </div>
                 ))}
               </div>
 
               <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px' }}>
                 <div>
-                  <div style={{ fontFamily: font.sans, fontSize: 9, color: '#666', textTransform: 'uppercase' }}>Credits</div>
+                  <div style={{ fontFamily: font.sans, fontSize: 9, color: '#999', textTransform: 'uppercase' }}>Credits</div>
                   <div style={{ fontFamily: font.mono, fontSize: 18, fontWeight: 700, color: c.pink }}>{profile.credits}</div>
                 </div>
                 <Link href="/profile" style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 600, color: c.bg, background: c.pink, padding: '6px 12px', borderRadius: 6, textDecoration: 'none' }}>Get Credits</Link>
               </div>
             </>) : (
               <div className="card" style={{ padding: 20, textAlign: 'center' }}>
-                <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#1A1A1A', border: '3px solid #333', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontFamily: font.display, color: '#555', margin: '0 auto 12px' }}>?</div>
-                <div style={{ fontFamily: font.sans, fontSize: 14, fontWeight: 600, color: '#AAA', marginBottom: 4 }}>Welcome</div>
-                <div style={{ fontFamily: font.sans, fontSize: 11, color: '#666', marginBottom: 14 }}>Loading your profile...</div>
+                <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#1A1A1A', border: '3px solid #444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontFamily: font.display, color: '#888', margin: '0 auto 12px' }}>?</div>
+                <div style={{ fontFamily: font.sans, fontSize: 14, fontWeight: 600, color: '#CCC', marginBottom: 4 }}>Welcome</div>
+                <div style={{ fontFamily: font.sans, fontSize: 11, color: '#999', marginBottom: 14 }}>Loading your profile...</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                   {['WINS', 'WIN RATE', 'BEST TRADE', 'LOBBIES'].map(l => (
                     <div key={l} style={{ background: '#0C0C0C', borderRadius: 8, padding: '8px', textAlign: 'center', border: '1px solid #1A1A1A' }}>
-                      <div style={{ fontFamily: font.mono, fontSize: 16, fontWeight: 700, color: '#333' }}>—</div>
-                      <div style={{ fontFamily: font.sans, fontSize: 8, color: '#555', textTransform: 'uppercase', marginTop: 3 }}>{l}</div>
+                      <div style={{ fontFamily: font.mono, fontSize: 16, fontWeight: 700, color: '#555' }}>—</div>
+                      <div style={{ fontFamily: font.sans, fontSize: 8, color: '#888', textTransform: 'uppercase', marginTop: 3 }}>{l}</div>
                     </div>
                   ))}
                 </div>
@@ -259,7 +255,7 @@ export default function DashboardPage() {
                     <span style={{ fontFamily: font.mono, fontSize: 10, color: '#888', flexShrink: 0 }}>{done}/{tasks.length}</span>
                   </div>
                   {tasks.map((t, i) => (
-                    <Link key={i} href={t.href} className="row-h" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderBottom: i < tasks.length - 1 ? '1px solid #151515' : 'none', textDecoration: 'none', color: t.done ? '#555' : '#CCC', fontFamily: font.sans, fontSize: 11, fontWeight: 500 }}>
+                    <Link key={i} href={t.href} className="row-h" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderBottom: i < tasks.length - 1 ? '1px solid #151515' : 'none', textDecoration: 'none', color: t.done ? '#777' : '#CCC', fontFamily: font.sans, fontSize: 11, fontWeight: 500 }}>
                       <div style={{ width: 16, height: 16, borderRadius: 4, border: t.done ? 'none' : '1.5px solid #333', background: t.done ? c.green : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#FFF', flexShrink: 0 }}>
                         {t.done && '✓'}
                       </div>
@@ -284,16 +280,16 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            <button onClick={() => { localStorage.removeItem('bt_profile_id'); logout() }} style={{ fontFamily: font.sans, fontSize: 10, color: '#444', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', marginTop: 'auto' }}>Sign out</button>
+            <button onClick={() => { localStorage.removeItem('bt_profile_id'); logout() }} style={{ fontFamily: font.sans, fontSize: 10, color: '#777', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', marginTop: 'auto' }}>Sign out</button>
           </div>
 
           {/* ──── CENTER: Play + Lobbies ──── */}
           <div className="center-col" style={{ flex: 1, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, overflow: 'hidden' }}>
-            <button onClick={handlePlay} className="play-btn">
+            <Link href={playHref} className="play-btn" style={{ textDecoration: 'none' }}>
               {live.length > 0 ? (
                 <>PLAY NOW <span style={{ fontFamily: font.mono, fontSize: 12, background: 'rgba(0,0,0,.15)', padding: '3px 8px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 4 }}><span className="dot" style={{ width: 5, height: 5, background: '#0A0A0A', animation: 'pulse 1.4s infinite' }} />{live.length} LIVE</span></>
               ) : lobbies.length > 0 ? 'JOIN A LOBBY' : 'CREATE A LOBBY'}
-            </button>
+            </Link>
 
             <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               <div className="card-hd">
@@ -336,7 +332,7 @@ export default function DashboardPage() {
                           <div style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 700, color: l.top_trader.return_pct >= 0 ? c.green : c.red }}>
                             {l.top_trader.return_pct >= 0 ? '+' : ''}{l.top_trader.return_pct.toFixed(1)}%
                           </div>
-                          <div style={{ fontFamily: font.mono, fontSize: 10, color: '#666' }}>{l.top_trader.name}</div>
+                          <div style={{ fontFamily: font.mono, fontSize: 10, color: '#999' }}>{l.top_trader.name}</div>
                         </div>
                       )}
                       <span className="tag" style={{ color: fee > 0 ? c.pink : c.green, background: fee > 0 ? `${c.pink}15` : `${c.green}15` }}>{fee > 0 ? `$${fee}` : 'FREE'}</span>
@@ -345,8 +341,8 @@ export default function DashboardPage() {
                   )
                 }) : (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 32, textAlign: 'center' }}>
-                    <div style={{ fontFamily: font.display, fontSize: 24, color: '#444', marginBottom: 8 }}>NO ACTIVE LOBBIES</div>
-                    <div style={{ fontFamily: font.sans, fontSize: 13, color: '#666', marginBottom: 16 }}>Create a lobby and invite your friends</div>
+                    <div style={{ fontFamily: font.display, fontSize: 24, color: '#777', marginBottom: 8 }}>NO ACTIVE LOBBIES</div>
+                    <div style={{ fontFamily: font.sans, fontSize: 13, color: '#999', marginBottom: 16 }}>Create a lobby and invite your friends</div>
                     <Link href="/create" style={{ fontFamily: font.sans, fontSize: 13, fontWeight: 600, color: c.bg, background: c.pink, padding: '10px 28px', borderRadius: 8, textDecoration: 'none' }}>Create Lobby</Link>
                   </div>
                 )}
@@ -358,9 +354,9 @@ export default function DashboardPage() {
           <div className="right-col" style={{ width: 340, minWidth: 340, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden', borderLeft: '1px solid #1A1A1A' }}>
             {/* Tab switcher */}
             <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-              <button className="tab-btn" onClick={() => setRightTab('cards')} style={{ color: rightTab === 'cards' ? '#FFF' : '#777', background: rightTab === 'cards' ? '#1A1A1A' : 'transparent' }}>Playbook</button>
-              <button className="tab-btn" onClick={() => setRightTab('leaderboard')} style={{ color: rightTab === 'leaderboard' ? '#FFF' : '#777', background: rightTab === 'leaderboard' ? '#1A1A1A' : 'transparent' }}>
-                Leaderboard{traders.length > 0 && <span style={{ fontFamily: font.mono, fontSize: 9, color: '#666', marginLeft: 4 }}>({traders.length})</span>}
+              <button className="tab-btn" onClick={() => setRightTab('cards')} style={{ color: rightTab === 'cards' ? '#FFF' : '#999', background: rightTab === 'cards' ? '#1A1A1A' : 'transparent' }}>Playbook</button>
+              <button className="tab-btn" onClick={() => setRightTab('leaderboard')} style={{ color: rightTab === 'leaderboard' ? '#FFF' : '#999', background: rightTab === 'leaderboard' ? '#1A1A1A' : 'transparent' }}>
+                Leaderboard{traders.length > 0 && <span style={{ fontFamily: font.mono, fontSize: 9, color: '#999', marginLeft: 4 }}>({traders.length})</span>}
               </button>
             </div>
 
@@ -390,7 +386,7 @@ export default function DashboardPage() {
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
                         <div style={{ fontFamily: font.mono, fontSize: 12, fontWeight: 700, color: c.pink }}>{w.cost}</div>
-                        {w.duration > 0 && <div style={{ fontFamily: font.mono, fontSize: 9, color: '#555' }}>{w.duration}s</div>}
+                        {w.duration > 0 && <div style={{ fontFamily: font.mono, fontSize: 9, color: '#888' }}>{w.duration}s</div>}
                       </div>
                     </div>
                   ))}
@@ -413,7 +409,7 @@ export default function DashboardPage() {
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
                         <div style={{ fontFamily: font.mono, fontSize: 12, fontWeight: 700, color: c.blue }}>{w.cost}</div>
-                        {w.duration > 0 && <div style={{ fontFamily: font.mono, fontSize: 9, color: '#555' }}>{w.duration}s</div>}
+                        {w.duration > 0 && <div style={{ fontFamily: font.mono, fontSize: 9, color: '#888' }}>{w.duration}s</div>}
                       </div>
                     </div>
                   ))}
@@ -446,14 +442,14 @@ export default function DashboardPage() {
                         </div>
                         <div style={{ textAlign: 'right' }}>
                           <div style={{ fontFamily: font.mono, fontSize: 12, fontWeight: 600, color: rc }}>{t.tr_score}</div>
-                          <div style={{ fontFamily: font.sans, fontSize: 8, color: '#555' }}>{tierName(t.rank_tier).toUpperCase()}</div>
+                          <div style={{ fontFamily: font.sans, fontSize: 8, color: '#888' }}>{tierName(t.rank_tier).toUpperCase()}</div>
                         </div>
                       </Link>
                     )
                   }) : (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 24, textAlign: 'center' }}>
-                      <div style={{ fontFamily: font.sans, fontSize: 14, color: '#555', marginBottom: 8 }}>No rankings yet</div>
-                      <div style={{ fontFamily: font.sans, fontSize: 12, color: '#444' }}>Play a lobby to get on the board</div>
+                      <div style={{ fontFamily: font.sans, fontSize: 14, color: '#999', marginBottom: 8 }}>No rankings yet</div>
+                      <div style={{ fontFamily: font.sans, fontSize: 12, color: '#777' }}>Play a lobby to get on the board</div>
                     </div>
                   )}
                 </div>

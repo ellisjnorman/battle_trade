@@ -7,6 +7,7 @@ import { PRESETS, PRESET_CATEGORIES } from '@/lib/event-presets';
 import type { EventPreset } from '@/lib/event-presets';
 import { PYTH_FEEDS, MARKET_TYPES, getFeedsByMarket } from '@/lib/pyth-feeds';
 import type { AssetCategory, MarketType } from '@/lib/pyth-feeds';
+import PredictionAdmin from '@/components/prediction-admin';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1691,18 +1692,13 @@ export default function AdminPanel() {
               })()}
             </div>
 
-            {/* ── PREDICTION MARKET ── */}
+            {/* ── PREDICTION MARKET CONTROLS ── */}
             <div style={{ padding: '10px 20px', borderBottom: '1px solid #1A1A1A' }}>
-              <div style={{ fontFamily: sans, fontSize: 9, color: '#999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>PREDICTION MARKET</div>
-              <div style={{ fontFamily: mono, fontSize: 12, color: '#888', marginBottom: 6 }}>
-                {totalBets} BETS · ${market?.total_volume?.toLocaleString() ?? '0'} VOLUME
-              </div>
-              {(market?.outcomes ?? []).map(o => (
-                <div key={o.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontFamily: mono, fontSize: 12 }}>
-                  <span style={{ color: '#888' }}>{o.team_name}</span>
-                  <span style={{ color: '#F5A0D0' }}>{o.odds.toFixed(1)}X ({(o.probability * 100).toFixed(0)}%)</span>
-                </div>
-              ))}
+              <PredictionAdmin
+                lobbyId={lobbyId}
+                password={password}
+                traders={traders.map(t => ({ trader_id: t.trader_id, name: t.name, team_id: t.team_id }))}
+              />
             </div>
 
             {/* ── SABOTAGE FEED ── */}

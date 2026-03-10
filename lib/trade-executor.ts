@@ -1,4 +1,5 @@
 import type { Position } from '@/types';
+import { HyperliquidClient } from './hyperliquid';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -285,10 +286,109 @@ export class LiveExecutor implements TradeExecutor {
 }
 
 // ---------------------------------------------------------------------------
+// HyperliquidExecutor
+// ---------------------------------------------------------------------------
+// Mirrors paper positions to Hyperliquid perps via the agent wallet pattern.
+// Paper position is always recorded first. Hyperliquid order is best-effort.
+
+export class HyperliquidExecutor implements TradeExecutor {
+  private paper = new PaperOnlyExecutor();
+  private client: HyperliquidClient | null = null;
+
+  constructor() {
+    const key = process.env.HYPERLIQUID_PRIVATE_KEY;
+    const testnet = process.env.HYPERLIQUID_TESTNET === 'true';
+    if (key) {
+      this.client = new HyperliquidClient(key, testnet);
+    } else {
+      console.warn(
+        '[hyperliquid] HYPERLIQUID_PRIVATE_KEY not set — running in paper-only fallback'
+      );
+    }
+  }
+
+  async execute(params: TradeParams): Promise<TradeResult> {
+    // Always record paper position first
+    const paperResult = await this.paper.execute(params);
+    if (!paperResult.success) return paperResult;
+
+    // Mirror to Hyperliquid if client is available
+    if (this.client) {
+      try {
+        // Convert symbol: "BTCUSDT" -> "BTC", "ETHUSDT" -> "ETH"
+        const coin = params.asset.replace(/USDT$/, '');
+
+        // Convert USD size to asset size: size_usd / entry_price
+        const sz = params.size_usd / params.entry_price;
+
+        // Apply slippage for market orders (0.5%)
+        const slippage = params.direction === 'long' ? 1.005 : 0.995;
+        const limitPx = params.entry_price * slippage;
+
+        const result = await this.client.placeOrder({
+          coin,
+          isBuy: params.direction === 'long',
+          sz,
+          limitPx,
+          leverage: params.leverage,
+          orderType: params.order_type === 'limit' ? 'limit' : 'market',
+        });
+
+        // Extract order ID from response
+        const status = result.response?.data?.statuses?.[0];
+        const oid =
+          status?.resting?.oid ?? status?.filled?.oid;
+
+        return {
+          ...paperResult,
+          external_tx_id: oid?.toString() ?? 'hl-submitted',
+        };
+      } catch (err) {
+        console.error(
+          '[hyperliquid] Order failed (paper position preserved):',
+          err
+        );
+      }
+    }
+
+    return paperResult;
+  }
+
+  async closePosition(params: CloseParams): Promise<TradeResult> {
+    const paperResult = await this.paper.closePosition(params);
+    if (!paperResult.success) return paperResult;
+
+    // Close the matching position on Hyperliquid
+    if (this.client) {
+      try {
+        const { supabase } = await import('./supabase');
+        const { data: pos } = await supabase
+          .from('positions')
+          .select('symbol')
+          .eq('id', params.position_id)
+          .single();
+
+        if (pos) {
+          const coin = pos.symbol.replace(/USDT$/, '');
+          await this.client.closePosition(coin);
+        }
+      } catch (err) {
+        console.error(
+          '[hyperliquid] Close failed (paper position closed):',
+          err
+        );
+      }
+    }
+
+    return paperResult;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
 
-export type TradeExecutionMode = 'paper_only' | 'paper_plus_onchain' | 'live';
+export type TradeExecutionMode = 'paper_only' | 'paper_plus_onchain' | 'live' | 'hyperliquid';
 
 export function getExecutor(config: {
   trade_execution_mode?: TradeExecutionMode;
@@ -302,6 +402,8 @@ export function getExecutor(config: {
       return new PaperPlusOnchainExecutor(config.sponsor_api);
     case 'live':
       return new LiveExecutor();
+    case 'hyperliquid':
+      return new HyperliquidExecutor();
     default:
       return new PaperOnlyExecutor();
   }

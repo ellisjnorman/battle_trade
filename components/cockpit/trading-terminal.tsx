@@ -11,6 +11,7 @@ import { CREDIT_PACKAGES, totalCredits, type CreditPackage, type PaymentMethod }
 import { getLiquidationPrice } from '@/lib/liquidation';
 import { useToastStore } from '@/lib/toast-store';
 import { SectionErrorBoundary } from '@/components/error-boundary';
+import LobbyChat from '@/components/lobby-chat';
 import type { Position } from '@/types';
 
 // ---------------------------------------------------------------------------
@@ -1587,6 +1588,16 @@ export default function TradingTerminal() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Chat */}
+      {trader && (
+        <LobbyChat
+          lobbyId={lobbyId}
+          userId={trader.id}
+          userName={trader.name}
+          userRole="competitor"
+        />
       )}
     </>
   );

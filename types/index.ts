@@ -24,7 +24,7 @@ export interface LobbyConfig {
   round_duration_seconds: number;           // each round (default 300 = 5 min)
   lobby_duration_minutes?: number;          // total lobby length (15-60 min, optional)
   scoring_mode?: 'best_round' | 'cumulative' | 'last_round';  // how winner is decided (default best_round)
-  trade_execution_mode?: 'paper_only' | 'paper_plus_onchain' | 'live';
+  trade_execution_mode?: 'paper_only' | 'paper_plus_onchain' | 'live' | 'hyperliquid';
   prediction_rake_pct?: number;   // 0-100, platform rake on prediction market payouts (default 10)
   entry_fee?: number;             // credits required to enter (0 = free / IRL events)
   entry_rake_pct?: number;        // 0-100, platform cut of entry fee pot (default 20)
@@ -230,4 +230,21 @@ export interface ProfileFull extends Profile {
   location: string | null;
   followers_count: number;
   following_count: number;
+}
+
+// ---------------------------------------------------------------------------
+// Streaming
+// ---------------------------------------------------------------------------
+
+export interface LobbyStream {
+  id: string;
+  lobby_id: string;
+  provider: 'mux' | 'cloudflare' | 'custom';
+  stream_key: string;
+  rtmp_url: string;
+  playback_url: string;
+  playback_id: string | null;
+  external_id: string | null;
+  status: 'idle' | 'active' | 'disconnected';
+  created_at: string;
 }

@@ -27,6 +27,7 @@ interface RegistrationResult {
   handle: string | null;
   is_competitor: boolean;
   credits: number;
+  entry_fee?: number;
   trade_url: string;
   spectate_url: string;
 }
@@ -59,11 +60,24 @@ export default function RegisterPage() {
 
   // Lobby info
   const [lobbyName, setLobbyName] = useState<string | null>(null);
+  const [entryFee, setEntryFee] = useState(0);
+  const [prizePool, setPrizePool] = useState(0);
+  const [totalEntries, setTotalEntries] = useState(0);
 
   useEffect(() => {
     fetch(`/api/lobby/${lobbyId}/info`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data?.name) setLobbyName(data.name); })
+      .catch(() => {});
+    fetch(`/api/lobby/${lobbyId}/fee-info`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) {
+          setEntryFee(data.entry_fee ?? 0);
+          setPrizePool(data.prize_pool ?? 0);
+          setTotalEntries(data.total_entries ?? 0);
+        }
+      })
       .catch(() => {});
   }, [lobbyId]);
 
@@ -116,7 +130,15 @@ export default function RegisterPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error ?? 'Registration failed'); setSubmitting(false); return; }
+      if (!res.ok) {
+        if (data.insufficient_credits) {
+          setError(`Not enough credits to enter. Entry fee: ${data.entry_fee} CR. You can earn credits during the match.`);
+        } else {
+          setError(data.error ?? 'Registration failed');
+        }
+        setSubmitting(false);
+        return;
+      }
       setResult(data);
       setScreen('success');
     } catch {
@@ -208,6 +230,34 @@ export default function RegisterPage() {
               </div>
             </div>
 
+            {/* Entry Fee + Prize Pool */}
+            {entryFee > 0 && (
+              <div className="fade-up-3" style={{
+                width: '100%',
+                border: '1px solid #1A1A1A',
+                background: 'rgba(0,255,136,0.02)',
+                padding: '16px 24px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontFamily: sans, fontSize: 9, color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase' }}>ENTRY FEE</div>
+                    <div style={{ fontFamily: bebas, fontSize: 28, color: '#F5A0D0', lineHeight: 1, marginTop: 2 }}>
+                      {entryFee.toLocaleString()} CR
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontFamily: sans, fontSize: 9, color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase' }}>PRIZE POOL</div>
+                    <div style={{ fontFamily: bebas, fontSize: 28, color: '#00FF88', lineHeight: 1, marginTop: 2 }}>
+                      {prizePool.toLocaleString()} CR
+                    </div>
+                  </div>
+                </div>
+                <div style={{ fontFamily: mono, fontSize: 11, color: '#555', textAlign: 'center' }}>
+                  1st: 60% · 2nd: 25% · 3rd: 15% · {totalEntries} entered
+                </div>
+              </div>
+            )}
+
             {/* CTAs */}
             <div className="fade-up-3" style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
               <button
@@ -220,7 +270,7 @@ export default function RegisterPage() {
                   cursor: 'pointer',
                 }}
               >
-                ENTER THE ARENA
+                {entryFee > 0 ? `ENTER THE ARENA · ${entryFee.toLocaleString()} CR` : 'ENTER THE ARENA'}
               </button>
               <button
                 onClick={() => { setIsCompetitor(false); setScreen('register'); }}
@@ -476,7 +526,7 @@ export default function RegisterPage() {
                 cursor: submitting ? 'not-allowed' : 'pointer',
               }}
             >
-              {submitting ? 'LOCKING IN...' : 'JOIN THE BATTLE'}
+              {submitting ? 'LOCKING IN...' : (entryFee > 0 && isCompetitor ? `JOIN THE BATTLE · ${entryFee.toLocaleString()} CR` : 'JOIN THE BATTLE')}
             </button>
 
             <button
@@ -572,6 +622,19 @@ export default function RegisterPage() {
                   ACCESS CODE
                 </div>
               </div>
+              {result.entry_fee && result.entry_fee > 0 && (
+                <>
+                  <div style={{ width: 1, background: '#1A1A1A' }} />
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontFamily: mono, fontSize: 28, color: '#00FF88', fontWeight: 700, letterSpacing: '-0.02em' }}>
+                      {result.entry_fee}
+                    </div>
+                    <div style={{ fontFamily: sans, fontSize: 9, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      FEE PAID
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Enter terminal button */}
