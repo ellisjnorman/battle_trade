@@ -153,10 +153,28 @@ const sans = "var(--font-dm-sans, 'DM Sans'), sans-serif";
 export default function AdminPanel() {
   const { id: lobbyId } = useParams<{ id: string }>();
 
-  // Auth
-  const [password, setPassword] = useState('');
+  // Auth — profile ID (creator) or password
+  const [authToken, setAuthToken] = useState('');
   const [authenticated, setAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
+  const [autoAuthAttempted, setAutoAuthAttempted] = useState(false);
+
+  // Auto-authenticate if user is the lobby creator
+  useEffect(() => {
+    if (authenticated || autoAuthAttempted) return;
+    setAutoAuthAttempted(true);
+    const profileId = localStorage.getItem('bt_profile_id');
+    if (!profileId) return;
+    // Try auth with profile ID
+    fetch(`/api/lobby/${lobbyId}/admin/status`, {
+      headers: { Authorization: profileId },
+    }).then(r => {
+      if (r.ok) {
+        setAuthToken(profileId);
+        setAuthenticated(true);
+      }
+    }).catch(() => {});
+  }, [lobbyId, authenticated, autoAuthAttempted]);
 
   // Round state
   const [round, setRound] = useState<RoundData | null>(null);
@@ -233,7 +251,7 @@ export default function AdminPanel() {
       try {
         const res = await fetch(`/api/lobby/${lobbyId}/admin/${path}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: password },
+          headers: { 'Content-Type': 'application/json', Authorization: authToken },
           body: JSON.stringify(body),
         });
         const data = await res.json();
@@ -250,17 +268,17 @@ export default function AdminPanel() {
         return { error: 'Network error' };
       }
     },
-    [lobbyId, password],
+    [lobbyId, authToken],
   );
 
   const adminGet = useCallback(
     async (path: string) => {
       const res = await fetch(`/api/lobby/${lobbyId}/admin/${path}`, {
-        headers: { Authorization: password },
+        headers: { Authorization: authToken },
       });
       return res.json();
     },
-    [lobbyId, password],
+    [lobbyId, authToken],
   );
 
   // ---------------------------------------------------------------------------
@@ -287,7 +305,7 @@ export default function AdminPanel() {
     if (!authenticated) return;
     try {
       const res = await fetch(`/api/lobby/${lobbyId}/events`, {
-        headers: { Authorization: password },
+        headers: { Authorization: authToken },
       });
       const data = await res.json();
       const events = (data.events ?? []) as VolatilityEvent[];
@@ -306,7 +324,7 @@ export default function AdminPanel() {
     } catch {
       // silent
     }
-  }, [authenticated, lobbyId, password]);
+  }, [authenticated, lobbyId, authToken]);
 
   const fetchMarket = useCallback(async () => {
     if (!authenticated || !round) return;
@@ -623,7 +641,7 @@ export default function AdminPanel() {
     const asset = eventAsset === 'ALL' ? 'ALL' : `${eventAsset}USDT`;
     const res = await fetch(`/api/lobby/${lobbyId}/events`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: password },
+      headers: { 'Content-Type': 'application/json', Authorization: authToken },
       body: JSON.stringify({
         type: selectedEvent,
         asset,
@@ -661,7 +679,7 @@ export default function AdminPanel() {
     if (presetCooldown) return;
     const res = await fetch(`/api/lobby/${lobbyId}/events`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: password },
+      headers: { 'Content-Type': 'application/json', Authorization: authToken },
       body: JSON.stringify({ preset_id: preset.id }),
     });
     const data = await res.json();
@@ -690,7 +708,7 @@ export default function AdminPanel() {
       const symbol = symbols.length > 0 ? symbols[Math.floor(Math.random() * symbols.length)] : 'BTCUSDT';
       await fetch(`/api/lobby/${lobbyId}/positions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: password },
+        headers: { 'Content-Type': 'application/json', Authorization: authToken },
         body: JSON.stringify({
           trader_id: traderId,
           round_id: round?.id,
@@ -871,6 +889,15 @@ export default function AdminPanel() {
   // ---------------------------------------------------------------------------
 
   if (!authenticated) {
+    // Show loading while auto-auth is being attempted
+    if (!autoAuthAttempted) {
+      return (
+        <div style={{ background: '#0A0A0A', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ fontFamily: mono, fontSize: 14, color: '#888' }}>AUTHENTICATING...</div>
+        </div>
+      );
+    }
+
     return (
       <>
         {/* eslint-disable-next-line @next/next/no-page-custom-font */}
@@ -890,12 +917,12 @@ export default function AdminPanel() {
                 type="password"
                 value={passwordInput}
                 onChange={(e) => setPasswordInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && (() => { setPassword(passwordInput); setAuthenticated(true); })()}
+                onKeyDown={(e) => e.key === 'Enter' && (() => { setAuthToken(passwordInput); setAuthenticated(true); })()}
                 placeholder="ENTER PASSWORD"
                 style={{ width: '100%', height: 56, background: '#111111', border: '2px solid #1A1A1A', color: '#F5A0D0', fontFamily: mono, fontSize: 16, textAlign: 'center', letterSpacing: '0.15em', outline: 'none' }}
               />
               <button
-                onClick={() => { setPassword(passwordInput); setAuthenticated(true); }}
+                onClick={() => { setAuthToken(passwordInput); setAuthenticated(true); }}
                 style={{ width: '100%', height: 56, background: '#F5A0D0', color: '#0A0A0A', border: 'none', fontFamily: bebas, fontSize: 24, letterSpacing: '0.15em', cursor: 'pointer' }}
               >
                 ENTER
@@ -1760,7 +1787,7 @@ export default function AdminPanel() {
             <div style={{ padding: '10px 20px', borderBottom: '1px solid #1A1A1A' }}>
               <PredictionAdmin
                 lobbyId={lobbyId}
-                password={password}
+                password={authToken}
                 traders={traders.map(t => ({ trader_id: t.trader_id, name: t.name, team_id: t.team_id }))}
               />
             </div>

@@ -17,13 +17,13 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
     const { name: safeName, format: safeFormat, config } = parsed.data;
-    const { is_public, admin_password } = body;
+    const { is_public, admin_password, creator_id } = body;
 
     // Generate a 6-char invite code
     const invite_code = crypto.randomBytes(4).toString('base64url').slice(0, 6).toUpperCase();
 
-    // Auto-generate admin password if none provided
-    const finalAdminPassword = admin_password || crypto.randomBytes(6).toString('base64url');
+    // Keep admin_password as fallback for IRL/kiosk scenarios
+    const finalAdminPassword = admin_password || undefined;
 
     const sb = getServerSupabase();
 
@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
         format: safeFormat,
         is_public: is_public ?? true,
         invite_code,
+        created_by: creator_id || null,
         config: {
           ...config,
           admin_password: finalAdminPassword,
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ id: lobby.id, invite_code: lobby.invite_code, admin_password: finalAdminPassword });
+    return NextResponse.json({ id: lobby.id, invite_code: lobby.invite_code });
   } catch (err) {
     logger.error('Lobby creation failed', { route: '/api/lobby/create' }, err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

@@ -30,7 +30,7 @@ export function checkAuth(request: NextRequest): boolean {
   return false;
 }
 
-/** Check auth against both global password and per-lobby config password */
+/** Check auth against global password, per-lobby password, OR lobby creator profile ID */
 export async function checkAuthWithLobby(request: NextRequest, lobbyId: string): Promise<boolean> {
   const authHeader = request.headers.get('Authorization');
   if (!authHeader) return false;
@@ -39,15 +39,19 @@ export async function checkAuthWithLobby(request: NextRequest, lobbyId: string):
   const globalPassword = process.env.ADMIN_PASSWORD;
   if (globalPassword && safeEqual(authHeader, globalPassword)) return true;
 
-  // Check per-lobby admin password from config
+  // Check per-lobby: creator profile ID or config admin_password
   try {
     const sb = getServerSupabase();
     const { data: lobby } = await sb
       .from('lobbies')
-      .select('config')
+      .select('config, created_by')
       .eq('id', lobbyId)
       .single();
 
+    // Creator owns their lobby — profile ID match
+    if (lobby?.created_by && authHeader === lobby.created_by) return true;
+
+    // Fallback: per-lobby admin password
     const lobbyPassword = lobby?.config?.admin_password;
     if (lobbyPassword && safeEqual(authHeader, lobbyPassword)) return true;
   } catch {
