@@ -889,46 +889,25 @@ export default function AdminPanel() {
   // ---------------------------------------------------------------------------
 
   if (!authenticated) {
-    // Show loading while auto-auth is being attempted
-    if (!autoAuthAttempted) {
-      return (
-        <div style={{ background: '#0A0A0A', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ fontFamily: mono, fontSize: 14, color: '#888' }}>AUTHENTICATING...</div>
-        </div>
-      );
-    }
-
     return (
       <>
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-        <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
-        <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } input, button { border-radius: 0 !important; }`}</style>
-        {/* Scanlines */}
-        <div style={{ position: 'fixed', inset: 0, background: 'repeating-linear-gradient(rgba(0,0,0,0.03) 1px, transparent 1px)', backgroundSize: '2px 2px', pointerEvents: 'none', zIndex: 999 }} />
-        <div style={{ background: '#0A0A0A', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: 400, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 32 }}>
-            <a href="/">
+        <style>{`* { box-sizing: border-box; margin: 0; padding: 0; }`}</style>
+        <div style={{ background: '#0A0A0A', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 24 }}>
+          {!autoAuthAttempted ? (
+            <div style={{ fontFamily: mono, fontSize: 14, color: '#888' }}>AUTHENTICATING...</div>
+          ) : (
+            <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/brand/logo-main.png" alt="Battle Trade" style={{ width: 280, height: 'auto' }} />
-            </a>
-            <div style={{ fontFamily: bebas, fontSize: 20, color: '#999999', letterSpacing: '0.15em' }}>MISSION CONTROL</div>
-            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <input
-                type="password"
-                value={passwordInput}
-                onChange={(e) => setPasswordInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && (() => { setAuthToken(passwordInput); setAuthenticated(true); })()}
-                placeholder="ENTER PASSWORD"
-                style={{ width: '100%', height: 56, background: '#111111', border: '2px solid #1A1A1A', color: '#F5A0D0', fontFamily: mono, fontSize: 16, textAlign: 'center', letterSpacing: '0.15em', outline: 'none' }}
-              />
-              <button
-                onClick={() => { setAuthToken(passwordInput); setAuthenticated(true); }}
-                style={{ width: '100%', height: 56, background: '#F5A0D0', color: '#0A0A0A', border: 'none', fontFamily: bebas, fontSize: 24, letterSpacing: '0.15em', cursor: 'pointer' }}
-              >
-                ENTER
-              </button>
-            </div>
-          </div>
+              <div style={{ fontFamily: bebas, fontSize: 20, color: '#999', letterSpacing: '0.15em' }}>ACCESS DENIED</div>
+              <div style={{ fontFamily: sans, fontSize: 13, color: '#666', textAlign: 'center', maxWidth: 320 }}>
+                You don&apos;t have admin access to this lobby. Only the creator can manage it.
+              </div>
+              <a href="/dashboard" style={{ fontFamily: bebas, fontSize: 18, color: '#F5A0D0', textDecoration: 'none', padding: '12px 32px', border: '2px solid #F5A0D0', cursor: 'pointer' }}>
+                GO TO DASHBOARD
+              </a>
+            </>
+          )}
         </div>
       </>
     );
