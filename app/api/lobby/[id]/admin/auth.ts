@@ -1,37 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { getServerSupabase } from '@/lib/supabase-server';
 
 export function unauthorized() {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+}
+
+function safeEqual(a: string, b: string): boolean {
+  try {
+    const bufA = Buffer.from(a, 'utf8');
+    const bufB = Buffer.from(b, 'utf8');
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
 }
 
 export function checkAuth(request: NextRequest): boolean {
   const authHeader = request.headers.get('Authorization');
   if (!authHeader) return false;
 
-  const password = process.env.ADMIN_PASSWORD;
-  if (!password) {
-    console.error('ADMIN_PASSWORD env var is not set — all admin requests will be rejected');
-    return false;
-  }
+  // Check global admin password
+  const globalPassword = process.env.ADMIN_PASSWORD;
+  if (globalPassword && safeEqual(authHeader, globalPassword)) return true;
 
-  // Also support per-lobby passwords from config header
-  const lobbyPassword = request.headers.get('X-Lobby-Password');
+  // Will also be checked against per-lobby password in checkAuthWithLobby
+  // For backwards compat, return false here — callers should use checkAuthWithLobby
+  return false;
+}
 
-  // Timing-safe comparison to prevent timing attacks
+/** Check auth against both global password and per-lobby config password */
+export async function checkAuthWithLobby(request: NextRequest, lobbyId: string): Promise<boolean> {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader) return false;
+
+  // Check global admin password first
+  const globalPassword = process.env.ADMIN_PASSWORD;
+  if (globalPassword && safeEqual(authHeader, globalPassword)) return true;
+
+  // Check per-lobby admin password from config
   try {
-    const a = Buffer.from(authHeader, 'utf8');
-    const b = Buffer.from(password, 'utf8');
-    if (a.length !== b.length) {
-      // Check lobby password as fallback
-      if (lobbyPassword) {
-        const c = Buffer.from(lobbyPassword, 'utf8');
-        return c.length === b.length && crypto.timingSafeEqual(c, b);
-      }
-      return false;
-    }
-    return crypto.timingSafeEqual(a, b);
+    const sb = getServerSupabase();
+    const { data: lobby } = await sb
+      .from('lobbies')
+      .select('config')
+      .eq('id', lobbyId)
+      .single();
+
+    const lobbyPassword = lobby?.config?.admin_password;
+    if (lobbyPassword && safeEqual(authHeader, lobbyPassword)) return true;
   } catch {
-    return false;
+    // silent — fall through to false
   }
+
+  return false;
 }

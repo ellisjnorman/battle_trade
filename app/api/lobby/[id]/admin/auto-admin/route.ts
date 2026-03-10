@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { checkAuth } from '../auth';
+import { checkAuthWithLobby } from '../auth';
 import { getServerSupabase } from '@/lib/supabase-server';
 import { startAutoAdmin, stopAutoAdmin } from '@/lib/auto-admin';
 
@@ -11,7 +11,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: lobbyId } = await params;
-  if (!checkAuth(request)) {
+  if (!(await checkAuthWithLobby(request, lobbyId))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

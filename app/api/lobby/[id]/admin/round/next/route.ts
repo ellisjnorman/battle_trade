@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { startParticipationLoop } from '@/lib/participation-rules';
 import { logAdminAction } from '@/lib/audit';
-import { checkAuth, unauthorized } from '../../auth';
+import { checkAuthWithLobby, unauthorized } from '../../auth';
 import { getCleanup, setCleanup, removeCleanup } from '../../participation';
 
 export const dynamic = 'force-dynamic';
@@ -11,9 +11,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!checkAuth(request)) return unauthorized();
-
   const { id: lobbyId } = await params;
+  if (!(await checkAuthWithLobby(request, lobbyId))) return unauthorized();
   const body = await request.json();
   const { settings } = body;
 

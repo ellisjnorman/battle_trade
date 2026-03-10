@@ -22,6 +22,9 @@ export async function POST(req: NextRequest) {
     // Generate a 6-char invite code
     const invite_code = crypto.randomBytes(4).toString('base64url').slice(0, 6).toUpperCase();
 
+    // Auto-generate admin password if none provided
+    const finalAdminPassword = admin_password || crypto.randomBytes(6).toString('base64url');
+
     const sb = getServerSupabase();
 
     const { data: lobby, error } = await sb
@@ -33,7 +36,7 @@ export async function POST(req: NextRequest) {
         invite_code,
         config: {
           ...config,
-          admin_password: admin_password || undefined,
+          admin_password: finalAdminPassword,
         },
         status: 'waiting',
       })
@@ -44,7 +47,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ id: lobby.id, invite_code: lobby.invite_code });
+    return NextResponse.json({ id: lobby.id, invite_code: lobby.invite_code, admin_password: finalAdminPassword });
   } catch (err) {
     logger.error('Lobby creation failed', { route: '/api/lobby/create' }, err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

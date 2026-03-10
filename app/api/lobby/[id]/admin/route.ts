@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { checkAuth, unauthorized } from './auth';
+import { checkAuthWithLobby, unauthorized } from './auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,9 +16,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!checkAuth(request)) return unauthorized();
-
   const { id: lobbyId } = await params;
+  if (!(await checkAuthWithLobby(request, lobbyId))) return unauthorized();
   const action = request.nextUrl.searchParams.get('action');
 
   if (action === 'current_round') {

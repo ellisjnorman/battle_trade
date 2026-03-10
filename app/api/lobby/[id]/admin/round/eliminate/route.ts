@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { MockProvider } from '@/lib/prediction-markets';
 import { logger } from '@/lib/logger';
 import { logAdminAction } from '@/lib/audit';
-import { checkAuth, unauthorized } from '../../auth';
+import { checkAuthWithLobby, unauthorized } from '../../auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,9 +11,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!checkAuth(request)) return unauthorized();
-
   const { id: lobbyId } = await params;
+  if (!(await checkAuthWithLobby(request, lobbyId))) return unauthorized();
   const body = await request.json();
   const { trader_id } = body;
 

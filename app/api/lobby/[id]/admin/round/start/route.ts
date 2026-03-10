@@ -5,7 +5,7 @@ import { startPriceFeed } from '@/lib/prices';
 import { logger } from '@/lib/logger';
 import { parseBody, AdminRoundSchema } from '@/lib/validation';
 import { logAdminAction } from '@/lib/audit';
-import { checkAuth, unauthorized } from '../../auth';
+import { checkAuthWithLobby, unauthorized } from '../../auth';
 
 // Track if price feed is already running
 let priceFeedStarted = false;
@@ -16,9 +16,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!checkAuth(request)) return unauthorized();
-
   const { id: lobbyId } = await params;
+  if (!(await checkAuthWithLobby(request, lobbyId))) return unauthorized();
   const body = await request.json();
   const parsed = parseBody(AdminRoundSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });

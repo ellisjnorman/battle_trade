@@ -218,6 +218,9 @@ export default function AdminPanel() {
   // Revenue
   const [revenue, setRevenue] = useState<{ predictionRake: number; entryRake: number; purchases: number; prizePool: number; prizeStatus: string } | null>(null);
 
+  // All lobbies (for lobby switcher)
+  const [allLobbies, setAllLobbies] = useState<{ id: string; name: string; status: string; player_count: number }[]>([]);
+
   // Refs
   const traderNamesRef = useRef<Record<string, string>>({});
 
@@ -945,6 +948,8 @@ export default function AdminPanel() {
             <div style={{ width: 1, height: 32, background: '#1A1A1A' }} />
             <div style={{ fontFamily: bebas, fontSize: 20, color: '#999999', letterSpacing: '0.1em' }}>MISSION CONTROL</div>
           </a>
+          <a href="/dashboard" style={{ fontFamily: sans, fontSize: 12, color: '#888', textDecoration: 'none', padding: '4px 12px', border: '1px solid #1A1A1A', cursor: 'pointer' }}>DASHBOARD</a>
+          <a href="/create" style={{ fontFamily: sans, fontSize: 12, color: '#888', textDecoration: 'none', padding: '4px 12px', border: '1px solid #1A1A1A', cursor: 'pointer' }}>+ NEW BATTLE</a>
           <div style={{ flex: 1 }} />
 
           {/* Live prices — top assets */}

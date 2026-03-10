@@ -54,11 +54,12 @@ const LOBBY_DURATIONS = [
   { label: '1 HOUR', value: 60 },
 ];
 
-function DoneScreen({ name, lobby, router }: { name: string; lobby: { id: string; invite_code: string }; router: ReturnType<typeof useRouter> }) {
+function DoneScreen({ name, lobby, router }: { name: string; lobby: { id: string; invite_code: string; admin_password: string }; router: ReturnType<typeof useRouter> }) {
   const [copied, setCopied] = useState<string | null>(null);
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const joinLink = `${origin}/register/${lobby.invite_code}`;
   const spectateLink = `${origin}/lobby/${lobby.id}/spectate`;
+  const adminLink = `${origin}/lobby/${lobby.id}/admin`;
 
   const copy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -72,8 +73,25 @@ function DoneScreen({ name, lobby, router }: { name: string; lobby: { id: string
       <h1 style={{ ...B, fontSize: 64, color: '#00FF88', lineHeight: 1, textShadow: '0 0 60px rgba(0,255,136,0.4)' }}>LET&apos;S GO</h1>
       <p style={{ ...B, fontSize: 28, color: '#FFF', marginTop: 16 }}>{name}</p>
 
-      {/* Share links — the main thing */}
-      <div style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* Admin password — CRITICAL, show prominently */}
+      <div style={{ marginTop: 24, padding: '16px 24px', border: '2px solid #FF4466', background: 'rgba(255,68,102,0.06)', textAlign: 'left' }}>
+        <div style={{ ...S, fontSize: 10, color: '#FF4466', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>ADMIN PASSWORD — SAVE THIS</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ ...M, fontSize: 24, color: '#FFF', fontWeight: 700, letterSpacing: '0.1em' }}>
+            {lobby.admin_password}
+          </div>
+          <button
+            onClick={() => copy(lobby.admin_password, 'password')}
+            style={{ ...B, fontSize: 14, color: copied === 'password' ? '#00FF88' : '#FF4466', background: 'transparent', border: `1px solid ${copied === 'password' ? '#00FF88' : '#FF4466'}`, padding: '4px 14px', cursor: 'pointer' }}
+          >
+            {copied === 'password' ? 'COPIED!' : 'COPY'}
+          </button>
+        </div>
+        <div style={{ ...S, fontSize: 11, color: '#888', marginTop: 6 }}>You need this to access the admin panel. It won&apos;t be shown again.</div>
+      </div>
+
+      {/* Share links */}
+      <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ ...S, fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>SHARE THESE LINKS</div>
 
         {/* Join as trader */}
@@ -152,7 +170,7 @@ export default function CreateLobbyPage() {
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [createdLobby, setCreatedLobby] = useState<{ id: string; invite_code: string } | null>(null);
+  const [createdLobby, setCreatedLobby] = useState<{ id: string; invite_code: string; admin_password: string } | null>(null);
   const [hoveredPreset, setHoveredPreset] = useState<string | null>(null);
 
   // Config state
