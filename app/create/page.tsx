@@ -54,6 +54,98 @@ const LOBBY_DURATIONS = [
   { label: '1 HOUR', value: 60 },
 ];
 
+function DoneScreen({ name, lobby, router }: { name: string; lobby: { id: string; invite_code: string }; router: ReturnType<typeof useRouter> }) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const joinLink = `${origin}/register/${lobby.invite_code}`;
+  const spectateLink = `${origin}/lobby/${lobby.id}/spectate`;
+
+  const copy = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  return (
+    <div style={{ textAlign: 'center', paddingTop: 32 }}>
+      <div style={{ fontSize: 64, marginBottom: 16 }}>⚡</div>
+      <h1 style={{ ...B, fontSize: 64, color: '#00FF88', lineHeight: 1, textShadow: '0 0 60px rgba(0,255,136,0.4)' }}>LET&apos;S GO</h1>
+      <p style={{ ...B, fontSize: 28, color: '#FFF', marginTop: 16 }}>{name}</p>
+
+      {/* Share links — the main thing */}
+      <div style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ ...S, fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>SHARE THESE LINKS</div>
+
+        {/* Join as trader */}
+        <button
+          onClick={() => copy(joinLink, 'join')}
+          style={{
+            width: '100%', padding: '16px 20px',
+            background: copied === 'join' ? 'rgba(0,255,136,0.08)' : '#0D0D0D',
+            border: `2px solid ${copied === 'join' ? '#00FF88' : '#1A1A1A'}`,
+            cursor: 'pointer', textAlign: 'left',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            transition: 'all 200ms',
+          }}
+        >
+          <div>
+            <div style={{ ...B, fontSize: 18, color: '#F5A0D0' }}>JOIN AS TRADER</div>
+            <div style={{ ...M, fontSize: 11, color: '#555', marginTop: 2, wordBreak: 'break-all' }}>{joinLink}</div>
+          </div>
+          <span style={{ ...B, fontSize: 14, color: copied === 'join' ? '#00FF88' : '#888', flexShrink: 0, marginLeft: 16 }}>
+            {copied === 'join' ? 'COPIED!' : 'COPY'}
+          </span>
+        </button>
+
+        {/* Spectate link */}
+        <button
+          onClick={() => copy(spectateLink, 'spectate')}
+          style={{
+            width: '100%', padding: '16px 20px',
+            background: copied === 'spectate' ? 'rgba(0,255,136,0.08)' : '#0D0D0D',
+            border: `2px solid ${copied === 'spectate' ? '#00FF88' : '#1A1A1A'}`,
+            cursor: 'pointer', textAlign: 'left',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            transition: 'all 200ms',
+          }}
+        >
+          <div>
+            <div style={{ ...B, fontSize: 18, color: '#888' }}>SPECTATE LINK</div>
+            <div style={{ ...M, fontSize: 11, color: '#555', marginTop: 2, wordBreak: 'break-all' }}>{spectateLink}</div>
+          </div>
+          <span style={{ ...B, fontSize: 14, color: copied === 'spectate' ? '#00FF88' : '#888', flexShrink: 0, marginLeft: 16 }}>
+            {copied === 'spectate' ? 'COPIED!' : 'COPY'}
+          </span>
+        </button>
+      </div>
+
+      {/* Invite code */}
+      <div style={{ marginTop: 24, padding: 20, border: '2px solid #F5A0D0', background: '#0D0D0D', display: 'inline-block' }} className="glow-pulse">
+        <div style={{ ...S, fontSize: 10, color: '#888', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.1em' }}>INVITE CODE</div>
+        <div style={{ ...M, fontSize: 40, color: '#F5A0D0', fontWeight: 700, letterSpacing: '0.15em', textShadow: '0 0 30px rgba(245,160,208,0.5)' }}>
+          {lobby.invite_code}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: 12, marginTop: 28, justifyContent: 'center', flexWrap: 'wrap' }}>
+        <button
+          onClick={() => router.push(`/lobby/${lobby.id}/admin`)}
+          style={{ height: 56, padding: '0 32px', ...B, fontSize: 20, color: '#0A0A0A', background: '#F5A0D0', border: 'none', cursor: 'pointer' }}
+        >
+          OPEN ADMIN PANEL
+        </button>
+        <button
+          onClick={() => router.push(`/register/${lobby.invite_code}`)}
+          style={{ height: 56, padding: '0 32px', ...B, fontSize: 20, color: '#FFF', background: 'transparent', border: '2px solid #333', cursor: 'pointer' }}
+        >
+          JOIN AS PLAYER
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function CreateLobbyPage() {
   const router = useRouter();
   const [step, setStep] = useState<'preset' | 'config' | 'done'>('preset');
@@ -424,46 +516,7 @@ export default function CreateLobbyPage() {
 
             {/* ═══ STEP 3: DONE ═══ */}
             {step === 'done' && createdLobby && (
-              <div style={{ textAlign: 'center', paddingTop: 32 }}>
-                <div style={{ fontSize: 64, marginBottom: 16 }}>⚡</div>
-                <h1 style={{ ...B, fontSize: 64, color: '#00FF88', lineHeight: 1, textShadow: '0 0 60px rgba(0,255,136,0.4)' }}>LET&apos;S GO</h1>
-                <p style={{ ...B, fontSize: 28, color: '#FFF', marginTop: 16 }}>{name}</p>
-
-                <div style={{ marginTop: 32, padding: 24, border: '2px solid #F5A0D0', background: '#0D0D0D', display: 'inline-block' }} className="glow-pulse">
-                  <div style={{ ...S, fontSize: 10, color: '#888', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.1em' }}>INVITE CODE</div>
-                  <div style={{ ...M, fontSize: 48, color: '#F5A0D0', fontWeight: 700, letterSpacing: '0.15em', textShadow: '0 0 30px rgba(245,160,208,0.5)' }}>
-                    {createdLobby.invite_code}
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: 12, marginTop: 32, justifyContent: 'center', flexWrap: 'wrap' }}>
-                  <button
-                    onClick={() => router.push(`/lobby/${createdLobby.id}/admin`)}
-                    style={{ height: 56, padding: '0 32px', ...B, fontSize: 20, color: '#0A0A0A', background: '#F5A0D0', border: 'none', cursor: 'pointer' }}
-                  >
-                    OPEN ADMIN PANEL
-                  </button>
-                  <button
-                    onClick={() => router.push(`/register/${createdLobby.invite_code}`)}
-                    style={{ height: 56, padding: '0 32px', ...B, fontSize: 20, color: '#FFF', background: 'transparent', border: '2px solid #333', cursor: 'pointer' }}
-                  >
-                    JOIN AS PLAYER
-                  </button>
-                  <button
-                    onClick={() => { navigator.clipboard.writeText(createdLobby.invite_code); }}
-                    style={{ height: 56, padding: '0 32px', ...B, fontSize: 20, color: '#888', background: 'transparent', border: '1px solid #222', cursor: 'pointer' }}
-                  >
-                    COPY CODE
-                  </button>
-                </div>
-
-                <div style={{ marginTop: 32 }}>
-                  <div style={{ ...S, fontSize: 10, color: '#555', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>SHARE LINK</div>
-                  <div style={{ ...M, fontSize: 11, color: '#444', wordBreak: 'break-all' }}>
-                    {typeof window !== 'undefined' ? `${window.location.origin}/register/${createdLobby.invite_code}` : ''}
-                  </div>
-                </div>
-              </div>
+              <DoneScreen name={name} lobby={createdLobby} router={router} />
             )}
 
           </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
+import { usePrivy } from '@privy-io/react-auth';
 import QRCode from 'qrcode';
 
 // ---------------------------------------------------------------------------
@@ -41,14 +42,15 @@ const VOLUME_TIERS = ['JUST WATCHING', 'UNDER $10K/MO', '$10K-$100K/MO', '$100K-
 
 export default function RegisterPage() {
   const { lobby_id: lobbyId } = useParams<{ lobby_id: string }>();
+  const { user, ready: privyReady } = usePrivy();
 
   const [screen, setScreen] = useState<Screen>('welcome');
   const [isCompetitor, setIsCompetitor] = useState(true);
+  const [hasExistingProfile, setHasExistingProfile] = useState(false);
 
   // Form fields — step 1
   const [teamName, setTeamName] = useState('');
   const [handle, setHandle] = useState('');
-  const [walletAddress, setWalletAddress] = useState('');
 
   // Form fields — step 2 (profile)
   const [selectedAssets, setSelectedAssets] = useState<string[]>([]);
@@ -63,6 +65,20 @@ export default function RegisterPage() {
   const [entryFee, setEntryFee] = useState(0);
   const [prizePool, setPrizePool] = useState(0);
   const [totalEntries, setTotalEntries] = useState(0);
+
+  // Auto-populate from Privy + check if profile already exists
+  useEffect(() => {
+    if (!privyReady || !user) return;
+    const profileId = localStorage.getItem('bt_profile_id');
+    if (profileId) setHasExistingProfile(true);
+    // Pre-fill handle from Privy social accounts
+    const name = user.google?.name ?? user.twitter?.username ?? user.email?.address?.split('@')[0];
+    if (name && !handle) setHandle(name);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [privyReady, user]);
+
+  // Get wallet address from Privy automatically
+  const walletAddress = user?.wallet?.address ?? '';
 
   useEffect(() => {
     fetch(`/api/lobby/${lobbyId}/info`)
@@ -106,7 +122,12 @@ export default function RegisterPage() {
     const name = isCompetitor ? teamName.trim() : (handle.trim() || 'SPECTATOR');
     if (isCompetitor && !name) { setError('Enter a team name'); return; }
     setError(null);
-    setScreen('profile');
+    // Skip enrichment screen if user already has a profile
+    if (hasExistingProfile) {
+      handleSubmit();
+    } else {
+      setScreen('profile');
+    }
   };
 
   const handleSubmit = useCallback(async () => {
@@ -122,7 +143,7 @@ export default function RegisterPage() {
           display_name: name,
           handle: handle.trim() || null,
           is_competitor: isCompetitor,
-          wallet_address: walletAddress.trim() || null,
+          wallet_address: walletAddress || null,
           team_name: isCompetitor ? teamName.trim() || null : null,
           trading_assets: selectedAssets.length > 0 ? selectedAssets : null,
           monthly_volume: volume || null,
@@ -151,7 +172,6 @@ export default function RegisterPage() {
     setScreen('welcome');
     setTeamName('');
     setHandle('');
-    setWalletAddress('');
     setSelectedAssets([]);
     setVolume('');
     setWantsWhitelist(false);
@@ -353,24 +373,22 @@ export default function RegisterPage() {
                 />
               </div>
 
-              <div className="slide-in" style={{ animationDelay: '100ms' }}>
-                <div style={{ fontFamily: sans, fontSize: 9, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
-                  WALLET ADDRESS <span style={{ color: '#888888' }}>OPTIONAL</span>
-                </div>
-                <input
-                  value={walletAddress}
-                  onChange={(e) => setWalletAddress(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleNext()}
-                  placeholder="0x... or SOL address"
-                  style={{
+              {walletAddress && (
+                <div className="slide-in" style={{ animationDelay: '100ms' }}>
+                  <div style={{ fontFamily: sans, fontSize: 9, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
+                    WALLET CONNECTED
+                  </div>
+                  <div style={{
                     width: '100%', height: 48,
                     background: '#111111', border: '1px solid #1A1A1A',
-                    color: '#888888', fontFamily: mono,
+                    color: '#555', fontFamily: mono,
                     fontSize: 13, letterSpacing: '-0.02em',
-                    padding: '0 16px', outline: 'none',
-                  }}
-                />
-              </div>
+                    padding: '0 16px', display: 'flex', alignItems: 'center',
+                  }}>
+                    {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+                  </div>
+                </div>
+              )}
             </div>
 
             {error && (
