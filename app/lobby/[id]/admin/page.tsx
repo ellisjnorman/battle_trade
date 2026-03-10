@@ -1583,6 +1583,65 @@ export default function AdminPanel() {
               </div>
             </div>
 
+            {/* ── BROADCAST CONTROLS ── */}
+            <div style={{ padding: '10px 20px', borderBottom: '1px solid #1A1A1A' }}>
+              <div style={{ fontFamily: sans, fontSize: 9, color: '#999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>BROADCAST & LINKS</div>
+
+              {/* Quick links row */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
+                {[
+                  { label: 'OBS OVERLAY', path: `/lobby/${lobbyId}/broadcast`, color: '#F5A0D0', desc: 'Full broadcast view for OBS' },
+                  { label: 'SPECTATE', path: `/lobby/${lobbyId}/spectate`, color: '#00DC82', desc: 'Live spectator view' },
+                  { label: 'CAST VIEW', path: `/lobby/${lobbyId}/cast`, color: '#7B93DB', desc: 'Minimal casting overlay' },
+                  { label: 'LEADERBOARD', path: `/lobby/${lobbyId}/leaderboard`, color: '#FFF', desc: 'Standalone leaderboard' },
+                  { label: 'STAGE', path: `/lobby/${lobbyId}/stage`, color: '#FF4466', desc: 'Big-screen stage view' },
+                ].map(link => (
+                  <div key={link.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      onClick={() => window.open(link.path, '_blank')}
+                      style={{ flex: 1, height: 32, display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', background: '#0D0D0D', border: '1px solid #1A1A1A', cursor: 'pointer', textAlign: 'left' }}
+                    >
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: link.color, flexShrink: 0 }} />
+                      <span style={{ fontFamily: bebas, fontSize: 13, color: link.color, letterSpacing: '0.05em' }}>{link.label}</span>
+                      <span style={{ fontFamily: sans, fontSize: 9, color: '#666', marginLeft: 'auto' }}>{link.desc}</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        const url = `${window.location.origin}${link.path}`;
+                        navigator.clipboard.writeText(url);
+                      }}
+                      style={{ height: 32, width: 32, background: 'transparent', border: '1px solid #1A1A1A', color: '#666', fontFamily: mono, fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      title="Copy link"
+                    >
+                      ⎘
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Share links */}
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button
+                  onClick={() => {
+                    const url = `${window.location.origin}/register/${lobbyId}`;
+                    navigator.clipboard.writeText(url);
+                  }}
+                  style={{ flex: 1, height: 28, background: '#F5A0D0', color: '#0A0A0A', border: 'none', fontFamily: bebas, fontSize: 12, letterSpacing: '0.05em', cursor: 'pointer' }}
+                >
+                  COPY JOIN LINK
+                </button>
+                <button
+                  onClick={() => {
+                    const url = `${window.location.origin}/lobby/${lobbyId}/spectate`;
+                    navigator.clipboard.writeText(url);
+                  }}
+                  style={{ flex: 1, height: 28, background: 'transparent', color: '#00DC82', border: '1px solid #00DC82', fontFamily: bebas, fontSize: 12, letterSpacing: '0.05em', cursor: 'pointer' }}
+                >
+                  COPY SPECTATE LINK
+                </button>
+              </div>
+            </div>
+
             {/* ── CREDIT GRANT ── */}
             <div style={{ padding: '10px 20px', borderBottom: '1px solid #1A1A1A' }}>
               <div style={{ fontFamily: sans, fontSize: 9, color: '#999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>GRANT CREDITS</div>
