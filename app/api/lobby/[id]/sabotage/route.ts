@@ -103,11 +103,11 @@ export async function POST(
   // Check target defenses
   const defense = await checkDefense(target_id, lobbyId, type as SabotageType);
 
-  // SHIELD: block sabotage, refund 50%
+  // HEDGE: block sabotage, refund 50%
   if (defense.shield) {
     const refund = Math.round(sabotageDef.cost * 0.5);
     await deductCredits(attacker_id, lobbyId, sabotageDef.cost);
-    await addCredits(attacker_id, lobbyId, refund, 'shield_refund');
+    await addCredits(attacker_id, lobbyId, refund, 'hedge_refund');
 
     // Consume the shield
     if (defense.shieldId) {
@@ -117,7 +117,7 @@ export async function POST(
         .eq('id', defense.shieldId);
     }
 
-    // Record sabotage as shielded
+    // Record sabotage as hedged
     const { data: sabotage } = await supabase
       .from('sabotages')
       .insert({
@@ -126,7 +126,7 @@ export async function POST(
         target_id,
         type,
         cost: sabotageDef.cost,
-        status: 'shielded',
+        status: 'hedged',
         payload: payload ?? null,
         duration_seconds: sabotageDef.duration,
         fired_at: new Date().toISOString(),
@@ -137,14 +137,14 @@ export async function POST(
     const shieldBalance = await getCredits(attacker_id, lobbyId);
 
     // Broadcast to both parties + lobby
-    broadcastEvent(`t-${target_id}`, 'sabotage', { type: 'defense_result', result: 'shielded', attacker_name: attacker.name });
-    broadcastEvent(`t-${attacker_id}`, 'sabotage', { type: 'defense_result', result: 'shielded', refund });
-    broadcastEvent(`lobby-${lobbyId}-sabotage`, 'sabotage', { type: 'sabotage_shielded', target_id, target_name: target.name, attacker_name: attacker.name, weapon_type: type });
+    broadcastEvent(`t-${target_id}`, 'sabotage', { type: 'defense_result', result: 'hedged', attacker_name: attacker.name });
+    broadcastEvent(`t-${attacker_id}`, 'sabotage', { type: 'defense_result', result: 'hedged', refund });
+    broadcastEvent(`lobby-${lobbyId}-sabotage`, 'sabotage', { type: 'sabotage_hedged', target_id, target_name: target.name, attacker_name: attacker.name, weapon_type: type });
 
-    return NextResponse.json({ result: 'shielded', sabotage, refund, credits_remaining: shieldBalance }, { status: 200 });
+    return NextResponse.json({ result: 'hedged', sabotage, refund, credits_remaining: shieldBalance }, { status: 200 });
   }
 
-  // DEFLECT: redirect sabotage to attacker
+  // STOP-LOSS: redirect sabotage to attacker
   if (defense.deflect) {
     await deductCredits(attacker_id, lobbyId, sabotageDef.cost);
 
@@ -160,7 +160,7 @@ export async function POST(
       ? new Date(Date.now() + sabotageDef.duration * 1000).toISOString()
       : null;
 
-    // Record sabotage as deflected
+    // Record sabotage as stopped
     const { data: sabotage } = await supabase
       .from('sabotages')
       .insert({
@@ -169,7 +169,7 @@ export async function POST(
         target_id,
         type,
         cost: sabotageDef.cost,
-        status: 'deflected',
+        status: 'stopped',
         payload: payload ?? null,
         duration_seconds: sabotageDef.duration,
         fired_at: new Date().toISOString(),
@@ -197,11 +197,11 @@ export async function POST(
     const deflectBalance = await getCredits(attacker_id, lobbyId);
 
     // Broadcast to both parties + lobby
-    broadcastEvent(`t-${target_id}`, 'sabotage', { type: 'defense_result', result: 'deflected', attacker_name: attacker.name });
+    broadcastEvent(`t-${target_id}`, 'sabotage', { type: 'defense_result', result: 'stopped', attacker_name: attacker.name });
     broadcastEvent(`t-${attacker_id}`, 'sabotage', { type: 'sabotage_received', sabotage: deflectedSabotage as unknown as Record<string, unknown> });
-    broadcastEvent(`lobby-${lobbyId}-sabotage`, 'sabotage', { type: 'sabotage_deflected', attacker_id, target_id, target_name: target.name, attacker_name: attacker.name, weapon_type: type });
+    broadcastEvent(`lobby-${lobbyId}-sabotage`, 'sabotage', { type: 'sabotage_stopped', attacker_id, target_id, target_name: target.name, attacker_name: attacker.name, weapon_type: type });
 
-    return NextResponse.json({ result: 'deflected', sabotage, credits_remaining: deflectBalance }, { status: 200 });
+    return NextResponse.json({ result: 'stopped', sabotage, credits_remaining: deflectBalance }, { status: 200 });
   }
 
   // NO DEFENSE: apply sabotage normally

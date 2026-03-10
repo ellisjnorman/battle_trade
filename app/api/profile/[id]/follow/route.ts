@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { recalcAndSave } from '@/lib/reputation';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +33,9 @@ export async function POST(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Recalc TR for the followed user (community score changes) — fire-and-forget
+    recalcAndSave(followingId).catch(() => {});
+
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('POST /api/profile/[id]/follow error:', err);
@@ -62,6 +66,9 @@ export async function DELETE(
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    // Recalc TR for the unfollowed user (community score changes) — fire-and-forget
+    recalcAndSave(followingId).catch(() => {});
 
     return NextResponse.json({ success: true });
   } catch (err) {

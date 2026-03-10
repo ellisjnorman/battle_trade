@@ -350,6 +350,23 @@ async function finishGame(
     }
   }
 
+  // Recalc TR for ALL participants (fire-and-forget)
+  const { data: allTraders } = await sb
+    .from('traders')
+    .select('profile_id')
+    .eq('lobby_id', lobbyId)
+    .not('profile_id', 'is', null);
+
+  if (allTraders && allTraders.length > 0) {
+    import('@/lib/reputation').then(({ recalcAndSave }) => {
+      for (const t of allTraders) {
+        if (t.profile_id) {
+          recalcAndSave(t.profile_id).catch(() => {});
+        }
+      }
+    }).catch(() => {});
+  }
+
   // Broadcast game over
   const winner = standings.find(s => !s.trader.is_eliminated);
   await broadcast('auto_admin', {

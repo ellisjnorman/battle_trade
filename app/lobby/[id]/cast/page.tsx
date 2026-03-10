@@ -186,12 +186,12 @@ function StandingsPanel({ traders }: { traders: BroadcastTrader[] }) {
                       key={sab.id}
                       className="font-heading text-[9px] px-[6px] py-[2px] flex-shrink-0"
                       style={{
-                        backgroundColor: sab.type === 'LOCKOUT' ? 'rgba(255, 51, 51, 0.15)' : '#1A1A1A',
-                        color: sab.type === 'LOCKOUT' ? '#FF3333' : '#666666',
-                        border: sab.type === 'LOCKOUT' ? '1px solid rgba(255, 51, 51, 0.3)' : 'none',
+                        backgroundColor: sab.type === 'BLACKOUT' ? 'rgba(255, 51, 51, 0.15)' : '#1A1A1A',
+                        color: sab.type === 'BLACKOUT' ? '#FF3333' : '#666666',
+                        border: sab.type === 'BLACKOUT' ? '1px solid rgba(255, 51, 51, 0.3)' : 'none',
                       }}
                     >
-                      {sab.type === 'LOCKOUT' ? 'LOCKED' : 'GHOST'} {sab.remainingTime}s
+                      {sab.type === 'BLACKOUT' ? 'BLACKED OUT' : 'DARK POOL'} {sab.remainingTime}s
                     </span>
                   ))}
                 </div>
@@ -242,11 +242,11 @@ function NarrativeFeed({ lobbyState }: { lobbyState: LobbyState }) {
   const feedEntries: FeedEntry[] = [
     { id: '1', type: 'big_trade', timestamp: '14:22', text: 'WOLFPACK opens BTC LONG $5,000 @ 5X leverage' },
     { id: '2', type: 'trade', timestamp: '14:20', text: 'VEGA closes ETH SHORT with +$840 profit' },
-    { id: '3', type: 'sabotage', timestamp: '14:18', text: 'ANONYMOUS → WOLFPACK · LOCKOUT activated (200cr)' },
+    { id: '3', type: 'sabotage', timestamp: '14:18', text: 'ANONYMOUS → WOLFPACK · BLACKOUT activated (200cr)' },
     { id: '4', type: 'event', timestamp: '14:15', text: 'FLASH CRASH TRIGGERED · BTC drops 18% instantly' },
     { id: '5', type: 'trade', timestamp: '14:12', text: 'IRON HANDS opens SOL LONG $2,000 @ 3X' },
     { id: '6', type: 'trade', timestamp: '14:10', text: 'DEGEN PRIME closes BTC SHORT -$320 loss' },
-    { id: '7', type: 'sabotage', timestamp: '14:08', text: 'VEGA → IRON HANDS · GHOST mode (150cr)' },
+    { id: '7', type: 'sabotage', timestamp: '14:08', text: 'VEGA → IRON HANDS · DARK POOL mode (150cr)' },
     { id: '8', type: 'elimination', timestamp: '14:05', text: 'MOON BOY ELIMINATED · Final return: -15.3%' },
     { id: '9', type: 'trade', timestamp: '14:02', text: 'ANONYMOUS opens ETH LONG $4,000 @ 4X' },
     { id: '10', type: 'big_trade', timestamp: '14:00', text: 'WOLFPACK closes SOL LONG +$1,240 profit' },
@@ -406,7 +406,7 @@ function IntelPanel({ lobbyState }: { lobbyState: LobbyState }) {
                   </span>
                   <span
                     className="font-heading text-[11px]"
-                    style={{ color: s.type === 'LOCKOUT' ? '#FF3333' : '#888888' }}
+                    style={{ color: s.type === 'BLACKOUT' ? '#FF3333' : '#888888' }}
                   >
                     {s.type} · {s.remainingTime}s
                   </span>

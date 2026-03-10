@@ -112,7 +112,7 @@ interface ActiveSabotage {
 // ---------------------------------------------------------------------------
 
 const EVENT_CARDS = [
-  { type: 'flash_crash', icon: '⚡', name: 'FLASH CRASH', desc: 'Drop asset X%' },
+  { type: 'circuit_breaker', icon: '⚡', name: 'CIRCUIT BREAKER', desc: 'Drop asset X%' },
   { type: 'moon_shot', icon: '🌙', name: 'MOON SHOT', desc: 'Pump asset X%' },
   { type: 'volatility_spike', icon: '📈', name: 'VOL SPIKE', desc: 'Oscillate prices' },
   { type: 'dead_cat', icon: '📉', name: 'DEAD CAT', desc: 'Drop, recover, drop' },
@@ -120,7 +120,7 @@ const EVENT_CARDS = [
   { type: 'leverage_surge', icon: '⚡', name: 'LEVERAGE SURGE', desc: '2x all positions' },
   { type: 'wild_card', icon: '🎲', name: 'WILD CARD', desc: '$2k to random trader' },
   { type: 'reversal', icon: '🔄', name: 'REVERSAL', desc: 'Invert leaderboard' },
-  { type: 'lockout', icon: '🔒', name: 'LOCKOUT ALL', desc: 'Block all trades' },
+  { type: 'blackout', icon: '🔒', name: 'BLACKOUT ALL', desc: 'Block all trades' },
 ] as const;
 
 const LEVERAGE_OPTIONS = [2, 5, 10, 20];

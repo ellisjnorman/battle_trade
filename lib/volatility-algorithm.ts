@@ -34,11 +34,11 @@ export interface SuggestedEvent {
 // ---------------------------------------------------------------------------
 
 const EARLY_WEIGHTS: Partial<Record<VolatilityEventType, number>> = {
-  flash_crash: 30,
+  circuit_breaker: 30,
   moon_shot: 20,
   volatility_spike: 25,
   wild_card: 15,
-  lockout: 10,
+  blackout: 10,
 };
 
 const MID_WEIGHTS: Partial<Record<VolatilityEventType, number>> = {
@@ -60,7 +60,7 @@ const LATE_WEIGHTS: Partial<Record<VolatilityEventType, number>> = {
 // ---------------------------------------------------------------------------
 
 const HEADLINES: Record<VolatilityEventType, string> = {
-  flash_crash: 'FLASH CRASH INCOMING',
+  circuit_breaker: 'CIRCUIT BREAKER INCOMING',
   moon_shot: 'TO THE MOON',
   volatility_spike: 'VOLATILITY SURGE DETECTED',
   dead_cat: 'DEAD CAT BOUNCE',
@@ -68,7 +68,7 @@ const HEADLINES: Record<VolatilityEventType, string> = {
   leverage_surge: 'LEVERAGE UNLOCKED — ALL POSITIONS 2X',
   wild_card: 'WILD CARD — RANDOM TRADER GETS $2000',
   reversal: 'RANKINGS INVERTED FOR 60 SECONDS',
-  lockout: 'TRADING LOCKED — NO NEW POSITIONS',
+  blackout: 'TRADING LOCKED — NO NEW POSITIONS',
 };
 
 // ---------------------------------------------------------------------------
@@ -211,7 +211,7 @@ function calcMagnitude(
   const base = Math.min(gap / 100, 0.3);
 
   switch (type) {
-    case 'flash_crash': return Math.max(0.05, base);
+    case 'circuit_breaker': return Math.max(0.05, base);
     case 'moon_shot': return Math.max(0.05, base);
     case 'volatility_spike': return Math.max(0.03, base * 0.8);
     case 'dead_cat': return Math.max(0.05, base);
@@ -219,14 +219,14 @@ function calcMagnitude(
     case 'leverage_surge': return 1;
     case 'wild_card': return 1;
     case 'reversal': return 1;
-    case 'lockout': return 1;
+    case 'blackout': return 1;
     default: return 0.1;
   }
 }
 
 function calcDuration(type: VolatilityEventType): number {
   switch (type) {
-    case 'flash_crash': return 60;
+    case 'circuit_breaker': return 60;
     case 'moon_shot': return 60;
     case 'volatility_spike': return 60;
     case 'dead_cat': return 60;
@@ -234,7 +234,7 @@ function calcDuration(type: VolatilityEventType): number {
     case 'leverage_surge': return 30;
     case 'wild_card': return 10;
     case 'reversal': return 60;
-    case 'lockout': return 30;
+    case 'blackout': return 30;
     default: return 30;
   }
 }

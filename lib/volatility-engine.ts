@@ -3,14 +3,14 @@
 // ---------------------------------------------------------------------------
 
 export const VOLATILITY_EVENT_TYPES = [
-  'flash_crash',
+  'circuit_breaker',
   'moon_shot',
   'volatility_spike',
   'dead_cat',
   'margin_call',
   'leverage_surge',
   'wild_card',
-  'lockout',
+  'blackout',
   'reversal',
 ] as const;
 
@@ -73,7 +73,7 @@ export function applyPriceModifier(
   const mag = event.magnitude;
 
   switch (event.type) {
-    case 'flash_crash':
+    case 'circuit_breaker':
       return basePrice * (1 - mag);
 
     case 'moon_shot':
@@ -97,7 +97,7 @@ export function applyPriceModifier(
     case 'leverage_surge':
     case 'wild_card':
     case 'reversal':
-    case 'lockout':
+    case 'blackout':
       return basePrice;
 
     default:
@@ -122,8 +122,8 @@ export interface EventDefinition {
 }
 
 export const EVENT_DEFINITIONS: Record<VolatilityEventType, EventDefinition> = {
-  flash_crash: {
-    type: 'flash_crash',
+  circuit_breaker: {
+    type: 'circuit_breaker',
     default_duration_ms: 60_000,
     buildModifier: (_base, intensity) => ({
       multiplier: 1 - 0.15 * intensity,
@@ -180,8 +180,8 @@ export const EVENT_DEFINITIONS: Record<VolatilityEventType, EventDefinition> = {
       return { multiplier: 1 + swing, offset: 0 };
     },
   },
-  lockout: {
-    type: 'lockout',
+  blackout: {
+    type: 'blackout',
     default_duration_ms: 30_000,
     buildModifier: () => ({
       multiplier: 1,
@@ -427,7 +427,7 @@ export class VolatilityEngine {
     this.activeEvent = event;
     this.activeEvents.set(event.id, event);
 
-    if (event.type === 'lockout') {
+    if (event.type === 'blackout') {
       this.positionsLocked = true;
     }
 
@@ -465,9 +465,9 @@ export class VolatilityEngine {
       this.eventTimers.delete(event.id);
     }
 
-    if (event.type === 'lockout') {
+    if (event.type === 'blackout') {
       // Only unlock if no other lockout is active
-      const hasOtherLockout = Array.from(this.activeEvents.values()).some(e => e.type === 'lockout' && e.status === 'active');
+      const hasOtherLockout = Array.from(this.activeEvents.values()).some(e => e.type === 'blackout' && e.status === 'active');
       if (!hasOtherLockout) {
         this.positionsLocked = false;
       }
@@ -493,11 +493,11 @@ function pickAlgoEventType(
   let candidates: VolatilityEventType[];
 
   if (roundElapsedPct > 0.7 && gap > 40) {
-    candidates = ['flash_crash', 'margin_call', 'leverage_surge'];
+    candidates = ['circuit_breaker', 'margin_call', 'leverage_surge'];
   } else if (gap > 35) {
     candidates = ['reversal', 'volatility_spike', 'dead_cat'];
   } else if (traderCount > 10) {
-    candidates = ['volatility_spike', 'wild_card', 'lockout'];
+    candidates = ['volatility_spike', 'wild_card', 'blackout'];
   } else {
     candidates = ['wild_card', 'dead_cat', 'moon_shot'];
   }

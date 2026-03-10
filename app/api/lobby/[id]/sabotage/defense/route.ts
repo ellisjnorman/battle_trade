@@ -68,8 +68,8 @@ export async function POST(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // UNFREEZE: immediately clear lockout + asset freeze from session & expire active sabotages
-  if (type === 'unfreeze') {
+  // RESUME: immediately clear blackout + trading halt from session & expire active sabotages
+  if (type === 'resume') {
     await supabase
       .from('sessions')
       .update({ positions_locked: false, frozen_asset: null })
@@ -82,9 +82,9 @@ export async function POST(
       .eq('target_id', trader_id)
       .eq('lobby_id', lobbyId)
       .eq('status', 'active')
-      .in('type', ['lockout', 'asset_freeze']);
+      .in('type', ['blackout', 'trading_halt']);
 
-    // Mark the unfreeze defense as consumed (instant use)
+    // Mark the resume defense as consumed (instant use)
     await supabase
       .from('defenses')
       .update({ status: 'consumed' })

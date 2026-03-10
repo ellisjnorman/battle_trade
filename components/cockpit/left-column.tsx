@@ -40,7 +40,7 @@ export function LeftColumn({
   const fmtPrice = (p: number) => p > 100 ? p.toLocaleString(undefined, { maximumFractionDigits: 2 }) : p > 1 ? p.toFixed(2) : p.toFixed(6)
 
   const executeLabel = isLockedOut
-    ? `LOCKED ${Math.floor(lockoutTime / 60)}:${(lockoutTime % 60).toString().padStart(2, '0')}`
+    ? `BLACKED OUT ${Math.floor(lockoutTime / 60)}:${(lockoutTime % 60).toString().padStart(2, '0')}`
     : isFrozen ? 'ROUND FROZEN'
     : isFullPositions ? 'MAX POSITIONS (3/3)'
     : assetRestriction && assetRestriction !== selectedAsset ? `${assetRestriction} ONLY`

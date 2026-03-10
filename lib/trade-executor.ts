@@ -52,7 +52,7 @@ export class PaperOnlyExecutor implements TradeExecutor {
   async execute(params: TradeParams): Promise<TradeResult> {
     const { supabase } = await import('./supabase');
 
-    // Check sabotage: lockout
+    // Check sabotage: blackout
     if (!params.is_forced) {
       const { data: session } = await supabase
         .from('sessions')
@@ -65,7 +65,7 @@ export class PaperOnlyExecutor implements TradeExecutor {
         return { success: false, position_id: '', error: 'LOCKED_OUT' };
       }
 
-      // Check sabotage: asset freeze — block trading the frozen asset
+      // Check sabotage: trading halt — block trading the halted asset
       if (session?.frozen_asset && params.asset === session.frozen_asset) {
         return { success: false, position_id: '', error: 'ASSET_FROZEN' };
       }

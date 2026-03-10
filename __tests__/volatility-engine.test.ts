@@ -98,7 +98,7 @@ describe('applyPriceModifier', () => {
   }
 
   test('flash_crash reduces price by magnitude', () => {
-    const event = makeEvent('flash_crash', 0.15);
+    const event = makeEvent('circuit_breaker', 0.15);
     expect(applyPriceModifier(60000, event, 0)).toBe(60000 * 0.85);
     expect(applyPriceModifier(60000, event, 30)).toBe(60000 * 0.85);
   });
@@ -144,7 +144,7 @@ describe('applyPriceModifier', () => {
   });
 
   test('non-price events return basePrice unchanged', () => {
-    for (const type of ['margin_call', 'leverage_surge', 'wild_card', 'reversal', 'lockout'] as VolatilityEventType[]) {
+    for (const type of ['margin_call', 'leverage_surge', 'wild_card', 'reversal', 'blackout'] as VolatilityEventType[]) {
       const event = makeEvent(type, 0.5);
       expect(applyPriceModifier(60000, event, 30)).toBe(60000);
     }
@@ -158,18 +158,18 @@ describe('applyPriceModifier', () => {
 describe('event lifecycle', () => {
   test('triggerEvent creates event and activates it', () => {
     const { engine } = makeEngine();
-    const event = engine.triggerEvent('flash_crash', 'BTCUSDT');
+    const event = engine.triggerEvent('circuit_breaker', 'BTCUSDT');
 
     expect(event.status).toBe('active');
     expect(event.triggered_at).not.toBeNull();
     expect(event.lobby_id).toBe('lobby-1');
-    expect(event.type).toBe('flash_crash');
+    expect(event.type).toBe('circuit_breaker');
     expect(event.asset).toBe('BTCUSDT');
   });
 
   test('event auto-completes after duration', () => {
     const { engine } = makeEngine();
-    const event = engine.triggerEvent('flash_crash', 'ALL', 0.1, 5000);
+    const event = engine.triggerEvent('circuit_breaker', 'ALL', 0.1, 5000);
 
     expect(event.status).toBe('active');
     jest.advanceTimersByTime(5000);
@@ -190,7 +190,7 @@ describe('event lifecycle', () => {
 
   test('concurrent events: both stay active', () => {
     const { engine } = makeEngine();
-    const first = engine.triggerEvent('flash_crash', 'ALL', 0.1, 60000);
+    const first = engine.triggerEvent('circuit_breaker', 'ALL', 0.1, 60000);
     const second = engine.triggerEvent('moon_shot', 'ALL', 0.1, 60000);
 
     expect(first.status).toBe('active');
@@ -200,7 +200,7 @@ describe('event lifecycle', () => {
 
   test('getAllEvents returns all events', () => {
     const { engine } = makeEngine();
-    engine.triggerEvent('flash_crash');
+    engine.triggerEvent('circuit_breaker');
     engine.triggerEvent('moon_shot');
 
     expect(engine.getAllEvents()).toHaveLength(2);
@@ -208,7 +208,7 @@ describe('event lifecycle', () => {
 
   test('destroy clears everything', () => {
     const { engine } = makeEngine();
-    engine.triggerEvent('flash_crash');
+    engine.triggerEvent('circuit_breaker');
     engine.destroy();
 
     expect(engine.getActiveEvent()).toBeNull();
@@ -223,7 +223,7 @@ describe('event lifecycle', () => {
 describe('broadcast', () => {
   test('broadcasts on activation and completion', () => {
     const { engine, broadcasts } = makeEngine();
-    engine.triggerEvent('flash_crash', 'ALL', 0.1, 3000);
+    engine.triggerEvent('circuit_breaker', 'ALL', 0.1, 3000);
 
     expect(broadcasts).toHaveLength(1);
     expect(broadcasts[0].lobbyId).toBe('lobby-1');
@@ -237,7 +237,7 @@ describe('broadcast', () => {
 
   test('broadcast scoped to lobby_id', () => {
     const { engine, broadcasts } = makeEngine();
-    engine.triggerEvent('lockout');
+    engine.triggerEvent('blackout');
 
     expect(broadcasts[0].lobbyId).toBe('lobby-1');
     const payload = broadcasts[0].payload;
@@ -259,7 +259,7 @@ describe('getModifiedPrices', () => {
 
   test('applies modifier to targeted asset only', () => {
     const { engine } = makeEngine();
-    engine.triggerEvent('flash_crash', 'BTCUSDT', 0.1, 60000);
+    engine.triggerEvent('circuit_breaker', 'BTCUSDT', 0.1, 60000);
 
     const result = engine.getModifiedPrices(RAW_PRICES);
     expect(result.BTCUSDT).toBeLessThan(RAW_PRICES.BTCUSDT);
@@ -269,7 +269,7 @@ describe('getModifiedPrices', () => {
 
   test('applies modifier to all assets with ALL', () => {
     const { engine } = makeEngine();
-    engine.triggerEvent('flash_crash', 'ALL', 0.1, 60000);
+    engine.triggerEvent('circuit_breaker', 'ALL', 0.1, 60000);
 
     const result = engine.getModifiedPrices(RAW_PRICES);
     expect(result.BTCUSDT).toBeLessThan(RAW_PRICES.BTCUSDT);
@@ -279,7 +279,7 @@ describe('getModifiedPrices', () => {
 
   test('returns raw prices after event completes', () => {
     const { engine } = makeEngine();
-    engine.triggerEvent('flash_crash', 'ALL', 0.1, 3000);
+    engine.triggerEvent('circuit_breaker', 'ALL', 0.1, 3000);
 
     jest.advanceTimersByTime(3000);
 
@@ -292,17 +292,17 @@ describe('getModifiedPrices', () => {
 // Each event type — modifier behaviour via ENGINE
 // ---------------------------------------------------------------------------
 
-describe('flash_crash via engine', () => {
+describe('circuit_breaker via engine', () => {
   test('drops price by magnitude', () => {
     const { engine } = makeEngine();
-    engine.triggerEvent('flash_crash', 'ALL', 0.15, 60000);
+    engine.triggerEvent('circuit_breaker', 'ALL', 0.15, 60000);
     const result = engine.getModifiedPrices(RAW_PRICES);
     expect(result.BTCUSDT).toBeCloseTo(51000, -2);
   });
 
   test('magnitude 0 = no change', () => {
     const { engine } = makeEngine();
-    engine.triggerEvent('flash_crash', 'ALL', 0, 60000);
+    engine.triggerEvent('circuit_breaker', 'ALL', 0, 60000);
     const result = engine.getModifiedPrices(RAW_PRICES);
     expect(result.BTCUSDT).toBe(RAW_PRICES.BTCUSDT);
   });
@@ -349,7 +349,7 @@ describe('non-price events via engine', () => {
 
   test('lockout: sets positionsLocked flag', () => {
     const { engine } = makeEngine();
-    engine.triggerEvent('lockout', 'ALL', 0.5, 60000);
+    engine.triggerEvent('blackout', 'ALL', 0.5, 60000);
     expect(engine.isPositionsLocked()).toBe(true);
     const result = engine.getModifiedPrices(RAW_PRICES);
     expect(result).toEqual(RAW_PRICES);
@@ -357,7 +357,7 @@ describe('non-price events via engine', () => {
 
   test('lockout: clears positionsLocked on complete', () => {
     const { engine } = makeEngine();
-    engine.triggerEvent('lockout', 'ALL', 0.5, 3000);
+    engine.triggerEvent('blackout', 'ALL', 0.5, 3000);
     expect(engine.isPositionsLocked()).toBe(true);
     jest.advanceTimersByTime(3000);
     expect(engine.isPositionsLocked()).toBe(false);
@@ -446,7 +446,7 @@ describe('algorithmic mode', () => {
     const { engine } = makeEngine({
       algoConfig: { enabled: true, cooldown_ms: 0, gap_threshold: 25 },
     });
-    engine.triggerEvent('flash_crash', 'ALL', 0.1, 60000);
+    engine.triggerEvent('circuit_breaker', 'ALL', 0.1, 60000);
 
     const result = engine.evaluateAlgoTrigger(
       makeStandingsGap({ gap: 50, roundElapsedPct: 0.5 }),
@@ -486,7 +486,7 @@ describe('algorithmic mode', () => {
       makeStandingsGap({ gap: 45, roundElapsedPct: 0.8 }),
     );
     expect(result).not.toBeNull();
-    expect(result!.type).toBe('flash_crash');
+    expect(result!.type).toBe('circuit_breaker');
   });
 
   test('picks reversal for large mid-round gap', () => {
@@ -517,12 +517,12 @@ describe('magnitude clamping', () => {
   test('magnitude clamped to 0-1 range', () => {
     const { engine } = makeEngine();
 
-    const low = engine.triggerEvent('flash_crash', 'ALL', -5, 60000);
+    const low = engine.triggerEvent('circuit_breaker', 'ALL', -5, 60000);
     expect(low.magnitude).toBe(0);
 
     engine.cancelActiveEvent();
 
-    const high = engine.triggerEvent('flash_crash', 'ALL', 10, 60000);
+    const high = engine.triggerEvent('circuit_breaker', 'ALL', 10, 60000);
     expect(high.magnitude).toBe(1);
   });
 });
@@ -543,7 +543,7 @@ describe('lobby scoping', () => {
       broadcastFn: async (id) => { b2.push({ lobbyId: id }); },
     });
 
-    engine1.triggerEvent('flash_crash');
+    engine1.triggerEvent('circuit_breaker');
     engine2.triggerEvent('moon_shot');
 
     expect(b1).toHaveLength(1);
@@ -551,7 +551,7 @@ describe('lobby scoping', () => {
     expect(b2).toHaveLength(1);
     expect(b2[0].lobbyId).toBe('lobby-B');
 
-    expect(engine1.getActiveEvent()!.type).toBe('flash_crash');
+    expect(engine1.getActiveEvent()!.type).toBe('circuit_breaker');
     expect(engine2.getActiveEvent()!.type).toBe('moon_shot');
 
     engine1.destroy();
@@ -560,7 +560,7 @@ describe('lobby scoping', () => {
 
   test('event ids contain lobby_id', () => {
     const { engine } = makeEngine();
-    const event = engine.triggerEvent('lockout');
+    const event = engine.triggerEvent('blackout');
     expect(event.id).toContain('lobby-1');
     engine.destroy();
   });
@@ -598,20 +598,20 @@ describe('event type coverage', () => {
 describe('firedTypes tracking', () => {
   test('tracks all fired event types', () => {
     const { engine } = makeEngine();
-    engine.triggerEvent('flash_crash');
+    engine.triggerEvent('circuit_breaker');
     engine.triggerEvent('moon_shot');
-    engine.triggerEvent('lockout');
+    engine.triggerEvent('blackout');
 
     const fired = engine.getFiredTypes();
-    expect(fired).toContain('flash_crash');
+    expect(fired).toContain('circuit_breaker');
     expect(fired).toContain('moon_shot');
-    expect(fired).toContain('lockout');
+    expect(fired).toContain('blackout');
     expect(fired).toHaveLength(3);
   });
 
   test('destroy clears firedTypes', () => {
     const { engine } = makeEngine();
-    engine.triggerEvent('flash_crash');
+    engine.triggerEvent('circuit_breaker');
     engine.destroy();
     expect(engine.getFiredTypes()).toHaveLength(0);
   });

@@ -192,7 +192,7 @@ export async function checkDefense(
     .select('id')
     .eq('trader_id', target_id)
     .eq('lobby_id', lobby_id)
-    .eq('type', 'shield')
+    .eq('type', 'hedge')
     .eq('status', 'active')
     .or(`expires_at.is.null,expires_at.gt.${now}`)
     .limit(1)
@@ -204,7 +204,7 @@ export async function checkDefense(
     .select('id')
     .eq('trader_id', target_id)
     .eq('lobby_id', lobby_id)
-    .eq('type', 'deflect')
+    .eq('type', 'stop_loss')
     .eq('status', 'active')
     .or(`expires_at.is.null,expires_at.gt.${now}`)
     .limit(1)
@@ -245,14 +245,14 @@ export async function applySabotageEffect(
     broadcast(`lobby-${lobby_id}-sabotage`, event, payload);
 
   switch (sabotage.type) {
-    case 'lockout': {
+    case 'blackout': {
       // Set positions_locked flag on session
       await supabase
         .from('sessions')
         .update({ positions_locked: true })
         .eq('trader_id', sabotage.target_id)
         .eq('lobby_id', lobby_id);
-      traderBroadcast('sabotage', { type: 'lockout', duration: sabotage.duration_seconds ?? 90 });
+      traderBroadcast('sabotage', { type: 'blackout', duration: sabotage.duration_seconds ?? 90 });
 
       // Schedule unlock
       if (sabotage.duration_seconds) {
@@ -273,7 +273,7 @@ export async function applySabotageEffect(
           const ch = sb.channel(`t-${sabotage.target_id}`);
           ch.subscribe(async (status) => {
             if (status === 'SUBSCRIBED') {
-              ch.send({ type: 'broadcast', event: 'sabotage', payload: { type: 'lockout_lifted' } }).catch(() => {});
+              ch.send({ type: 'broadcast', event: 'sabotage', payload: { type: 'blackout_lifted' } }).catch(() => {});
               setTimeout(() => sb.removeChannel(ch), 200);
             }
           });
@@ -291,7 +291,7 @@ export async function applySabotageEffect(
       break;
     }
 
-    case 'margin_squeeze': {
+    case 'leverage_cap': {
       // Reduce starting_balance by 10%
       const { data: session } = await supabase
         .from('sessions')
@@ -308,17 +308,17 @@ export async function applySabotageEffect(
           .eq('trader_id', sabotage.target_id)
           .eq('lobby_id', lobby_id);
       }
-      traderBroadcast('sabotage', { type: 'margin_squeeze', reduction: 10 });
+      traderBroadcast('sabotage', { type: 'leverage_cap', reduction: 10 });
       break;
     }
 
-    case 'expose': {
+    case 'reveal': {
       await supabase
         .from('sessions')
         .update({ positions_public: true })
         .eq('trader_id', sabotage.target_id)
         .eq('lobby_id', lobby_id);
-      traderBroadcast('sabotage', { type: 'expose', duration: sabotage.duration_seconds ?? 120 });
+      traderBroadcast('sabotage', { type: 'reveal', duration: sabotage.duration_seconds ?? 120 });
 
       if (sabotage.duration_seconds) {
         setTimeout(async () => {
@@ -338,7 +338,7 @@ export async function applySabotageEffect(
       break;
     }
 
-    case 'asset_freeze': {
+    case 'trading_halt': {
       const frozen_asset =
         (sabotage.payload?.asset as string) ?? 'BTCUSDT';
       await supabase
@@ -346,7 +346,7 @@ export async function applySabotageEffect(
         .update({ frozen_asset })
         .eq('trader_id', sabotage.target_id)
         .eq('lobby_id', lobby_id);
-      traderBroadcast('sabotage', { type: 'asset_freeze', payload: { asset: frozen_asset }, duration: sabotage.duration_seconds ?? 60 });
+      traderBroadcast('sabotage', { type: 'trading_halt', payload: { asset: frozen_asset }, duration: sabotage.duration_seconds ?? 60 });
 
       if (sabotage.duration_seconds) {
         setTimeout(async () => {

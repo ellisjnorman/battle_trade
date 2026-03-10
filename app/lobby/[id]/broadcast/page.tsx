@@ -314,10 +314,10 @@ function EventOverlay({ event }: { event: VolatilityEvent | null }) {
 
   const getEventContent = () => {
     switch (event.type) {
-      case 'FLASH_CRASH':
+      case 'CIRCUIT_BREAKER':
         return {
           icon: '▼',
-          title: 'FLASH CRASH',
+          title: 'CIRCUIT BREAKER',
           color: '#FF3333',
           glowColor: 'rgba(255, 51, 51, 0.6)',
           subtitle: `${event.asset} ${event.impact}%`,
@@ -330,10 +330,10 @@ function EventOverlay({ event }: { event: VolatilityEvent | null }) {
           glowColor: 'rgba(0, 255, 136, 0.6)',
           subtitle: `${event.asset} +${event.impact}%`,
         }
-      case 'LOCKOUT':
+      case 'BLACKOUT':
         return {
           icon: '■',
-          title: 'TRADING HALTED',
+          title: 'BLACKOUT',
           color: '#FF3333',
           glowColor: 'rgba(255, 51, 51, 0.6)',
           subtitle: '',

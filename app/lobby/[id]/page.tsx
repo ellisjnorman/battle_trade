@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 
 const B = "var(--font-bebas, 'Bebas Neue'), sans-serif"
@@ -123,11 +124,11 @@ export default function LobbyLandingPage() {
 
       {/* Nav */}
       <nav style={{ height: 48, borderBottom: '1px solid #1A1A1A', display: 'flex', alignItems: 'center', padding: '0 24px', background: '#0D0D0D' }}>
-        <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
+        <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/brand/logo-icon.png" alt="" style={{ height: 20, width: 'auto' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
           <span style={{ fontFamily: B, fontSize: 16, color: '#F5A0D0', letterSpacing: '0.1em' }}>BATTLE TRADE</span>
-        </a>
+        </Link>
       </nav>
 
       {/* Main content */}
@@ -192,6 +193,19 @@ export default function LobbyLandingPage() {
           <button onClick={() => handleQuickJoin('spectate')} disabled={joining} style={{ flex: 1, height: 56, background: '#F5A0D0', color: '#0A0A0A', border: 'none', fontFamily: B, fontSize: 22, letterSpacing: '0.1em', cursor: joining ? 'not-allowed' : 'pointer' }}>
             SPECTATE
           </button>
+        </div>
+
+        {/* Broadcast links — share these */}
+        <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 400, marginTop: 8 }}>
+          <Link href={`/lobby/${lobbyId}/spectate`} style={{ flex: 1, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111', border: '1px solid #222', color: '#888', fontFamily: S, fontSize: 12, fontWeight: 500, textDecoration: 'none', transition: 'all .15s' }}>
+            Spectator View
+          </Link>
+          <Link href={`/lobby/${lobbyId}/broadcast`} style={{ flex: 1, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111', border: '1px solid #222', color: '#888', fontFamily: S, fontSize: 12, fontWeight: 500, textDecoration: 'none', transition: 'all .15s' }}>
+            OBS Overlay
+          </Link>
+          <Link href={`/lobby/${lobbyId}/leaderboard`} style={{ flex: 1, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111', border: '1px solid #222', color: '#888', fontFamily: S, fontSize: 12, fontWeight: 500, textDecoration: 'none', transition: 'all .15s' }}>
+            Leaderboard
+          </Link>
         </div>
 
         {/* Name input */}

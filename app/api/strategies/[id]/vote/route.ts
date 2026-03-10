@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { recalcAndSave } from '@/lib/reputation';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,6 +67,46 @@ export async function POST(
 
     if (updateErr) {
       return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    }
+
+    // Creator rewards: award 5 credits per upvote to strategy author
+    if (voted) {
+      const { data: strategy } = await supabase
+        .from('strategies')
+        .select('author_id')
+        .eq('id', strategyId)
+        .single();
+
+      if (strategy?.author_id && strategy.author_id !== voter_id) {
+        // Award base credits (5 per upvote) + milestone bonuses
+        const milestones: Record<number, number> = { 10: 50, 25: 100, 50: 200, 100: 500 };
+        const bonus = milestones[upvotes] ?? 0;
+        const totalReward = 5 + bonus;
+
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('credits')
+          .eq('id', strategy.author_id)
+          .single();
+
+        if (prof) {
+          await supabase
+            .from('profiles')
+            .update({ credits: (prof.credits ?? 0) + totalReward })
+            .eq('id', strategy.author_id);
+        }
+      }
+    }
+
+    // Recalc TR for strategy author (strategy/community score changes) — fire-and-forget
+    const { data: stratForRecalc } = await supabase
+      .from('strategies')
+      .select('author_id')
+      .eq('id', strategyId)
+      .single();
+
+    if (stratForRecalc?.author_id) {
+      recalcAndSave(stratForRecalc.author_id).catch(() => {});
     }
 
     return NextResponse.json({ voted, upvotes });

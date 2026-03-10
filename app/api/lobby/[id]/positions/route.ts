@@ -96,20 +96,20 @@ export async function POST(
 
   if (!result.success) {
     if (result.error === 'LOCKED_OUT') {
-      // Find remaining lockout time for client
-      const { data: lockoutSabotage } = await supabase
+      // Find remaining blackout time for client
+      const { data: blackoutSabotage } = await supabase
         .from('sabotages')
         .select('expires_at')
         .eq('target_id', trader_id)
         .eq('lobby_id', lobbyId)
-        .eq('type', 'lockout')
+        .eq('type', 'blackout')
         .eq('status', 'active')
         .order('fired_at', { ascending: false })
         .limit(1)
         .single();
 
-      const remaining = lockoutSabotage?.expires_at
-        ? Math.ceil((new Date(lockoutSabotage.expires_at).getTime() - Date.now()) / 1000)
+      const remaining = blackoutSabotage?.expires_at
+        ? Math.ceil((new Date(blackoutSabotage.expires_at).getTime() - Date.now()) / 1000)
         : 0;
 
       return NextResponse.json(

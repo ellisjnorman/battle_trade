@@ -191,7 +191,7 @@ export default function LearnPage() {
         {/* MENTORS TAB */}
         {tab === 'mentors' && (
           <div>
-            <p style={{ fontFamily: S, fontSize: 14, color: '#888', marginBottom: 24 }}>Top-ranked traders who can help you level up. Challenge them to a 1v1 or watch their replays.</p>
+            <p style={{ fontFamily: S, fontSize: 14, color: '#888', marginBottom: 24 }}>Top-ranked traders who can help you level up. Challenge them to a battle or watch their replays.</p>
             {mentors.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 48, border: '1px solid #1A1A1A', background: '#0D0D0D' }}>
                 <span style={{ fontFamily: B, fontSize: 24, color: '#555' }}>NO MENTORS YET</span>

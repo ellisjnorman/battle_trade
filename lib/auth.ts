@@ -1,163 +1,32 @@
 /**
- * Supabase Auth helpers for Battle Trade.
- * Supports: email magic link, Apple Sign-In, wallet connect.
+ * Auth helpers for Battle Trade.
+ * Privy handles all authentication (social, email, wallets via WalletConnect).
+ * This module provides profile management on top of Privy sessions.
  */
 
 import { createBrowserClient } from '@supabase/ssr';
-import type { SupabaseClient, User } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 // ---------------------------------------------------------------------------
-// Client
+// Supabase client (for profile management only — auth is via Privy)
 // ---------------------------------------------------------------------------
 
-let _authClient: SupabaseClient | null = null;
+let _client: SupabaseClient | null = null;
 
-export function getAuthClient(): SupabaseClient {
-  if (_authClient) return _authClient;
-  _authClient = createBrowserClient(
+function getClient(): SupabaseClient {
+  if (_client) return _client;
+  _client = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
-  return _authClient;
+  return _client;
 }
 
 // ---------------------------------------------------------------------------
-// Auth methods
+// Profile helpers
 // ---------------------------------------------------------------------------
 
-/** Sign in with email magic link (passwordless) */
-export async function signInWithEmail(email: string): Promise<{ error?: string }> {
-  const sb = getAuthClient();
-  const { error } = await sb.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: `${window.location.origin}/auth/callback`,
-    },
-  });
-  if (error) return { error: error.message };
-  return {};
-}
-
-/** Sign in with email + password (for returning users who set a password) */
-export async function signInWithPassword(email: string, password: string): Promise<{ error?: string }> {
-  const sb = getAuthClient();
-  const { error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) return { error: error.message };
-  return {};
-}
-
-/** Sign up with email + password */
-export async function signUpWithEmail(email: string, password: string): Promise<{ error?: string }> {
-  const sb = getAuthClient();
-  const { error } = await sb.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: `${window.location.origin}/auth/callback`,
-    },
-  });
-  if (error) return { error: error.message };
-  return {};
-}
-
-/** Sign in with Apple */
-export async function signInWithApple(): Promise<{ error?: string }> {
-  const sb = getAuthClient();
-  const { error } = await sb.auth.signInWithOAuth({
-    provider: 'apple',
-    options: {
-      redirectTo: `${window.location.origin}/auth/callback`,
-    },
-  });
-  if (error) return { error: error.message };
-  return {};
-}
-
-/** Sign in with wallet — sign a message, verify, get session */
-export async function signInWithWallet(walletType: 'evm' | 'solana'): Promise<{ error?: string }> {
-  try {
-    // Dynamic import to avoid SSR issues
-    const { connectWallet } = await import('./wallet');
-    const wallet = await connectWallet(walletType);
-
-    // Get a nonce from the server
-    const nonceRes = await fetch('/api/auth/wallet-nonce', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address: wallet.address, type: wallet.type }),
-    });
-    const { nonce } = await nonceRes.json();
-    if (!nonce) return { error: 'Failed to get nonce' };
-
-    // Sign the message
-    const message = `Battle Trade login\nNonce: ${nonce}`;
-    let signature: string;
-
-    if (walletType === 'evm') {
-      const ethereum = (window as unknown as Record<string, unknown>).ethereum as {
-        request: (args: { method: string; params: unknown[] }) => Promise<string>;
-      };
-      signature = await ethereum.request({
-        method: 'personal_sign',
-        params: [message, wallet.address],
-      });
-    } else {
-      const solana = (window as unknown as Record<string, unknown>).solana as {
-        signMessage: (msg: Uint8Array, encoding: string) => Promise<{ signature: Uint8Array }>;
-      };
-      const encoded = new TextEncoder().encode(message);
-      const result = await solana.signMessage(encoded, 'utf8');
-      signature = Buffer.from(result.signature).toString('hex');
-    }
-
-    // Verify on server and get session
-    const verifyRes = await fetch('/api/auth/wallet-verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        address: wallet.address,
-        type: wallet.type,
-        signature,
-        nonce,
-      }),
-    });
-    const verifyData = await verifyRes.json();
-    if (!verifyRes.ok) return { error: verifyData.error ?? 'Verification failed' };
-
-    // Set the session from the server response
-    if (verifyData.access_token) {
-      const sb = getAuthClient();
-      await sb.auth.setSession({
-        access_token: verifyData.access_token,
-        refresh_token: verifyData.refresh_token,
-      });
-    }
-
-    return {};
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Wallet connection failed' };
-  }
-}
-
-/** Sign out */
-export async function signOut(): Promise<void> {
-  const sb = getAuthClient();
-  await sb.auth.signOut();
-}
-
-// ---------------------------------------------------------------------------
-// Session helpers
-// ---------------------------------------------------------------------------
-
-/** Get current user (client-side) */
-export async function getCurrentUser(): Promise<User | null> {
-  const sb = getAuthClient();
-  const { data: { user } } = await sb.auth.getUser();
-  return user;
-}
-
-/** Get or create profile for authenticated user */
-export async function getOrCreateProfile(user: User): Promise<{
+export interface BattleProfile {
   id: string;
   display_name: string;
   email: string | null;
@@ -166,36 +35,81 @@ export async function getOrCreateProfile(user: User): Promise<{
   elo_rating: number;
   total_wins: number;
   total_lobbies_played: number;
-} | null> {
-  const sb = getAuthClient();
+}
 
-  // Try to find existing profile
+/**
+ * Get or create a profile for a Privy-authenticated user.
+ * Called after Privy login with the Privy user object.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getOrCreateProfile(privyUser: any): Promise<BattleProfile | null> {
+  const sb = getClient();
+
+  // Try to find existing profile by Privy ID
   const { data: existing } = await sb
     .from('profiles')
     .select('*')
-    .eq('auth_user_id', user.id)
+    .eq('auth_user_id', privyUser.id)
     .single();
 
   if (existing) return existing;
 
-  // Create new profile
-  const displayName = user.user_metadata?.full_name
-    ?? user.email?.split('@')[0]
-    ?? `Trader_${Math.random().toString(36).slice(2, 6)}`;
+  // Build display name from available data
+  const displayName =
+    privyUser.google?.name ??
+    privyUser.email?.address?.split('@')[0] ??
+    privyUser.apple?.email?.split('@')[0] ??
+    (privyUser.wallet?.address
+      ? `${privyUser.wallet.address.slice(0, 6)}...${privyUser.wallet.address.slice(-4)}`
+      : `Trader_${Math.random().toString(36).slice(2, 6)}`);
+
+  const email =
+    privyUser.email?.address ??
+    privyUser.google?.email ??
+    privyUser.apple?.email ??
+    null;
 
   const { data: newProfile } = await sb
     .from('profiles')
     .insert({
-      auth_user_id: user.id,
+      auth_user_id: privyUser.id,
       display_name: displayName,
-      email: user.email ?? null,
-      wallet_address: user.user_metadata?.wallet_address ?? null,
-      wallet_type: user.user_metadata?.wallet_type ?? null,
+      email,
+      wallet_address: privyUser.wallet?.address ?? null,
+      wallet_type: privyUser.wallet ? 'evm' : null,
     })
     .select('*')
     .single();
 
   return newProfile;
+}
+
+/**
+ * Get profile by Privy user ID
+ */
+export async function getProfileByPrivyId(privyUserId: string): Promise<BattleProfile | null> {
+  const sb = getClient();
+  const { data } = await sb
+    .from('profiles')
+    .select('*')
+    .eq('auth_user_id', privyUserId)
+    .single();
+  return data;
+}
+
+/**
+ * Update wallet address on profile after Privy wallet link
+ */
+export async function updateProfileWallet(
+  profileId: string,
+  walletAddress: string,
+  walletType: 'evm' | 'solana' = 'evm',
+): Promise<void> {
+  const sb = getClient();
+  await sb
+    .from('profiles')
+    .update({ wallet_address: walletAddress, wallet_type: walletType })
+    .eq('id', profileId);
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +140,7 @@ export async function awardBadge(profileId: string, badgeId: string): Promise<vo
   const def = BADGE_DEFS[badgeId];
   if (!def) return;
 
-  const sb = getAuthClient();
+  const sb = getClient();
   const { data: profile } = await sb
     .from('profiles')
     .select('badges')
@@ -236,7 +150,7 @@ export async function awardBadge(profileId: string, badgeId: string): Promise<vo
   if (!profile) return;
 
   const badges = (profile.badges as Badge[]) ?? [];
-  if (badges.some(b => b.id === badgeId)) return; // Already has it
+  if (badges.some(b => b.id === badgeId)) return;
 
   badges.push({
     id: badgeId,

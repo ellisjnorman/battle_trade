@@ -314,13 +314,13 @@ export default function SpectatePage() {
       const id = `feed-${++feedIdCounter.current}`;
       const pType = payload.type as string;
 
-      if (pType === 'sabotage_received' || pType === 'sabotage_shielded' || pType === 'sabotage_deflected') {
+      if (pType === 'sabotage_received' || pType === 'sabotage_hedged' || pType === 'sabotage_stopped') {
         const sab = payload.sabotage as Record<string, unknown> | undefined;
         const attackerName = (payload.attacker_name as string) ?? 'SOMEONE';
         const targetName = (payload.target_name as string) ?? traders.find((t) => t.trader_id === (sab?.target_id ?? payload.target_id))?.name ?? '???';
         const weaponType = (payload.weapon_type as string) ?? (sab?.type as string);
         const weaponDef = WEAPONS.find((w) => w.type === weaponType);
-        const resultSuffix = pType === 'sabotage_shielded' ? ' — SHIELDED!' : pType === 'sabotage_deflected' ? ' — DEFLECTED!' : '';
+        const resultSuffix = pType === 'sabotage_hedged' ? ' — HEDGED!' : pType === 'sabotage_stopped' ? ' — STOPPED!' : '';
         setFeed((prev) => [{
           id,
           type: 'sabotage' as const,
@@ -328,7 +328,7 @@ export default function SpectatePage() {
           subtitle: `${weaponDef?.icon ?? '⚡'} ${weaponDef?.cost ?? 0}CR${resultSuffix}`,
           detail: undefined,
           color: pType === 'sabotage_received' ? '#F5A0D0' : '#00BFFF',
-          icon: pType === 'sabotage_received' ? '⚡' : pType === 'sabotage_shielded' ? '🛡' : '🔄',
+          icon: pType === 'sabotage_received' ? '⚡' : pType === 'sabotage_hedged' ? '🛡' : '🔄',
           timestamp: Date.now(),
         }, ...prev].slice(0, 30));
         setAttackHits((h) => ({ ...h, [targetName]: (h[targetName] ?? 0) + 1 }));
@@ -337,7 +337,7 @@ export default function SpectatePage() {
       // Defense activation events
       if (pType === 'defense_activated') {
         const traderName = (payload.trader_name as string) ?? traders.find((t) => t.trader_id === payload.trader_id)?.name ?? '???';
-        const defType = (payload.defense_type as string) ?? 'shield';
+        const defType = (payload.defense_type as string) ?? 'hedge';
         setFeed((prev) => [{
           id,
           type: 'sabotage' as const,

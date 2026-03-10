@@ -41,7 +41,7 @@ interface RoundHistory {
 }
 
 interface MarketEvent {
-  type: "flash_crash" | "moon_shot" | "margin_call"
+  type: "circuit_breaker" | "moon_shot" | "margin_call"
   asset: string
   percentChange: number
   countdownSeconds: number
@@ -94,7 +94,7 @@ const roundHistory: RoundHistory[] = [
 ]
 
 const activeEvent: MarketEvent = {
-  type: "flash_crash",
+  type: "circuit_breaker",
   asset: "BTC",
   percentChange: -12.4,
   countdownSeconds: 23,
@@ -103,14 +103,14 @@ const activeEvent: MarketEvent = {
 }
 
 const eventFeedItems: EventFeedItem[] = [
-  { type: "event_active", text: "FLASH CRASH ACTIVE", subtext: "BTC -12% · 43s left", color: "#FF3333", bgColor: "rgba(255,51,51,0.06)", borderColor: "#FF3333" },
+  { type: "event_active", text: "CIRCUIT BREAKER ACTIVE", subtext: "BTC -12% · 43s left", color: "#FF3333", bgColor: "rgba(255,51,51,0.06)", borderColor: "#FF3333" },
   { type: "position_wiped", text: "PAPER HANDS position wiped", subtext: "-$800", color: "#FF3333" },
   { type: "held_through", text: "WOLFPACK held through crash", subtext: "still +38%", color: "#00FF88" },
   { type: "closed_position", text: "SIGMA just closed BTC", subtext: "cut losses · -$200", color: "#888" },
 ]
 
 const scheduledEvents: ScheduledEvent[] = [
-  { type: "FLASH CRASH", time: "08:00", asset: "BTC" },
+  { type: "CIRCUIT BREAKER", time: "08:00", asset: "BTC" },
   { type: "MOON SHOT", time: "05:00", asset: "ETH" },
   { type: "MARGIN CALL", time: "02:00", asset: "ALL" },
 ]
@@ -360,7 +360,7 @@ function EventCountdownBar({ event }: { event: MarketEvent }) {
         </span>
         <span className="text-[#555]">·</span>
         <span className="font-display tracking-[0.05em] text-[20px] text-[#FF3333]">
-          FLASH CRASH · BTC -15%
+          CIRCUIT BREAKER · BTC -15%
         </span>
       </div>
     </div>
@@ -379,7 +379,7 @@ function EventActiveOverlay({ event }: { event: MarketEvent }) {
     >
       <div className="flex items-center gap-[16px]">
         <span className="font-display tracking-[0.05em] text-[18px] text-[#FF3333]">
-          FLASH CRASH ACTIVE
+          CIRCUIT BREAKER ACTIVE
         </span>
         <span
           className="font-mono tracking-[-0.02em] text-[24px] text-[#FF3333]"

@@ -64,7 +64,7 @@ describe('shouldTriggerEvent', () => {
 
   test('respects max_events_per_round cap', () => {
     const state = makeState({
-      eventsThisRound: ['flash_crash', 'moon_shot', 'volatility_spike', 'dead_cat', 'margin_call', 'lockout'],
+      eventsThisRound: ['circuit_breaker', 'moon_shot', 'volatility_spike', 'dead_cat', 'margin_call', 'blackout'],
     });
     const result = shouldTriggerEvent(state, DEFAULT_CONFIG);
     expect(result).toBeNull();
@@ -89,7 +89,7 @@ describe('shouldTriggerEvent', () => {
   });
 
   test('never repeats event type already used in round', () => {
-    const used = ['flash_crash', 'moon_shot'] as const;
+    const used = ['circuit_breaker', 'moon_shot'] as const;
     const results: string[] = [];
     for (let i = 0; i < 50; i++) {
       const result = shouldTriggerEvent(
@@ -162,18 +162,18 @@ describe('special triggers', () => {
 
 describe('weightedRandomSelect', () => {
   test('returns a valid key from weights', () => {
-    const weights = { flash_crash: 50, moon_shot: 30, lockout: 20 };
+    const weights = { circuit_breaker: 50, moon_shot: 30, blackout: 20 };
     const result = weightedRandomSelect(weights);
     expect(Object.keys(weights)).toContain(result);
   });
 
   test('higher weight selected more often', () => {
-    const weights = { flash_crash: 90, lockout: 10 };
-    let flashCount = 0;
+    const weights = { circuit_breaker: 90, blackout: 10 };
+    let cbCount = 0;
     for (let i = 0; i < 1000; i++) {
-      if (weightedRandomSelect(weights) === 'flash_crash') flashCount++;
+      if (weightedRandomSelect(weights) === 'circuit_breaker') cbCount++;
     }
-    expect(flashCount).toBeGreaterThan(700);
+    expect(cbCount).toBeGreaterThan(700);
   });
 });
 
@@ -191,9 +191,9 @@ describe('time buckets', () => {
       );
       if (result) types.add(result.type);
     }
-    // Early pool: flash_crash, moon_shot, volatility_spike, wild_card, lockout
+    // Early pool: circuit_breaker, moon_shot, volatility_spike, wild_card, blackout
     for (const t of types) {
-      expect(['flash_crash', 'moon_shot', 'volatility_spike', 'wild_card', 'lockout']).toContain(t);
+      expect(['circuit_breaker', 'moon_shot', 'volatility_spike', 'wild_card', 'blackout']).toContain(t);
     }
   });
 

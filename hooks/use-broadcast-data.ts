@@ -212,7 +212,7 @@ export function useBroadcastData(lobbyId: string) {
         if (msg.type === 'event_start') {
           const ev = msg.event as Record<string, unknown>
           setVolatilityEvent({
-            type: (ev.type as string) ?? 'flash_crash',
+            type: (ev.type as string) ?? 'circuit_breaker',
             asset: (ev.asset as string) ?? 'ALL',
             secondsRemaining: (msg.secondsRemaining as number) ?? 60,
           })
@@ -230,7 +230,7 @@ export function useBroadcastData(lobbyId: string) {
             id: `sab-${Date.now()}`,
             from: (msg.attacker_name as string) ?? 'UNKNOWN',
             to: (msg.target_name as string) ?? 'UNKNOWN',
-            type: (msg.attack_id as string) ?? 'LOCKOUT',
+            type: (msg.attack_id as string) ?? 'BLACKOUT',
             cost: (msg.cost as number) ?? 0,
             timestamp: new Date(),
           }
@@ -254,7 +254,7 @@ export function useBroadcastData(lobbyId: string) {
       const msg = payload.payload as Record<string, unknown>
       const dur = (msg.duration_seconds as number) ?? 60
       setVolatilityEvent({
-        type: (msg.type as string) ?? 'flash_crash',
+        type: (msg.type as string) ?? 'circuit_breaker',
         asset: (msg.asset as string) ?? 'ALL',
         secondsRemaining: dur,
       })
@@ -358,10 +358,10 @@ export function useBroadcastData(lobbyId: string) {
   // Map volatility event to broadcast type
   const currentEvent: VolatilityEvent | undefined = volatilityEvent
     ? {
-        type: volatilityEvent.type.toUpperCase().includes('CRASH') ? 'FLASH_CRASH'
+        type: volatilityEvent.type.toUpperCase().includes('CIRCUIT') ? 'CIRCUIT_BREAKER'
           : volatilityEvent.type.toUpperCase().includes('MOON') ? 'MOON_SHOT'
-          : volatilityEvent.type.toUpperCase().includes('LOCKOUT') ? 'LOCKOUT'
-          : 'FLASH_CRASH',
+          : volatilityEvent.type.toUpperCase().includes('BLACKOUT') ? 'BLACKOUT'
+          : 'CIRCUIT_BREAKER',
         asset: (volatilityEvent.asset.replace('USDT', '') || 'BTC') as 'BTC' | 'ETH' | 'SOL',
         impact: 0,
       }

@@ -497,6 +497,44 @@ export default function AdminPage() {
               </button>
             </div>
 
+            {/* BROADCAST LINKS */}
+            <div className="flex items-center gap-2 px-3 py-2 flex-wrap" style={{ background: '#0D0D0D', border: '1px solid #1A1A1A' }}>
+              <span style={{ fontFamily: mono, fontSize: '0.6rem', color: '#666', textTransform: 'uppercase', letterSpacing: '0.1em', marginRight: 4 }}>LINKS</span>
+              {[
+                { label: 'SPECTATE', path: 'spectate', color: '#F5A0D0' },
+                { label: 'OBS', path: 'broadcast', color: '#00FF88' },
+                { label: 'CAST', path: 'cast', color: '#FFD700' },
+                { label: 'STAGE', path: 'stage', color: '#00BFFF' },
+                { label: 'BOARD', path: 'leaderboard', color: '#888' },
+                { label: 'HUB', path: '', color: '#FFF' },
+              ].map(link => {
+                const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/lobby/${lobbyId}${link.path ? '/' + link.path : ''}`;
+                return (
+                  <button
+                    key={link.label}
+                    onClick={() => { navigator.clipboard.writeText(url); addLog(`Copied ${link.label} URL`, 'info'); }}
+                    className="admin-btn px-2 py-1 cursor-pointer"
+                    style={{
+                      background: 'transparent',
+                      border: `1px solid ${link.color}33`,
+                      color: link.color,
+                      fontFamily: mono, fontSize: '0.6rem', letterSpacing: '0.05em',
+                    }}
+                    title={url}
+                  >
+                    {link.label}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => window.open(`/lobby/${lobbyId}`, '_blank')}
+                className="admin-btn px-2 py-1 cursor-pointer"
+                style={{ background: 'transparent', border: '1px solid #333', color: '#555', fontFamily: mono, fontSize: '0.55rem', marginLeft: 'auto' }}
+              >
+                OPEN HUB ↗
+              </button>
+            </div>
+
             {/* TABS — Standings always visible, switchable lower panel */}
 
             {/* STANDINGS TABLE */}

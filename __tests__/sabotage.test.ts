@@ -30,11 +30,11 @@ afterEach(() => {
 describe('sabotage definitions', () => {
   test('all 7 sabotage types are defined', () => {
     expect(SABOTAGE_TYPES).toHaveLength(7);
-    expect(SABOTAGE_TYPES).toContain('lockout');
+    expect(SABOTAGE_TYPES).toContain('blackout');
     expect(SABOTAGE_TYPES).toContain('fake_news');
-    expect(SABOTAGE_TYPES).toContain('margin_squeeze');
-    expect(SABOTAGE_TYPES).toContain('expose');
-    expect(SABOTAGE_TYPES).toContain('asset_freeze');
+    expect(SABOTAGE_TYPES).toContain('leverage_cap');
+    expect(SABOTAGE_TYPES).toContain('reveal');
+    expect(SABOTAGE_TYPES).toContain('trading_halt');
     expect(SABOTAGE_TYPES).toContain('glitch');
     expect(SABOTAGE_TYPES).toContain('forced_trade');
   });
@@ -46,29 +46,29 @@ describe('sabotage definitions', () => {
   });
 
   test('credits deducted correctly for each type', () => {
-    expect(SABOTAGES.lockout.cost).toBe(200);
+    expect(SABOTAGES.blackout.cost).toBe(200);
     expect(SABOTAGES.fake_news.cost).toBe(150);
-    expect(SABOTAGES.margin_squeeze.cost).toBe(300);
-    expect(SABOTAGES.expose.cost).toBe(100);
-    expect(SABOTAGES.asset_freeze.cost).toBe(250);
+    expect(SABOTAGES.leverage_cap.cost).toBe(300);
+    expect(SABOTAGES.reveal.cost).toBe(100);
+    expect(SABOTAGES.trading_halt.cost).toBe(250);
     expect(SABOTAGES.glitch.cost).toBe(50);
     expect(SABOTAGES.forced_trade.cost).toBe(500);
   });
 
-  test('lockout has 90s duration', () => {
-    expect(SABOTAGES.lockout.duration).toBe(90);
+  test('blackout has 90s duration', () => {
+    expect(SABOTAGES.blackout.duration).toBe(90);
   });
 
-  test('expose has 120s duration', () => {
-    expect(SABOTAGES.expose.duration).toBe(120);
+  test('reveal has 120s duration', () => {
+    expect(SABOTAGES.reveal.duration).toBe(120);
   });
 
-  test('asset_freeze has 60s duration', () => {
-    expect(SABOTAGES.asset_freeze.duration).toBe(60);
+  test('trading_halt has 60s duration', () => {
+    expect(SABOTAGES.trading_halt.duration).toBe(60);
   });
 
-  test('margin_squeeze and forced_trade have null duration (instant)', () => {
-    expect(SABOTAGES.margin_squeeze.duration).toBeNull();
+  test('leverage_cap and forced_trade have null duration (instant)', () => {
+    expect(SABOTAGES.leverage_cap.duration).toBeNull();
     expect(SABOTAGES.forced_trade.duration).toBeNull();
   });
 });
@@ -80,11 +80,11 @@ describe('sabotage definitions', () => {
 describe('defense definitions', () => {
   test('all 5 defense types are defined', () => {
     expect(DEFENSE_TYPES).toHaveLength(5);
-    expect(DEFENSE_TYPES).toContain('shield');
-    expect(DEFENSE_TYPES).toContain('deflect');
-    expect(DEFENSE_TYPES).toContain('ghost_mode');
+    expect(DEFENSE_TYPES).toContain('hedge');
+    expect(DEFENSE_TYPES).toContain('stop_loss');
+    expect(DEFENSE_TYPES).toContain('dark_pool');
     expect(DEFENSE_TYPES).toContain('speed_boost');
-    expect(DEFENSE_TYPES).toContain('unfreeze');
+    expect(DEFENSE_TYPES).toContain('resume');
   });
 
   test('all defense types have positive cost', () => {
@@ -93,16 +93,16 @@ describe('defense definitions', () => {
     }
   });
 
-  test('shield costs 150', () => {
-    expect(DEFENSE_DEFS.shield.cost).toBe(150);
+  test('hedge costs 150', () => {
+    expect(DEFENSE_DEFS.hedge.cost).toBe(150);
   });
 
-  test('deflect costs 200', () => {
-    expect(DEFENSE_DEFS.deflect.cost).toBe(200);
+  test('stop_loss costs 200', () => {
+    expect(DEFENSE_DEFS.stop_loss.cost).toBe(200);
   });
 
-  test('ghost_mode has 120s duration', () => {
-    expect(DEFENSE_DEFS.ghost_mode.duration).toBe(120);
+  test('dark_pool has 120s duration', () => {
+    expect(DEFENSE_DEFS.dark_pool.duration).toBe(120);
   });
 
   test('speed_boost has 60s duration', () => {
@@ -117,13 +117,13 @@ describe('defense definitions', () => {
 describe('credit validation', () => {
   test('attacker with insufficient credits is rejected', () => {
     const balance = 100;
-    const cost = SABOTAGES.lockout.cost; // 200
+    const cost = SABOTAGES.blackout.cost; // 200
     expect(balance < cost).toBe(true);
   });
 
   test('attacker with exact credits can afford', () => {
     const balance = 200;
-    const cost = SABOTAGES.lockout.cost;
+    const cost = SABOTAGES.blackout.cost;
     expect(balance >= cost).toBe(true);
   });
 
@@ -183,7 +183,7 @@ describe('cooldown logic', () => {
 
 describe('defense interactions', () => {
   test('shield blocks sabotage and refunds 50% credits', () => {
-    const cost = SABOTAGES.lockout.cost;
+    const cost = SABOTAGES.blackout.cost;
     const refund = Math.round(cost * 0.5);
     const netCost = cost - refund;
     expect(refund).toBe(100);
@@ -206,13 +206,13 @@ describe('defense interactions', () => {
 // ---------------------------------------------------------------------------
 
 describe('sabotage effects', () => {
-  test('lockout blocks position opens', () => {
+  test('blackout blocks position opens', () => {
     // When positions_locked = true, position creation should be rejected
     const sessionsLocked = true;
     expect(sessionsLocked).toBe(true);
   });
 
-  test('asset freeze blocks wrong asset trades', () => {
+  test('trading halt blocks wrong asset trades', () => {
     const frozenAsset: string = 'BTCUSDT';
     const requestedSymbol: string = 'ETHUSDT';
     expect(requestedSymbol !== frozenAsset).toBe(true);
@@ -221,7 +221,7 @@ describe('sabotage effects', () => {
     expect(sameAsset !== frozenAsset).toBe(false);
   });
 
-  test('margin_squeeze reduces balance by 10%', () => {
+  test('leverage_cap reduces balance by 10%', () => {
     const startingBalance = 10000;
     const newBalance = Math.round(startingBalance * 0.9);
     expect(newBalance).toBe(9000);

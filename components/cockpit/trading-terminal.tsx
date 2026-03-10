@@ -257,27 +257,27 @@ export default function TradingTerminal() {
     }).subscribe();
     const sc = supabase.channel(`t-${trader.id}`).on('broadcast', { event: 'sabotage' }, ({ payload }) => {
       const m = payload as Record<string, unknown>; const st = (m.type as string) ?? ''; const sab = m.sabotage as Record<string, unknown> | undefined; const ty = (sab?.type as string) ?? (m.sabotage_type as string) ?? st;
-      if (ty === 'lockout') { setIsLockedOut(true); setLockoutTime(90); setActiveOverlay('locked'); flash('#FF3333'); addToast('YOU\'VE BEEN LOCKED OUT!', 'attack', '🔒'); addFeedItem('You got LOCKED OUT', '#FF3333', '🔒'); }
+      if (ty === 'blackout') { setIsLockedOut(true); setLockoutTime(90); setActiveOverlay('locked'); flash('#FF3333'); addToast('YOU\'VE BEEN BLACKED OUT!', 'attack', '🔒'); addFeedItem('You got BLACKED OUT', '#FF3333', '🔒'); }
       else if (ty === 'fake_news') { setActiveOverlay('fakenews'); flash('#F5A0D0'); addFeedItem('FAKE NEWS incoming!', '#F5A0D0', '📰'); }
-      else if (ty === 'asset_freeze') { setFrozenAsset((sab?.payload as Record<string, string>)?.asset ?? 'BTCUSDT'); addEffect('asset_freeze', 'attack', 60); flash('#00BFFF'); addToast('ASSET FROZEN!', 'attack', '🔀'); addFeedItem('Asset FROZEN', '#00BFFF', '🔀'); }
-      else if (ty === 'expose') { addEffect('expose', 'attack', 120); flash('#FF3333'); addToast('POSITIONS EXPOSED!', 'attack', '🎯'); addFeedItem('Your positions are EXPOSED', '#FF3333', '🎯'); }
+      else if (ty === 'trading_halt') { setFrozenAsset((sab?.payload as Record<string, string>)?.asset ?? 'BTCUSDT'); addEffect('trading_halt', 'attack', 60); flash('#00BFFF'); addToast('TRADING HALTED!', 'attack', '🔀'); addFeedItem('Trading HALTED', '#00BFFF', '🔀'); }
+      else if (ty === 'reveal') { addEffect('reveal', 'attack', 120); flash('#FF3333'); addToast('POSITIONS REVEALED!', 'attack', '🎯'); addFeedItem('Your positions are REVEALED', '#FF3333', '🎯'); }
       else if (ty === 'glitch') { addEffect('glitch', 'attack', 10); flash('#F5A0D0'); addFeedItem('GLITCH attack!', '#F5A0D0', '🌀'); }
-      else if (ty === 'margin_squeeze') { flash('#FF3333'); addToast('MARGIN SQUEEZED! -10% balance', 'attack', '💸'); addFeedItem('SQUEEZED -10%', '#FF3333', '💸'); }
+      else if (ty === 'leverage_cap') { flash('#FF3333'); addToast('LEVERAGE CAPPED! -10% balance', 'attack', '💸'); addFeedItem('LEVERAGE CAPPED -10%', '#FF3333', '💸'); }
       else if (ty === 'forced_trade') { setActiveOverlay('forced'); flash('#FF3333'); addFeedItem('FORCED TRADE opened!', '#FF3333', '⚡'); }
-      else if (ty === 'lockout_lifted') { setIsLockedOut(false); setActiveOverlay(null); addToast('Lockout expired — you\'re free!', 'success', '🔓'); }
+      else if (ty === 'blackout_lifted') { setIsLockedOut(false); setActiveOverlay(null); addToast('Blackout expired — you\'re free!', 'success', '🔓'); }
       if (st === 'defense_result') {
         const result = m.result as string;
-        if (result === 'shielded') { flash('#00BFFF'); addToast('ATTACK SHIELDED! 50% refund', 'defense', '🛡'); addFeedItem('Attack was SHIELDED', '#00BFFF', '🛡'); }
-        if (result === 'deflected') { flash('#00BFFF'); addToast('ATTACK DEFLECTED back!', 'defense', '🔄'); addFeedItem('Attack DEFLECTED!', '#00BFFF', '🔄'); }
+        if (result === 'hedged') { flash('#00BFFF'); addToast('ATTACK HEDGED! 50% refund', 'defense', '🛡'); addFeedItem('Attack was HEDGED', '#00BFFF', '🛡'); }
+        if (result === 'stopped') { flash('#00BFFF'); addToast('ATTACK STOPPED & bounced back!', 'defense', '🔄'); addFeedItem('Attack STOPPED!', '#00BFFF', '🔄'); }
       }
       if (st === 'defense_activated') {
-        const dt = (m.defense_type as string) ?? 'shield';
-        if (dt === 'unfreeze') {
+        const dt = (m.defense_type as string) ?? 'hedge';
+        if (dt === 'resume') {
           setIsLockedOut(false); setLockoutTime(0); setFrozenAsset(null); setActiveOverlay(null);
-          setActiveEffects(p => p.filter(e => e.type !== 'asset_freeze'));
-          flash('#00FF88'); addToast('UNFROZEN! All restrictions cleared', 'success', '🔥'); addFeedItem('UNFREEZE activated!', '#00FF88', '🔥');
+          setActiveEffects(p => p.filter(e => e.type !== 'trading_halt'));
+          flash('#00FF88'); addToast('RESUMED! All restrictions cleared', 'success', '🔥'); addFeedItem('RESUME activated!', '#00FF88', '🔥');
         } else {
-          const dur = dt === 'ghost_mode' ? 120 : dt === 'speed_boost' ? 60 : null; if (dur) addEffect(dt, 'defense', dur);
+          const dur = dt === 'dark_pool' ? 120 : dt === 'speed_boost' ? 60 : null; if (dur) addEffect(dt, 'defense', dur);
         }
       }
     }).on('broadcast', { event: 'liquidation' }, ({ payload }) => {
@@ -299,8 +299,8 @@ export default function TradingTerminal() {
         const weapon = ATTACKS.find(a => a.id === m.sabotage_type);
         addFeedItem(`${atkName} ${weapon?.icon ?? '⚡'} ${weapon?.name ?? '???'} → ${tgtName}`, '#F5A0D0', weapon?.icon ?? '⚡');
       }
-      if (type === 'sabotage_shielded') { addFeedItem('Attack BLOCKED by shield!', '#00BFFF', '🛡'); }
-      if (type === 'sabotage_deflected') { addFeedItem('Attack DEFLECTED!', '#00BFFF', '🔄'); }
+      if (type === 'sabotage_hedged') { addFeedItem('Attack BLOCKED by hedge!', '#00BFFF', '🛡'); }
+      if (type === 'sabotage_stopped') { addFeedItem('Attack STOPPED!', '#00BFFF', '🔄'); }
       if (type === 'defense_activated') {
         const tName = allTraders.find(t => t.id === m.trader_id)?.name ?? (m.trader_id === trader.id ? 'You' : '???');
         const def = DEFENSES.find(d => d.id === m.defense_type);
@@ -454,12 +454,12 @@ export default function TradingTerminal() {
         if (d.credits_remaining !== undefined) setCredits(p => ({ ...p, balance: d.credits_remaining }));
         else setCredits(p => ({ ...p, balance: p.balance - weapon!.cost }));
 
-        if (d.result === 'shielded') {
-          addToast(`${weapon?.name} was SHIELDED! +${d.refund}CR refund`, 'defense', '🛡');
-          addFeedItem(`${weapon?.name} SHIELDED by ${tgtName}!`, '#00BFFF', '🛡');
-        } else if (d.result === 'deflected') {
-          addToast(`${weapon?.name} DEFLECTED back at you!`, 'error', '🔄');
-          addFeedItem(`${weapon?.name} DEFLECTED by ${tgtName}!`, '#00BFFF', '🔄');
+        if (d.result === 'hedged') {
+          addToast(`${weapon?.name} was HEDGED! +${d.refund}CR refund`, 'defense', '🛡');
+          addFeedItem(`${weapon?.name} HEDGED by ${tgtName}!`, '#00BFFF', '🛡');
+        } else if (d.result === 'stopped') {
+          addToast(`${weapon?.name} STOPPED & bounced back at you!`, 'error', '🔄');
+          addFeedItem(`${weapon?.name} STOPPED by ${tgtName}!`, '#00BFFF', '🔄');
         } else {
           addToast(`${weapon?.icon} ${weapon?.name} launched at ${tgtName}! — ${weapon?.desc}`, 'attack', weapon?.icon);
           addFeedItem(`${weapon?.icon} ${weapon?.name} → ${tgtName}`, '#F5A0D0', weapon?.icon ?? '⚡');
@@ -522,7 +522,7 @@ export default function TradingTerminal() {
   const allSymbols = Object.keys(PYTH_FEEDS).map(s => s.replace('USD', ''));
   const frozen = round?.status === 'frozen';
   const canExec = selectedDirection && selectedSize > 0 && !isLockedOut && !frozen && openPos.length < 3 && (!frozenAsset || frozenAsset.replace('USDT', '') !== selectedSymbol) && round?.status === 'active';
-  const execLabel = isLockedOut ? `LOCKED ${Math.floor(lockoutTime/60)}:${(lockoutTime%60).toString().padStart(2,'0')}` : frozen ? 'FROZEN' : openPos.length >= 3 ? 'MAX POSITIONS' : !selectedDirection ? 'PICK A SIDE ↑' : actionLoading === 'trade' ? 'EXECUTING...' : `${selectedDirection.toUpperCase()} ${selectedSymbol}`;
+  const execLabel = isLockedOut ? `BLACKED OUT ${Math.floor(lockoutTime/60)}:${(lockoutTime%60).toString().padStart(2,'0')}` : frozen ? 'FROZEN' : openPos.length >= 3 ? 'MAX POSITIONS' : !selectedDirection ? 'PICK A SIDE ↑' : actionLoading === 'trade' ? 'EXECUTING...' : `${selectedDirection.toUpperCase()} ${selectedSymbol}`;
   const liqP = selectedPrice > 0 && selectedDirection ? (selectedDirection === 'long' ? selectedPrice * (1 - 1/leverage) : selectedPrice * (1 + 1/leverage)) : 0;
 
   // ── P&L milestone celebrations ──

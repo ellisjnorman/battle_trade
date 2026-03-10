@@ -7,7 +7,7 @@
 import type { AssetTarget } from './volatility-engine';
 
 export type EventType =
-  | 'flash_crash'
+  | 'circuit_breaker'
   | 'moon_shot'
   | 'volatility_spike'
   | 'dead_cat'
@@ -15,7 +15,7 @@ export type EventType =
   | 'leverage_surge'
   | 'wild_card'
   | 'reversal'
-  | 'lockout'
+  | 'blackout'
 
 export interface PresetEvent {
   type: EventType
@@ -49,8 +49,8 @@ export const PRESETS: EventPreset[] = [
     category: 'crash',
     headline: 'EXTRATERRESTRIAL CONTACT CONFIRMED — MARKETS SUSPENDED GLOBALLY',
     events: [
-      { type: 'flash_crash', asset: 'ALL', magnitude: 0.18, duration_seconds: 30 },
-      { type: 'lockout', asset: 'ALL', magnitude: 0, duration_seconds: 30 },
+      { type: 'circuit_breaker', asset: 'ALL', magnitude: 0.18, duration_seconds: 30 },
+      { type: 'blackout', asset: 'ALL', magnitude: 0, duration_seconds: 30 },
     ],
     timing: 'any',
     narrative: 'All assets flash crash 18%. Then 30 seconds nobody can trade.',
@@ -62,7 +62,7 @@ export const PRESETS: EventPreset[] = [
     category: 'crash',
     headline: 'NUCLEAR LAUNCH DETECTED — EMERGENCY CIRCUIT BREAKER ACTIVATED',
     events: [
-      { type: 'lockout', asset: 'ALL', magnitude: 0, duration_seconds: 60 },
+      { type: 'blackout', asset: 'ALL', magnitude: 0, duration_seconds: 60 },
       { type: 'volatility_spike', asset: 'BTCUSDT', magnitude: 0.12, duration_seconds: 45, delay_seconds: 60 },
     ],
     timing: 'any',
@@ -75,7 +75,7 @@ export const PRESETS: EventPreset[] = [
     category: 'crash',
     headline: 'EMERGENCY RATE HIKE +300BPS — POWELL GOES FULL VOLCKER',
     events: [
-      { type: 'flash_crash', asset: 'ALL', magnitude: 0.12, duration_seconds: 30 },
+      { type: 'circuit_breaker', asset: 'ALL', magnitude: 0.12, duration_seconds: 30 },
     ],
     timing: 'early',
     narrative: 'Clean -12% across the board.',
@@ -87,10 +87,10 @@ export const PRESETS: EventPreset[] = [
     category: 'crash',
     headline: 'CIRCUIT BREAKERS TRIGGERED — S&P DOWN 7% AT OPEN',
     events: [
-      { type: 'flash_crash', asset: 'BTCUSDT', magnitude: 0.20, duration_seconds: 45 },
-      { type: 'flash_crash', asset: 'ETHUSDT', magnitude: 0.22, duration_seconds: 45 },
-      { type: 'flash_crash', asset: 'SOLUSDT', magnitude: 0.25, duration_seconds: 45 },
-      { type: 'lockout', asset: 'ALL', magnitude: 0, duration_seconds: 20 },
+      { type: 'circuit_breaker', asset: 'BTCUSDT', magnitude: 0.20, duration_seconds: 45 },
+      { type: 'circuit_breaker', asset: 'ETHUSDT', magnitude: 0.22, duration_seconds: 45 },
+      { type: 'circuit_breaker', asset: 'SOLUSDT', magnitude: 0.25, duration_seconds: 45 },
+      { type: 'blackout', asset: 'ALL', magnitude: 0, duration_seconds: 20 },
     ],
     timing: 'early',
     narrative: 'BTC -20%, ETH -22%, SOL -25%. Then 20s halt.',
@@ -114,7 +114,7 @@ export const PRESETS: EventPreset[] = [
     category: 'crash',
     headline: 'CRYPTO WINTER CONFIRMED — ANALYSTS: $10K BTC INEVITABLE',
     events: [
-      { type: 'flash_crash', asset: 'BTCUSDT', magnitude: 0.08, duration_seconds: 20 },
+      { type: 'circuit_breaker', asset: 'BTCUSDT', magnitude: 0.08, duration_seconds: 20 },
       { type: 'moon_shot', asset: 'BTCUSDT', magnitude: 0.18, duration_seconds: 60, delay_seconds: 20 },
     ],
     timing: 'mid',
@@ -127,7 +127,7 @@ export const PRESETS: EventPreset[] = [
     category: 'crash',
     headline: 'PROTOCOL EXPLOITED — $800M DRAINED. TOKEN GOES TO ZERO.',
     events: [
-      { type: 'flash_crash', asset: 'SOLUSDT', magnitude: 0.30, duration_seconds: 45 },
+      { type: 'circuit_breaker', asset: 'SOLUSDT', magnitude: 0.30, duration_seconds: 45 },
     ],
     timing: 'any',
     narrative: 'SOL -30% while BTC/ETH stay flat. Tests concentration risk.',
@@ -166,7 +166,7 @@ export const PRESETS: EventPreset[] = [
     headline: 'PEPE OVERTAKES ETH MARKET CAP — FUNDAMENTALS ARE DEAD',
     events: [
       { type: 'moon_shot', asset: 'SOLUSDT', magnitude: 0.20, duration_seconds: 45 },
-      { type: 'flash_crash', asset: 'ETHUSDT', magnitude: 0.10, duration_seconds: 30 },
+      { type: 'circuit_breaker', asset: 'ETHUSDT', magnitude: 0.10, duration_seconds: 30 },
     ],
     timing: 'mid',
     narrative: 'SOL +20%, ETH -10% simultaneously. Alt rotation live.',
@@ -243,8 +243,8 @@ export const PRESETS: EventPreset[] = [
     category: 'punish',
     headline: 'SEC FILES EMERGENCY INJUNCTION — ALL CRYPTO EXCHANGES HALT',
     events: [
-      { type: 'lockout', asset: 'ALL', magnitude: 0, duration_seconds: 45 },
-      { type: 'flash_crash', asset: 'ALL', magnitude: 0.10, duration_seconds: 30 },
+      { type: 'blackout', asset: 'ALL', magnitude: 0, duration_seconds: 45 },
+      { type: 'circuit_breaker', asset: 'ALL', magnitude: 0.10, duration_seconds: 30 },
     ],
     timing: 'any',
     narrative: 'Crash + lockout simultaneously. Existing positions bleed.',
@@ -256,7 +256,7 @@ export const PRESETS: EventPreset[] = [
     category: 'punish',
     headline: 'BINANCE EXPLOITED — $2B DRAINED. WITHDRAWALS SUSPENDED.',
     events: [
-      { type: 'flash_crash', asset: 'ALL', magnitude: 0.15, duration_seconds: 30 },
+      { type: 'circuit_breaker', asset: 'ALL', magnitude: 0.15, duration_seconds: 30 },
       { type: 'margin_call', asset: 'ALL', magnitude: 0.10, duration_seconds: 0, delay_seconds: 1 },
     ],
     timing: 'mid',
@@ -312,7 +312,7 @@ export const PRESETS: EventPreset[] = [
     category: 'drama',
     headline: 'FINAL POSITIONS LOCKING — ALL TRADES CLOSE IN 60 SECONDS',
     events: [
-      { type: 'lockout', asset: 'ALL', magnitude: 0, duration_seconds: 60 },
+      { type: 'blackout', asset: 'ALL', magnitude: 0, duration_seconds: 60 },
     ],
     timing: 'late',
     narrative: '60s lockout. Forces traders to manage existing risk only.',
@@ -324,7 +324,7 @@ export const PRESETS: EventPreset[] = [
     category: 'drama',
     headline: 'MASSIVE INDEX REBALANCE — $50B IN FORCED SELLING AND BUYING',
     events: [
-      { type: 'flash_crash', asset: 'ETHUSDT', magnitude: 0.10, duration_seconds: 40 },
+      { type: 'circuit_breaker', asset: 'ETHUSDT', magnitude: 0.10, duration_seconds: 40 },
       { type: 'moon_shot', asset: 'BTCUSDT', magnitude: 0.08, duration_seconds: 40 },
     ],
     timing: 'mid',

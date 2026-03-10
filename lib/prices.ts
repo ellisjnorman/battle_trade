@@ -1,5 +1,8 @@
 import { getServerSupabase } from './supabase-server';
 import { PYTH_FEEDS, feedIdToSymbol, denormalizeSymbol } from './pyth-feeds';
+import type { LobbyStandingsGap } from './volatility-engine';
+import type { Position } from '@/types';
+import { calcPortfolioValue, calcReturnPct } from './pnl';
 
 const PYTH_BASE_URL = 'https://hermes.pyth.network/v2/updates/price/latest';
 const BATCH_SIZE = 50; // Pyth max per request
@@ -150,6 +153,10 @@ export function startPriceFeed() {
     await flushPricesToSupabase();
     // Auto-liquidation check for all active lobbies
     runLiquidationSweep();
+    // Auto-elimination check for traders with wiped portfolios
+    runEliminationSweep();
+    // Auto-volatility event trigger for algorithmic lobbies
+    runVolatilityAutoTrigger();
   }, 2000);
 
   // Check for stale prices every 10 seconds and fall back to Binance REST
@@ -195,6 +202,191 @@ async function runLiquidationSweep() {
     // Best-effort
   } finally {
     liquidationRunning = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Auto-elimination sweep (runs every price tick)
+// ---------------------------------------------------------------------------
+
+let eliminationRunning = false;
+
+async function runEliminationSweep() {
+  if (eliminationRunning) return; // skip if previous sweep still running
+  eliminationRunning = true;
+  try {
+    const { checkAndEliminate } = await import('./elimination');
+    const sb = getServerSupabase();
+    const { data: lobbies } = await sb
+      .from('rounds')
+      .select('lobby_id')
+      .in('status', ['active', 'frozen']);
+    if (!lobbies) return;
+    const lobbyIds = [...new Set(lobbies.map(r => r.lobby_id))];
+    await Promise.allSettled(lobbyIds.map(id => checkAndEliminate(id)));
+  } catch {
+    // Best-effort
+  } finally {
+    eliminationRunning = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Auto-volatility trigger sweep (runs every price tick)
+// ---------------------------------------------------------------------------
+
+let volatilityRunning = false;
+
+async function calculateStandingsGap(
+  lobbyId: string,
+  roundId: string,
+  startingBalance: number,
+  roundStartedAt: string | null,
+  roundDurationSeconds: number,
+): Promise<LobbyStandingsGap | null> {
+  const sb = getServerSupabase();
+
+  // Get non-eliminated traders for this lobby
+  const { data: traders } = await sb
+    .from('traders')
+    .select('id')
+    .eq('lobby_id', lobbyId)
+    .eq('is_eliminated', false);
+
+  if (!traders || traders.length < 2) return null;
+
+  // Get all positions for this round
+  const { data: positions } = await sb
+    .from('positions')
+    .select('*')
+    .eq('round_id', roundId);
+
+  const allPositions = (positions ?? []) as Position[];
+
+  // Build current prices from in-memory cache
+  const currentPrices = { ...latestPrices };
+
+  // Calculate return % for each trader
+  const returns: number[] = [];
+  for (const trader of traders) {
+    const traderPositions = allPositions.filter(p => p.trader_id === trader.id);
+    const open = traderPositions.filter(p => !p.closed_at);
+    const closed = traderPositions.filter(p => p.closed_at);
+    const value = calcPortfolioValue(startingBalance, open, closed, currentPrices);
+    returns.push(calcReturnPct(value, startingBalance));
+  }
+
+  returns.sort((a, b) => b - a); // descending
+
+  const topReturnPct = returns[0];
+  const bottomReturnPct = returns[returns.length - 1];
+  const gap = topReturnPct - bottomReturnPct;
+
+  // Calculate round elapsed percentage
+  let roundElapsedPct = 0.5; // default to midpoint if we can't determine
+  if (roundStartedAt && roundDurationSeconds > 0) {
+    const elapsedMs = Date.now() - new Date(roundStartedAt).getTime();
+    roundElapsedPct = Math.min(elapsedMs / (roundDurationSeconds * 1000), 1);
+  }
+
+  return {
+    lobby_id: lobbyId,
+    topReturnPct,
+    bottomReturnPct,
+    gap,
+    traderCount: traders.length,
+    roundElapsedPct,
+  };
+}
+
+async function runVolatilityAutoTrigger() {
+  if (volatilityRunning) return;
+  volatilityRunning = true;
+  try {
+    const { VolatilityEngine } = await import('./volatility-engine');
+    const sb = getServerSupabase();
+
+    // Get all active rounds
+    const { data: rounds } = await sb
+      .from('rounds')
+      .select('id, lobby_id, starting_balance, started_at, duration_seconds')
+      .eq('status', 'active');
+
+    if (!rounds || rounds.length === 0) return;
+
+    // Deduplicate by lobby_id (take first active round per lobby)
+    const lobbyRounds = new Map<string, typeof rounds[0]>();
+    for (const r of rounds) {
+      if (r.lobby_id && !lobbyRounds.has(r.lobby_id)) {
+        lobbyRounds.set(r.lobby_id, r);
+      }
+    }
+
+    // Get lobby configs for all active lobbies
+    const lobbyIds = [...lobbyRounds.keys()];
+    const { data: lobbies } = await sb
+      .from('lobbies')
+      .select('id, config')
+      .in('id', lobbyIds);
+
+    if (!lobbies) return;
+
+    for (const lobby of lobbies) {
+      const config = lobby.config as { volatility_engine?: string } | null;
+      if (!config || config.volatility_engine !== 'algorithmic') continue;
+
+      const round = lobbyRounds.get(lobby.id);
+      if (!round) continue;
+
+      // Get or create engine for this lobby
+      let engine = lobbyEngines.get(lobby.id);
+      if (!engine) {
+        engine = new VolatilityEngine(lobby.id, {
+          algoConfig: { enabled: true },
+        });
+        lobbyEngines.set(lobby.id, engine);
+      }
+
+      // Ensure algo mode is enabled on the engine
+      const algoConf = engine.getAlgoConfig();
+      if (!algoConf.enabled) {
+        engine.setAlgoConfig({ enabled: true });
+      }
+
+      // Calculate standings gap
+      const standings = await calculateStandingsGap(
+        lobby.id,
+        round.id,
+        round.starting_balance,
+        round.started_at,
+        round.duration_seconds,
+      );
+      if (!standings) continue;
+
+      // Let the engine decide whether to fire
+      const event = engine.evaluateAlgoTrigger(standings);
+      if (!event) continue;
+
+      // Persist fired event to volatility_events table
+      await sb.from('volatility_events').insert({
+        lobby_id: lobby.id,
+        type: event.type,
+        asset: event.asset,
+        magnitude: event.magnitude,
+        duration_seconds: event.duration_seconds,
+        headline: event.headline ?? null,
+        trigger_mode: 'algorithmic',
+        fired_at: new Date(event.triggered_at!).toISOString(),
+      });
+
+      console.log(
+        `[volatility] Auto-triggered "${event.type}" in lobby ${lobby.id} (gap=${standings.gap.toFixed(1)}%, elapsed=${(standings.roundElapsedPct * 100).toFixed(0)}%)`,
+      );
+    }
+  } catch {
+    // Best-effort — don't crash the price feed
+  } finally {
+    volatilityRunning = false;
   }
 }
 
