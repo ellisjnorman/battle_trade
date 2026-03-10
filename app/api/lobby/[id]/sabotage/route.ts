@@ -16,15 +16,17 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-/** Subscribe, send, then clean up after 500ms */
+/** Fire-and-forget broadcast — subscribe, send, clean up quickly */
 function broadcastEvent(channelName: string, event: string, payload: Record<string, unknown>) {
   const ch = supabase.channel(channelName);
   ch.subscribe(async (status) => {
     if (status === 'SUBSCRIBED') {
-      await ch.send({ type: 'broadcast', event, payload });
-      setTimeout(() => supabase.removeChannel(ch), 500);
+      ch.send({ type: 'broadcast', event, payload }).catch(() => {});
+      setTimeout(() => supabase.removeChannel(ch), 200);
     }
   });
+  // Failsafe cleanup
+  setTimeout(() => supabase.removeChannel(ch), 2000);
 }
 
 export async function POST(
@@ -67,7 +69,7 @@ export async function POST(
   // Verify target is in lobby and not eliminated
   const { data: target } = await supabase
     .from('traders')
-    .select('id, is_eliminated')
+    .select('id, name, is_eliminated')
     .eq('id', target_id)
     .eq('lobby_id', lobbyId)
     .single();
@@ -132,12 +134,14 @@ export async function POST(
       .select()
       .single();
 
-    // Broadcast to both parties
-    broadcastEvent(`t-${target_id}`, 'sabotage', { type: 'defense_result', result: 'shielded' });
-    broadcastEvent(`t-${attacker_id}`, 'sabotage', { type: 'defense_result', result: 'shielded', refund });
-    broadcastEvent(`lobby-${lobbyId}-sabotage`, 'sabotage', { type: 'sabotage_shielded', target_id });
+    const shieldBalance = await getCredits(attacker_id, lobbyId);
 
-    return NextResponse.json({ result: 'shielded', sabotage, refund }, { status: 200 });
+    // Broadcast to both parties + lobby
+    broadcastEvent(`t-${target_id}`, 'sabotage', { type: 'defense_result', result: 'shielded', attacker_name: attacker.name });
+    broadcastEvent(`t-${attacker_id}`, 'sabotage', { type: 'defense_result', result: 'shielded', refund });
+    broadcastEvent(`lobby-${lobbyId}-sabotage`, 'sabotage', { type: 'sabotage_shielded', target_id, target_name: target.name, attacker_name: attacker.name, weapon_type: type });
+
+    return NextResponse.json({ result: 'shielded', sabotage, refund, credits_remaining: shieldBalance }, { status: 200 });
   }
 
   // DEFLECT: redirect sabotage to attacker
@@ -190,12 +194,14 @@ export async function POST(
     };
     await applySabotageEffect(deflectedSabotage, lobbyId);
 
-    // Broadcast to both parties
-    broadcastEvent(`t-${target_id}`, 'sabotage', { type: 'defense_result', result: 'deflected' });
-    broadcastEvent(`t-${attacker_id}`, 'sabotage', { type: 'sabotage_received', sabotage: deflectedSabotage as unknown as Record<string, unknown> });
-    broadcastEvent(`lobby-${lobbyId}-sabotage`, 'sabotage', { type: 'sabotage_deflected', attacker_id, target_id });
+    const deflectBalance = await getCredits(attacker_id, lobbyId);
 
-    return NextResponse.json({ result: 'deflected', sabotage }, { status: 200 });
+    // Broadcast to both parties + lobby
+    broadcastEvent(`t-${target_id}`, 'sabotage', { type: 'defense_result', result: 'deflected', attacker_name: attacker.name });
+    broadcastEvent(`t-${attacker_id}`, 'sabotage', { type: 'sabotage_received', sabotage: deflectedSabotage as unknown as Record<string, unknown> });
+    broadcastEvent(`lobby-${lobbyId}-sabotage`, 'sabotage', { type: 'sabotage_deflected', attacker_id, target_id, target_name: target.name, attacker_name: attacker.name, weapon_type: type });
+
+    return NextResponse.json({ result: 'deflected', sabotage, credits_remaining: deflectBalance }, { status: 200 });
   }
 
   // NO DEFENSE: apply sabotage normally
@@ -239,8 +245,11 @@ export async function POST(
 
   await applySabotageEffect(sabotageRecord, lobbyId);
 
-  // Broadcast to target
-  broadcastEvent(`t-${target_id}`, 'sabotage', { type: 'sabotage_received', sabotage: sabotageRecord as unknown as Record<string, unknown> });
+  const remainingBalance = await getCredits(attacker_id, lobbyId);
 
-  return NextResponse.json({ result: 'success', sabotage: sabotageRecord }, { status: 201 });
+  // Broadcast to target and lobby
+  broadcastEvent(`t-${target_id}`, 'sabotage', { type: 'sabotage_received', sabotage: sabotageRecord as unknown as Record<string, unknown>, attacker_name: attacker.name });
+  broadcastEvent(`lobby-${lobbyId}-sabotage`, 'sabotage', { type: 'sabotage_received', sabotage: sabotageRecord as unknown as Record<string, unknown>, attacker_name: attacker.name, target_id, target_name: target.name, weapon_type: type });
+
+  return NextResponse.json({ result: 'success', sabotage: sabotageRecord, credits_remaining: remainingBalance }, { status: 201 });
 }

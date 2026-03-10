@@ -65,8 +65,8 @@ export class PaperOnlyExecutor implements TradeExecutor {
         return { success: false, position_id: '', error: 'LOCKED_OUT' };
       }
 
-      // Check sabotage: asset freeze
-      if (session?.frozen_asset && params.asset !== session.frozen_asset) {
+      // Check sabotage: asset freeze — block trading the frozen asset
+      if (session?.frozen_asset && params.asset === session.frozen_asset) {
         return { success: false, position_id: '', error: 'ASSET_FROZEN' };
       }
     }

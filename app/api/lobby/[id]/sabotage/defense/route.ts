@@ -68,18 +68,44 @@ export async function POST(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Broadcast to trader personal channel + lobby feed
+  // UNFREEZE: immediately clear lockout + asset freeze from session & expire active sabotages
+  if (type === 'unfreeze') {
+    await supabase
+      .from('sessions')
+      .update({ positions_locked: false, frozen_asset: null })
+      .eq('trader_id', trader_id)
+      .eq('lobby_id', lobbyId);
+
+    await supabase
+      .from('sabotages')
+      .update({ status: 'expired' })
+      .eq('target_id', trader_id)
+      .eq('lobby_id', lobbyId)
+      .eq('status', 'active')
+      .in('type', ['lockout', 'asset_freeze']);
+
+    // Mark the unfreeze defense as consumed (instant use)
+    await supabase
+      .from('defenses')
+      .update({ status: 'consumed' })
+      .eq('id', defense.id);
+  }
+
+  const remainingBalance = await getCredits(trader_id, lobbyId);
+
+  // Fire-and-forget broadcast to trader personal channel + lobby feed
   const bc = (name: string, event: string, payload: Record<string, unknown>) => {
     const ch = supabase.channel(name);
     ch.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
-        await ch.send({ type: 'broadcast', event, payload });
-        setTimeout(() => supabase.removeChannel(ch), 500);
+        ch.send({ type: 'broadcast', event, payload }).catch(() => {});
+        setTimeout(() => supabase.removeChannel(ch), 200);
       }
     });
+    setTimeout(() => supabase.removeChannel(ch), 2000);
   };
   bc(`t-${trader_id}`, 'sabotage', { type: 'defense_activated', defense_type: type });
-  bc(`lobby-${lobbyId}-sabotage`, 'sabotage', { type: 'defense_activated', trader_id, defense_type: type });
+  bc(`lobby-${lobbyId}-sabotage`, 'sabotage', { type: 'defense_activated', trader_id, trader_name: trader.name, defense_type: type });
 
-  return NextResponse.json({ result: 'success', defense }, { status: 201 });
+  return NextResponse.json({ result: 'success', defense, credits_remaining: remainingBalance }, { status: 201 });
 }

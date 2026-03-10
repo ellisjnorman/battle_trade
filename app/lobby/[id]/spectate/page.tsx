@@ -90,6 +90,8 @@ const WEAPONS = WEAPONS_LIST.map(w => ({
   cost: w.cost,
 } as const));
 
+const cheapestWeapon = Math.min(...WEAPONS.map(w => w.cost));
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -102,8 +104,12 @@ export default function SpectatePage() {
   const [tab, setTab] = useState<Tab>('watch');
   const [spectatorId, setSpectatorId] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [needsJoin, setNeedsJoin] = useState(false);
+  const [joinName, setJoinName] = useState('');
+  const [joining, setJoining] = useState(false);
   const addToast = useToastStore((s) => s.addToast);
   const [betStreak, setBetStreak] = useState(0);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   // Round
   const [round, setRound] = useState<RoundData | null>(null);
@@ -125,6 +131,7 @@ export default function SpectatePage() {
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
   const [attackOverlay, setAttackOverlay] = useState<{ weapon: string; target: string; cost: number; remaining: number } | null>(null);
   const [attackHits, setAttackHits] = useState<Record<string, number>>({});
+  const [confirmAttack, setConfirmAttack] = useState(false);
 
   // Predict
   const [outcomes, setOutcomes] = useState<MarketOutcome[]>([]);
@@ -132,9 +139,14 @@ export default function SpectatePage() {
   const [selectedOutcome, setSelectedOutcome] = useState<string | null>(null);
   const [betAmount, setBetAmount] = useState<number | null>(null);
   const [currentBet, setCurrentBet] = useState<BetState | null>(null);
+  const [confirmBet, setConfirmBet] = useState(false);
   const [eventAlert, setEventAlert] = useState<{ headline: string; expiresAt: number } | null>(null);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [purchaseLoading, setPurchaseLoading] = useState<string | null>(null);
+
+  // Reactions
+  const [floatingReactions, setFloatingReactions] = useState<Array<{ id: number; emoji: string; x: number }>>([]);
+  const reactionCounter = useRef(0);
 
   const handlePurchase = useCallback(async (pkg: CreditPackage, method: PaymentMethod) => {
     if (!spectatorId) return;
@@ -150,7 +162,38 @@ export default function SpectatePage() {
       if (data.url) window.open(data.url, '_blank');
     } catch { addToast('Purchase failed', 'error'); }
     finally { setPurchaseLoading(null); }
-  }, [spectatorId, lobbyId]);
+  }, [spectatorId, lobbyId, addToast]);
+
+  // ---------------------------------------------------------------------------
+  // Quick join (no registration form)
+  // ---------------------------------------------------------------------------
+
+  const handleQuickJoin = async () => {
+    setJoining(true);
+    try {
+      const res = await fetch(`/api/lobby/${lobbyId}/spectate-join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ display_name: joinName || undefined }),
+      });
+      const data = await res.json();
+      if (res.ok && data.trader_id) {
+        setSpectatorId(data.trader_id);
+        setCredits(data.credits ?? 500);
+        setNeedsJoin(false);
+        // Save to localStorage so they don't need to rejoin
+        localStorage.setItem(`bt-spectator-${lobbyId}`, JSON.stringify({ id: data.trader_id, code: data.code }));
+        // Show onboarding on first join
+        if (!localStorage.getItem('bt-onboarding-seen')) {
+          setShowOnboarding(true);
+          localStorage.setItem('bt-onboarding-seen', '1');
+        }
+      } else {
+        addToast(data.error || 'Join failed', 'error');
+      }
+    } catch { addToast('Network error', 'error'); }
+    finally { setJoining(false); }
+  };
 
   // ---------------------------------------------------------------------------
   // Initialize spectator
@@ -158,26 +201,44 @@ export default function SpectatePage() {
 
   useEffect(() => {
     const initSpectator = async () => {
-      if (!spectatorCode || !lobbyId) return;
-      // Look up trader by their unique code in this lobby
-      const { data } = await supabase
-        .from('traders')
-        .select('id')
-        .eq('lobby_id', lobbyId)
-        .eq('code', spectatorCode)
-        .single();
-      if (data) {
-        setSpectatorId(data.id);
-      } else {
-        // Fallback: try using code as a trader_id directly
+      // 1. Try code from URL
+      if (spectatorCode && lobbyId) {
+        const { data } = await supabase
+          .from('traders')
+          .select('id')
+          .eq('lobby_id', lobbyId)
+          .eq('code', spectatorCode)
+          .single();
+        if (data) { setSpectatorId(data.id); return; }
+        // Fallback: try as trader_id
         const { data: byId } = await supabase
           .from('traders')
           .select('id')
           .eq('lobby_id', lobbyId)
           .eq('id', spectatorCode)
           .single();
-        if (byId) setSpectatorId(byId.id);
+        if (byId) { setSpectatorId(byId.id); return; }
       }
+
+      // 2. Try localStorage (returning spectator)
+      if (lobbyId) {
+        try {
+          const saved = localStorage.getItem(`bt-spectator-${lobbyId}`);
+          if (saved) {
+            const { id } = JSON.parse(saved);
+            const { data } = await supabase
+              .from('traders')
+              .select('id')
+              .eq('id', id)
+              .eq('lobby_id', lobbyId)
+              .single();
+            if (data) { setSpectatorId(data.id); return; }
+          }
+        } catch { /* ignore */ }
+      }
+
+      // 3. No spectator found — show quick join
+      setNeedsJoin(true);
     };
     initSpectator();
   }, [lobbyId, spectatorCode]);
@@ -188,7 +249,6 @@ export default function SpectatePage() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      // Fetch active round directly from supabase
       const { data: rnds } = await supabase
         .from('rounds')
         .select('id, round_number, status, started_at, duration_seconds')
@@ -199,7 +259,6 @@ export default function SpectatePage() {
       const activeRound = rnds?.[0] ?? null;
       if (activeRound) setRound(activeRound as RoundData);
 
-      // Fetch leaderboard from public endpoint
       const roundId = activeRound?.id ?? round?.id;
       const url = roundId ? `/api/lobby/${lobbyId}/leaderboard?round_id=${roundId}` : `/api/lobby/${lobbyId}/leaderboard`;
       const res = await fetch(url);
@@ -219,9 +278,7 @@ export default function SpectatePage() {
           })));
         }
       }
-    } catch {
-      // silent
-    }
+    } catch { /* silent */ }
   }, [lobbyId]);
 
   const fetchCredits = useCallback(async () => {
@@ -230,9 +287,7 @@ export default function SpectatePage() {
       const res = await fetch(`/api/lobby/${lobbyId}/sabotage/credits?trader_id=${spectatorId}`);
       const data = await res.json();
       setCredits(data.balance ?? 0);
-    } catch {
-      // silent
-    }
+    } catch { /* silent */ }
   }, [lobbyId, spectatorId]);
 
   const fetchMarket = useCallback(async () => {
@@ -242,11 +297,9 @@ export default function SpectatePage() {
       if (data.market?.outcomes) {
         setOutcomes(data.market.outcomes);
         const vol = data.market.outcomes.reduce((s: number, o: MarketOutcome) => s + o.volume, 0);
-        setTotalBets(Math.round(vol / 50)); // approximate bet count
+        setTotalBets(Math.round(vol / 50));
       }
-    } catch {
-      // silent
-    }
+    } catch { /* silent */ }
   }, [lobbyId]);
 
   // ---------------------------------------------------------------------------
@@ -254,25 +307,72 @@ export default function SpectatePage() {
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
-    // Sabotage channel — generates feed items
+    // Sabotage channel — generates feed items (now with attacker names)
     const sabCh = supabase.channel(`lobby-${lobbyId}-sabotage`);
     sabCh.on('broadcast', { event: 'sabotage' }, ({ payload }) => {
       if (!payload) return;
       const id = `feed-${++feedIdCounter.current}`;
-      if (payload.type === 'sabotage_received' || payload.type === 'sabotage_shielded' || payload.type === 'sabotage_deflected') {
+      const pType = payload.type as string;
+
+      if (pType === 'sabotage_received' || pType === 'sabotage_shielded' || pType === 'sabotage_deflected') {
         const sab = payload.sabotage as Record<string, unknown> | undefined;
-        const targetName = traders.find((t) => t.trader_id === (sab?.target_id ?? payload.target_id))?.name ?? '???';
-        const weaponDef = WEAPONS.find((w) => w.type === sab?.type);
+        const attackerName = (payload.attacker_name as string) ?? 'SOMEONE';
+        const targetName = (payload.target_name as string) ?? traders.find((t) => t.trader_id === (sab?.target_id ?? payload.target_id))?.name ?? '???';
+        const weaponType = (payload.weapon_type as string) ?? (sab?.type as string);
+        const weaponDef = WEAPONS.find((w) => w.type === weaponType);
+        const resultSuffix = pType === 'sabotage_shielded' ? ' — SHIELDED!' : pType === 'sabotage_deflected' ? ' — DEFLECTED!' : '';
         setFeed((prev) => [{
           id,
           type: 'sabotage' as const,
-          title: `SOMEONE just ${weaponDef?.name ?? 'ATTACKED'} ${targetName}`,
-          subtitle: `${weaponDef?.cost ?? 0}CR SPENT`,
-          detail: payload.type === 'sabotage_shielded' ? 'SHIELDED!' : payload.type === 'sabotage_deflected' ? 'DEFLECTED!' : undefined,
-          color: '#F5A0D0',
-          icon: '⚡',
+          title: `${attackerName} ${weaponDef?.name ?? 'ATTACKED'} ${targetName}`,
+          subtitle: `${weaponDef?.icon ?? '⚡'} ${weaponDef?.cost ?? 0}CR${resultSuffix}`,
+          detail: undefined,
+          color: pType === 'sabotage_received' ? '#F5A0D0' : '#00BFFF',
+          icon: pType === 'sabotage_received' ? '⚡' : pType === 'sabotage_shielded' ? '🛡' : '🔄',
           timestamp: Date.now(),
         }, ...prev].slice(0, 30));
+        setAttackHits((h) => ({ ...h, [targetName]: (h[targetName] ?? 0) + 1 }));
+      }
+
+      // Defense activation events
+      if (pType === 'defense_activated') {
+        const traderName = (payload.trader_name as string) ?? traders.find((t) => t.trader_id === payload.trader_id)?.name ?? '???';
+        const defType = (payload.defense_type as string) ?? 'shield';
+        setFeed((prev) => [{
+          id,
+          type: 'sabotage' as const,
+          title: `${traderName} activated ${defType.replace(/_/g, ' ').toUpperCase()}`,
+          subtitle: 'Defense deployed!',
+          detail: undefined,
+          color: '#00BFFF',
+          icon: '🛡',
+          timestamp: Date.now(),
+        }, ...prev].slice(0, 30));
+      }
+
+      // Also handle sabotage_launched from applySabotageEffect (dedup via different event name)
+      if (pType === 'sabotage_launched') {
+        const attackerName = traders.find((t) => t.trader_id === payload.attacker_id)?.name ?? (payload.sponsor_name as string) ?? 'SOMEONE';
+        const targetName = traders.find((t) => t.trader_id === payload.target_id)?.name ?? '???';
+        const weaponType = payload.sabotage_type as string;
+        const weaponDef = WEAPONS.find((w) => w.type === weaponType);
+        // Only add if we haven't already added a sabotage_received for this (avoid duplicate)
+        // sabotage_launched comes from applySabotageEffect, sabotage_received from the route
+        // We'll skip this if we already got sabotage_received in the last second
+        setFeed((prev) => {
+          const recent = prev.find(f => f.timestamp > Date.now() - 2000 && f.title.includes(targetName) && f.title.includes(weaponDef?.name ?? ''));
+          if (recent) return prev; // skip duplicate
+          return [{
+            id,
+            type: 'sabotage' as const,
+            title: `${attackerName} ${weaponDef?.name ?? 'ATTACKED'} ${targetName}`,
+            subtitle: `${weaponDef?.icon ?? '⚡'} ${payload.cost ?? 0}CR`,
+            detail: undefined,
+            color: '#F5A0D0',
+            icon: weaponDef?.icon ?? '⚡',
+            timestamp: Date.now(),
+          }, ...prev].slice(0, 30);
+        });
       }
     }).subscribe();
 
@@ -318,10 +418,19 @@ export default function SpectatePage() {
       }, ...prev].slice(0, 30));
     }).subscribe();
 
+    // Market odds channel — live odds updates (FIX #7)
+    const mktCh = supabase.channel(`lobby-${lobbyId}-markets`);
+    mktCh.on('broadcast', { event: 'market' }, ({ payload }) => {
+      if (payload?.type === 'odds_update' && payload.outcomes) {
+        setOutcomes(payload.outcomes as MarketOutcome[]);
+      }
+    }).subscribe();
+
     return () => {
       supabase.removeChannel(sabCh);
       supabase.removeChannel(evCh);
       supabase.removeChannel(lobbyCh);
+      supabase.removeChannel(mktCh);
     };
   }, [lobbyId, traders]);
 
@@ -348,29 +457,22 @@ export default function SpectatePage() {
     for (const t of traders) {
       const old = prev.find((p) => p.trader_id === t.trader_id);
       if (!old) continue;
-
       const pnlDelta = t.balance - old.balance;
       if (Math.abs(pnlDelta) > 200) {
         const id = `feed-${++feedIdCounter.current}`;
         if (pnlDelta > 0) {
           setFeed((f) => [{
-            id,
-            type: 'big_trade' as const,
+            id, type: 'big_trade' as const,
             title: `${t.name} just made a move`,
             subtitle: `+$${Math.round(pnlDelta).toLocaleString()} · ${t.open_positions.length > 0 ? `${t.open_positions[0].direction.toUpperCase()} · ${t.open_positions[0].leverage}X` : 'CLOSED'}`,
-            color: '#00FF88',
-            icon: '🔥',
-            timestamp: Date.now(),
+            color: '#00FF88', icon: '🔥', timestamp: Date.now(),
           }, ...f].slice(0, 30));
         } else {
           setFeed((f) => [{
-            id,
-            type: 'wrecked' as const,
+            id, type: 'wrecked' as const,
             title: `${t.name} down -$${Math.abs(Math.round(pnlDelta)).toLocaleString()} this minute`,
             subtitle: t.open_positions.length > 0 ? 'Still holding...' : 'Liquidated.',
-            color: '#FF3333',
-            icon: '💀',
-            timestamp: Date.now(),
+            color: '#FF3333', icon: '💀', timestamp: Date.now(),
           }, ...f].slice(0, 30));
         }
       }
@@ -417,22 +519,12 @@ export default function SpectatePage() {
     return () => clearTimeout(timer);
   }, [attackOverlay]);
 
-  // Sabotage hit tracking
+  // Floating reactions auto-dismiss
   useEffect(() => {
-    const hits: Record<string, number> = {};
-    // Count from feed
-    for (const item of feed) {
-      if (item.type === 'sabotage') {
-        // extract target from title
-        const match = item.title.match(/just \w+ (.+)/);
-        if (match) {
-          const name = match[1];
-          hits[name] = (hits[name] ?? 0) + 1;
-        }
-      }
-    }
-    setAttackHits(hits);
-  }, [feed]);
+    if (floatingReactions.length === 0) return;
+    const timer = setTimeout(() => setFloatingReactions((r) => r.slice(1)), 2500);
+    return () => clearTimeout(timer);
+  }, [floatingReactions]);
 
   // ---------------------------------------------------------------------------
   // Actions
@@ -442,6 +534,13 @@ export default function SpectatePage() {
     if (!selectedTarget || !selectedWeapon || !spectatorId) return;
     const weapon = WEAPONS.find((w) => w.type === selectedWeapon);
     if (!weapon || credits < weapon.cost) return;
+
+    // Confirmation gate (FIX #6)
+    if (!confirmAttack) {
+      setConfirmAttack(true);
+      return;
+    }
+    setConfirmAttack(false);
 
     try {
       const res = await fetch(`/api/lobby/${lobbyId}/sabotage`, {
@@ -464,12 +563,10 @@ export default function SpectatePage() {
           remaining: credits - weapon.cost,
         });
         setCredits((c) => c - weapon.cost);
-        setCooldownEnd(Date.now() + 180_000);
-        setSelectedTarget(null);
+        setCooldownEnd(Date.now() + 45_000); // 45s cooldown
         setSelectedWeapon(null);
         fetchCredits();
         addToast(`${weapon.icon} ${weapon.name} launched at ${targetName}!`, 'attack', weapon.icon);
-        setAttackHits((h) => ({ ...h, [selectedTarget!]: (h[selectedTarget!] ?? 0) + 1 }));
       } else {
         addToast(data?.error || 'Attack failed', 'error');
       }
@@ -480,6 +577,13 @@ export default function SpectatePage() {
 
   const handlePlaceBet = async () => {
     if (!selectedOutcome || !betAmount || !spectatorId) return;
+
+    // Confirmation gate (FIX #6)
+    if (!confirmBet) {
+      setConfirmBet(true);
+      return;
+    }
+    setConfirmBet(false);
 
     try {
       const res = await fetch(`/api/lobby/${lobbyId}/markets/bet`, {
@@ -514,6 +618,12 @@ export default function SpectatePage() {
     }
   };
 
+  const sendReaction = (emoji: string) => {
+    const id = ++reactionCounter.current;
+    const x = 20 + Math.random() * 60;
+    setFloatingReactions((prev) => [...prev, { id, emoji, x }]);
+  };
+
   // ---------------------------------------------------------------------------
   // Derived
   // ---------------------------------------------------------------------------
@@ -537,23 +647,68 @@ export default function SpectatePage() {
     return (
       <div style={{ background: '#0A0A0A', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
         <div style={{ width: 8, height: 8, background: '#F5A0D0', animation: 'pulse 1s infinite' }} />
-        <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, letterSpacing: '0.05em', color: '#999' }}>LOADING SPECTATOR VIEW...</span>
+        <span style={{ fontFamily: bebas, fontSize: 24, letterSpacing: '0.05em', color: '#999' }}>LOADING...</span>
         <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }`}</style>
       </div>
     );
   }
 
+  // =========================================================================
+  // QUICK JOIN SCREEN (no code needed) — FIX #1 + #2
+  // =========================================================================
+  if (needsJoin) {
+    return (
+      <>
+        <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }`}</style>
+        <div style={{ background: '#0A0A0A', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, gap: 24, maxWidth: 375, margin: '0 auto' }}>
+          <div style={{ fontSize: 48 }}>⚡</div>
+          <div style={{ fontFamily: bebas, fontSize: 40, color: '#FFF', textAlign: 'center', lineHeight: 1 }}>WATCH THE BATTLE</div>
+          <div style={{ fontFamily: sans, fontSize: 14, color: '#999', textAlign: 'center', lineHeight: 1.5 }}>
+            Attack traders, bet on winners, earn credits. No signup needed.
+          </div>
+
+          <input
+            value={joinName}
+            onChange={(e) => setJoinName(e.target.value)}
+            placeholder="Your name (optional)"
+            maxLength={32}
+            style={{
+              width: '100%', padding: '14px 16px', background: '#111', border: '1px solid #333', color: '#FFF',
+              fontFamily: sans, fontSize: 16, outline: 'none',
+            }}
+            onFocus={(e) => { e.currentTarget.style.borderColor = '#F5A0D0'; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = '#333'; }}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleQuickJoin(); }}
+          />
+
+          <button
+            onClick={handleQuickJoin}
+            disabled={joining}
+            style={{
+              width: '100%', height: 64, background: '#F5A0D0', color: '#0A0A0A', border: 'none',
+              fontFamily: bebas, fontSize: 28, letterSpacing: '0.08em', cursor: joining ? 'wait' : 'pointer',
+            }}
+          >
+            {joining ? 'JOINING...' : '⚡ JOIN AS SPECTATOR'}
+          </button>
+
+          <div style={{ fontFamily: mono, fontSize: 11, color: '#555', textAlign: 'center' }}>
+            You&apos;ll get 500CR free · Enough for {Math.floor(500 / cheapestWeapon)} attacks
+          </div>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
-      {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-      <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
         @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
         @keyframes slideUp { from{transform:translateY(100%);opacity:0} to{transform:translateY(0);opacity:1} }
         @keyframes bounceIn { 0%{transform:scale(0.3);opacity:0} 50%{transform:scale(1.05)} 70%{transform:scale(0.95)} 100%{transform:scale(1);opacity:1} }
-        @keyframes urgentPulse { 0%,100%{border-color:#FF3333;box-shadow:0 0 8px rgba(255,51,51,0.3)} 50%{border-color:#FF6666;box-shadow:0 0 16px rgba(255,51,51,0.5)} }
+        @keyframes floatUp { 0%{opacity:1;transform:translateY(0) scale(1)} 100%{opacity:0;transform:translateY(-120px) scale(1.4)} }
         .shake { animation: shake 0.3s ease-in-out; }
         .pulse { animation: pulse 1s ease-in-out infinite; }
         .slideUp { animation: slideUp 0.3s ease-out; }
@@ -561,6 +716,46 @@ export default function SpectatePage() {
       `}</style>
 
       <div style={{ background: '#0A0A0A', minHeight: '100vh', width: '100%', maxWidth: 375, margin: '0 auto', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
+
+        {/* ============================================================= */}
+        {/* FLOATING REACTIONS                                            */}
+        {/* ============================================================= */}
+        {floatingReactions.map((r) => (
+          <div key={r.id} style={{
+            position: 'fixed', bottom: 80, left: `${r.x}%`, fontSize: 32, zIndex: 60, pointerEvents: 'none',
+            animation: 'floatUp 2s ease-out forwards',
+          }}>{r.emoji}</div>
+        ))}
+
+        {/* ============================================================= */}
+        {/* ONBOARDING OVERLAY — FIX #8                                   */}
+        {/* ============================================================= */}
+        {showOnboarding && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, maxWidth: 375, margin: '0 auto' }}>
+            <div style={{ fontFamily: bebas, fontSize: 36, color: '#FFF', textAlign: 'center', marginBottom: 24 }}>HOW IT WORKS</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
+              {[
+                { icon: '👁', tab: 'WATCH', desc: 'See live trades, attacks, and market events in real-time' },
+                { icon: '⚡', tab: 'ATTACK', desc: 'Spend credits to sabotage traders — lock them out, force trades, squeeze their margins' },
+                { icon: '🎲', tab: 'PREDICT', desc: 'Bet on who wins the round — earn credits if you call it right' },
+              ].map((item) => (
+                <div key={item.tab} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                  <div style={{ fontSize: 28, width: 36, textAlign: 'center', flexShrink: 0 }}>{item.icon}</div>
+                  <div>
+                    <div style={{ fontFamily: bebas, fontSize: 18, color: '#F5A0D0' }}>{item.tab}</div>
+                    <div style={{ fontFamily: sans, fontSize: 13, color: '#999', lineHeight: 1.4 }}>{item.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowOnboarding(false)}
+              style={{ marginTop: 32, width: '100%', height: 56, background: '#F5A0D0', color: '#0A0A0A', border: 'none', fontFamily: bebas, fontSize: 24, letterSpacing: '0.08em', cursor: 'pointer' }}
+            >
+              GOT IT — LET&apos;S GO
+            </button>
+          </div>
+        )}
 
         {/* ============================================================= */}
         {/* ATTACK OVERLAY                                                */}
@@ -590,421 +785,387 @@ export default function SpectatePage() {
         {/* ============================================================= */}
         <div style={{ padding: '12px 16px', borderBottom: '1px solid #1A1A1A', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, background: isLowTime ? 'rgba(255,51,51,0.05)' : '#0A0A0A' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <img src="/brand/logo-main.png" alt="Battle Trade" style={{ height: 20, width: 'auto' }} />
             <div style={{ fontFamily: bebas, fontSize: 20, color: '#FFF', letterSpacing: '0.05em' }}>
-              ROUND {round?.round_number ?? '-'} · <span style={{ color: isLowTime ? '#FF3333' : '#FFF' }}>{round?.status === 'active' ? remainingStr : round?.status?.toUpperCase() ?? '--'}</span>
+              ROUND {round?.round_number ?? '-'} · <span style={{ color: isLowTime ? '#FF3333' : '#FFF' }}>{round?.status === 'active' ? remainingStr : round?.status?.toUpperCase() ?? 'WAITING'}</span>
             </div>
           </div>
-          <div style={{ fontFamily: bebas, fontSize: 16, color: '#F5A0D0' }}>LEVERAGE {currentLeverage}X</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontFamily: mono, fontSize: 14, color: '#F5A0D0', fontWeight: 700 }}>{credits}CR</span>
+            {/* Reaction buttons */}
+            {['🔥', '💀', '😤', '🚀'].map((emoji) => (
+              <button key={emoji} onClick={() => sendReaction(emoji)} style={{ fontSize: 16, background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>{emoji}</button>
+            ))}
+          </div>
         </div>
 
         {/* ============================================================= */}
-        {/* TAB CONTENT                                                   */}
+        {/* TAB CONTENT — uses display:none to preserve state (FIX #9)   */}
         {/* ============================================================= */}
         <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 60 }}>
 
           {/* =========================================================== */}
           {/* WATCH TAB                                                    */}
           {/* =========================================================== */}
-          {tab === 'watch' && (
+          <div style={{ display: tab === 'watch' ? 'flex' : 'none', flexDirection: 'column' }}>
+            {/* Feed */}
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {/* Feed */}
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {feed.length === 0 && (
-                  <div style={{ padding: 32, textAlign: 'center' }}>
-                    <div style={{ fontFamily: bebas, fontSize: 24, color: '#666' }}>WAITING FOR ACTION...</div>
-                    <div style={{ fontFamily: sans, fontSize: 12, color: '#666', marginTop: 8 }}>Events will appear here in real-time</div>
+              {feed.length === 0 && (
+                <div style={{ padding: 32, textAlign: 'center' }}>
+                  <div style={{ fontFamily: bebas, fontSize: 24, color: '#666' }}>WAITING FOR ACTION...</div>
+                  <div style={{ fontFamily: sans, fontSize: 12, color: '#666', marginTop: 8 }}>
+                    {round?.status === 'active' ? 'Trades, attacks, and events will appear here' : 'The round hasn\'t started yet — hang tight'}
                   </div>
-                )}
-                {feed.map((item) => (
-                  <div
-                    key={item.id}
+                </div>
+              )}
+              {feed.map((item) => (
+                <div
+                  key={item.id}
+                  style={{
+                    padding: '12px 16px',
+                    borderLeft: `3px solid ${item.color}`,
+                    background: item.type === 'market_event' ? 'rgba(255,51,51,0.08)' : item.type === 'big_trade' ? 'rgba(0,255,136,0.06)' : item.type === 'wrecked' ? 'rgba(255,51,51,0.06)' : item.type === 'sabotage' ? 'rgba(245,160,208,0.06)' : 'transparent',
+                    borderBottom: '1px solid #111',
+                  }}
+                >
+                  <div style={{ fontFamily: bebas, fontSize: item.type === 'market_event' ? 20 : 18, color: item.type === 'market_event' ? '#FF3333' : '#FFF', letterSpacing: '0.03em' }}>
+                    {item.icon} {item.title}
+                  </div>
+                  <div style={{
+                    fontFamily: item.type === 'wrecked' ? sans : mono,
+                    fontSize: item.type === 'sabotage' ? 14 : 12,
+                    color: item.type === 'sabotage' ? '#F5A0D0' : item.color,
+                    marginTop: 2,
+                    fontStyle: item.type === 'wrecked' ? 'italic' : 'normal',
+                  }}>
+                    {item.subtitle}
+                  </div>
+                  {item.detail && (
+                    <div style={{ fontFamily: sans, fontSize: 12, color: '#888', marginTop: 2 }}>{item.detail}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Bottom standings strip */}
+            <div style={{ padding: '12px 0', borderTop: '1px solid #1A1A1A', position: 'sticky', bottom: 60, background: '#0A0A0A' }}>
+              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '0 16px' }}>
+                {activeTraders.map((t) => (
+                  <button
+                    key={t.trader_id}
+                    onClick={() => { setSelectedTarget(t.trader_id); setTab('attack'); }}
                     style={{
-                      padding: '12px 16px',
-                      borderLeft: `3px solid ${item.color}`,
-                      background: item.type === 'market_event'
-                        ? 'rgba(255,51,51,0.08)'
-                        : item.type === 'big_trade'
-                          ? 'rgba(0,255,136,0.06)'
-                          : item.type === 'wrecked'
-                            ? 'rgba(255,51,51,0.06)'
-                            : item.type === 'sabotage'
-                              ? 'rgba(245,160,208,0.06)'
-                              : 'transparent',
-                      borderBottom: '1px solid #111',
+                      flexShrink: 0, padding: '6px 12px',
+                      background: currentBet?.team_name === t.name ? 'rgba(245,160,208,0.15)' : '#111',
+                      border: currentBet?.team_name === t.name ? '1px solid #F5A0D0' : '1px solid #1A1A1A',
+                      display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer',
                     }}
                   >
-                    <div style={{ fontFamily: bebas, fontSize: item.type === 'market_event' ? 20 : 18, color: item.type === 'market_event' ? '#FF3333' : '#FFF', letterSpacing: '0.03em' }}>
-                      {item.icon} {item.title}
-                    </div>
-                    <div style={{
-                      fontFamily: item.type === 'wrecked' ? sans : mono,
-                      fontSize: item.type === 'sabotage' ? 14 : 12,
-                      color: item.type === 'sabotage' ? '#F5A0D0' : item.color,
-                      marginTop: 2,
-                      fontStyle: item.type === 'wrecked' ? 'italic' : 'normal',
-                    }}>
-                      {item.subtitle}
-                    </div>
-                    {item.detail && (
-                      <div style={{ fontFamily: sans, fontSize: 12, color: '#888', marginTop: 2 }}>{item.detail}</div>
-                    )}
-                  </div>
+                    <span style={{ fontFamily: mono, fontSize: 10, color: '#666' }}>#{t.rank}</span>
+                    <span style={{ fontFamily: bebas, fontSize: 13, color: '#FFF', letterSpacing: '0.03em' }}>{t.name}</span>
+                    <span style={{ fontFamily: mono, fontSize: 11, color: t.return_pct >= 0 ? '#00FF88' : '#FF3333' }}>
+                      {t.return_pct >= 0 ? '+' : ''}{t.return_pct.toFixed(1)}%
+                    </span>
+                  </button>
                 ))}
               </div>
-
-              {/* Bottom standings strip */}
-              <div style={{ padding: '12px 0', borderTop: '1px solid #1A1A1A', position: 'sticky', bottom: 60, background: '#0A0A0A' }}>
-                <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '0 16px' }}>
-                  {activeTraders.map((t) => (
-                    <button
-                      key={t.trader_id}
-                      onClick={() => { setSelectedTarget(t.trader_id); setTab('attack'); }}
-                      style={{
-                        flexShrink: 0,
-                        padding: '6px 12px',
-                        background: currentBet?.team_name === t.name ? 'rgba(245,160,208,0.15)' : '#111',
-                        border: currentBet?.team_name === t.name ? '1px solid #F5A0D0' : '1px solid #1A1A1A',
-                        display: 'flex',
-                        gap: 6,
-                        alignItems: 'center',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <span style={{ fontFamily: mono, fontSize: 10, color: '#666' }}>#{t.rank}</span>
-                      <span style={{ fontFamily: bebas, fontSize: 13, color: '#FFF', letterSpacing: '0.03em' }}>{t.name}</span>
-                      <span style={{ fontFamily: mono, fontSize: 11, color: t.return_pct >= 0 ? '#00FF88' : '#FF3333' }}>
-                        {t.return_pct >= 0 ? '+' : ''}{t.return_pct.toFixed(1)}%
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
-          )}
+          </div>
 
           {/* =========================================================== */}
           {/* ATTACK TAB                                                   */}
           {/* =========================================================== */}
-          {tab === 'attack' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-              {/* Credits */}
-              <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid #1A1A1A' }}>
-                <div style={{ fontFamily: sans, fontSize: 9, color: '#999', textTransform: 'uppercase', letterSpacing: '0.1em' }}>YOUR CREDITS</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ fontFamily: bebas, fontSize: 48, color: '#FFF', lineHeight: 1, marginTop: 4 }}>{credits}CR</div>
-                  <button onClick={() => setShowPurchaseModal(true)} style={{ fontFamily: bebas, fontSize: 14, color: '#0A0A0A', background: '#F5A0D0', border: 'none', padding: '6px 14px', cursor: 'pointer', letterSpacing: '0.08em', marginTop: 4 }}>BUY MORE</button>
+          <div style={{ display: tab === 'attack' ? 'flex' : 'none', flexDirection: 'column', gap: 0 }}>
+            {/* Credits with explanation — FIX #3 */}
+            <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid #1A1A1A' }}>
+              <div style={{ fontFamily: sans, fontSize: 9, color: '#999', textTransform: 'uppercase', letterSpacing: '0.1em' }}>YOUR CREDITS</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ fontFamily: bebas, fontSize: 48, color: '#FFF', lineHeight: 1, marginTop: 4 }}>{credits}CR</div>
+                <button onClick={() => setShowPurchaseModal(true)} style={{ fontFamily: bebas, fontSize: 14, color: '#0A0A0A', background: '#F5A0D0', border: 'none', padding: '6px 14px', cursor: 'pointer', letterSpacing: '0.08em', marginTop: 4 }}>BUY MORE</button>
+              </div>
+              <div style={{ fontFamily: mono, fontSize: 10, color: '#555', marginTop: 6 }}>
+                {credits >= cheapestWeapon ? `${Math.floor(credits / cheapestWeapon)} attacks remaining · Cheapest: ${cheapestWeapon}CR` : 'Not enough for an attack — buy more credits'}
+              </div>
+            </div>
+
+            {/* Cooldown */}
+            {cooldownEnd && cooldownRemaining > 0 && (
+              <div style={{ padding: '10px 16px', background: 'rgba(255,51,51,0.08)', borderBottom: '1px solid #1A1A1A' }}>
+                <div style={{ fontFamily: bebas, fontSize: 16, color: '#FF3333' }}>
+                  ⏳ COOLDOWN · NEXT ATTACK IN {cooldownRemaining}s
                 </div>
               </div>
+            )}
 
-              {/* Cooldown */}
-              {cooldownEnd && cooldownRemaining > 0 && (
-                <div style={{ padding: '10px 16px', background: 'rgba(255,51,51,0.08)', borderBottom: '1px solid #1A1A1A' }}>
-                  <div style={{ fontFamily: bebas, fontSize: 16, color: '#FF3333' }}>
-                    ⏳ COOLDOWN · NEXT ATTACK IN {Math.floor(cooldownRemaining / 60)}:{(cooldownRemaining % 60).toString().padStart(2, '0')}
-                  </div>
+            {!selectedTarget ? (
+              <>
+                <div style={{ padding: '12px 16px 8px' }}>
+                  <div style={{ fontFamily: bebas, fontSize: 16, color: '#888', letterSpacing: '0.05em' }}>CHOOSE YOUR TARGET</div>
                 </div>
-              )}
 
-              {!selectedTarget ? (
-                <>
-                  {/* Target selection */}
-                  <div style={{ padding: '12px 16px 8px' }}>
-                    <div style={{ fontFamily: bebas, fontSize: 16, color: '#888', letterSpacing: '0.05em' }}>CHOOSE YOUR TARGET</div>
+                {activeTraders.length === 0 && (
+                  <div style={{ padding: 32, textAlign: 'center' }}>
+                    <div style={{ fontFamily: bebas, fontSize: 24, color: '#666' }}>NO TARGETS AVAILABLE</div>
+                    <div style={{ fontFamily: sans, fontSize: 12, color: '#666', marginTop: 8 }}>Waiting for traders to join the round</div>
                   </div>
-
-                  {activeTraders.length === 0 && (
-                    <div style={{ padding: 32, textAlign: 'center' }}>
-                      <div style={{ fontFamily: bebas, fontSize: 24, color: '#666' }}>NO TARGETS AVAILABLE</div>
-                      <div style={{ fontFamily: sans, fontSize: 12, color: '#666', marginTop: 8 }}>Waiting for traders to join the round</div>
-                    </div>
-                  )}
-                  {activeTraders.map((t) => {
-                    const hits = attackHits[t.name] ?? 0;
-                    const chaosWidth = Math.min(100, hits * 15);
-                    return (
-                      <button
-                        key={t.trader_id}
-                        onClick={() => setSelectedTarget(t.trader_id)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          padding: '10px 16px',
-                          background: 'transparent',
-                          border: 'none',
-                          borderBottom: '1px solid #111',
-                          cursor: 'pointer',
-                          width: '100%',
-                          textAlign: 'left',
-                        }}
-                      >
-                        <span style={{ fontFamily: mono, fontSize: 12, color: '#666', width: 24 }}>#{t.rank}</span>
-                        <div style={{ width: 32, height: 32, background: '#1A1A1A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: bebas, fontSize: 14, color: '#999', flexShrink: 0 }}>
-                          {t.name.charAt(0)}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontFamily: bebas, fontSize: 16, color: '#FFF', letterSpacing: '0.03em' }}>{t.name}</div>
+                )}
+                {activeTraders.map((t) => {
+                  const hits = attackHits[t.name] ?? 0;
+                  const chaosWidth = Math.min(100, hits * 15);
+                  return (
+                    <button
+                      key={t.trader_id}
+                      onClick={() => setSelectedTarget(t.trader_id)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px',
+                        background: 'transparent', border: 'none', borderBottom: '1px solid #111',
+                        cursor: 'pointer', width: '100%', textAlign: 'left',
+                      }}
+                    >
+                      <span style={{ fontFamily: mono, fontSize: 12, color: '#666', width: 24 }}>#{t.rank}</span>
+                      <div style={{ width: 32, height: 32, background: '#1A1A1A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: bebas, fontSize: 14, color: '#999', flexShrink: 0 }}>
+                        {t.name.charAt(0)}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: bebas, fontSize: 16, color: '#FFF', letterSpacing: '0.03em' }}>{t.name}</div>
+                        {hits > 0 && (
                           <div style={{ height: 3, background: '#1A1A1A', marginTop: 3 }}>
                             <div style={{ height: 3, background: '#FF3333', width: `${chaosWidth}%`, transition: 'width 0.3s' }} />
                           </div>
-                        </div>
-                        <span style={{ fontFamily: mono, fontSize: 14, color: t.return_pct >= 0 ? '#00FF88' : '#FF3333', fontWeight: 700 }}>
-                          {t.return_pct >= 0 ? '+' : ''}{t.return_pct.toFixed(1)}%
-                        </span>
-                      </button>
-                    );
-                  })}
-                </>
-              ) : (
-                <div className="slideUp" style={{ display: 'flex', flexDirection: 'column' }}>
-                  {/* Weapons panel */}
-                  <div style={{ padding: '12px 16px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontFamily: bebas, fontSize: 20, color: '#FFF', letterSpacing: '0.03em' }}>
-                      ATTACK {traders.find((t) => t.trader_id === selectedTarget)?.name ?? '???'}?
-                    </div>
-                    <button onClick={() => { setSelectedTarget(null); setSelectedWeapon(null); }} style={{ fontFamily: sans, fontSize: 10, color: '#999', background: 'transparent', border: 'none', cursor: 'pointer' }}>← BACK</button>
+                        )}
+                      </div>
+                      <span style={{ fontFamily: mono, fontSize: 14, color: t.return_pct >= 0 ? '#00FF88' : '#FF3333', fontWeight: 700 }}>
+                        {t.return_pct >= 0 ? '+' : ''}{t.return_pct.toFixed(1)}%
+                      </span>
+                    </button>
+                  );
+                })}
+              </>
+            ) : (
+              <div className="slideUp" style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ padding: '12px 16px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontFamily: bebas, fontSize: 20, color: '#FFF', letterSpacing: '0.03em' }}>
+                    ATTACK {traders.find((t) => t.trader_id === selectedTarget)?.name ?? '???'}
                   </div>
-
-                  {WEAPONS.map((w) => {
-                    const canAfford = credits >= w.cost;
-                    const isSelected = selectedWeapon === w.type;
-                    return (
-                      <button
-                        key={w.type}
-                        onClick={() => canAfford && setSelectedWeapon(isSelected ? null : w.type)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          height: 56,
-                          padding: '0 16px',
-                          background: isSelected ? 'rgba(245,160,208,0.05)' : 'transparent',
-                          border: 'none',
-                          borderBottom: isSelected ? '2px solid #F5A0D0' : '1px solid #111',
-                          cursor: canAfford ? 'pointer' : 'not-allowed',
-                          opacity: canAfford ? 1 : 0.4,
-                          width: '100%',
-                          textAlign: 'left',
-                        }}
-                      >
-                        <span style={{ fontSize: 20, width: 32 }}>{w.icon}</span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <span style={{ fontFamily: bebas, fontSize: 16, color: '#FFF', letterSpacing: '0.03em' }}>{w.name}</span>
-                          <span style={{ fontFamily: sans, fontSize: 10, color: '#999', marginLeft: 8 }}>{w.desc}</span>
-                        </div>
-                        <span style={{ fontFamily: bebas, fontSize: 18, color: canAfford ? '#F5A0D0' : '#FF3333' }}>{w.cost}CR</span>
-                      </button>
-                    );
-                  })}
-
-                  {selectedWeapon && (
-                    <div style={{ padding: 16 }}>
-                      <button
-                        onClick={handleAttack}
-                        disabled={!!(cooldownEnd && cooldownRemaining > 0)}
-                        className="shake"
-                        style={{
-                          width: '100%',
-                          height: 72,
-                          background: (cooldownEnd && cooldownRemaining > 0) ? '#333' : '#F5A0D0',
-                          color: '#0A0A0A',
-                          border: 'none',
-                          fontFamily: bebas,
-                          fontSize: 28,
-                          letterSpacing: '0.08em',
-                          cursor: (cooldownEnd && cooldownRemaining > 0) ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        ⚡ LAUNCH ATTACK
-                      </button>
-                    </div>
-                  )}
+                  <button onClick={() => { setSelectedTarget(null); setSelectedWeapon(null); setConfirmAttack(false); }} style={{ fontFamily: sans, fontSize: 10, color: '#999', background: 'transparent', border: 'none', cursor: 'pointer' }}>← BACK</button>
                 </div>
-              )}
-            </div>
-          )}
+
+                {WEAPONS.map((w) => {
+                  const canAfford = credits >= w.cost;
+                  const isSelected = selectedWeapon === w.type;
+                  return (
+                    <button
+                      key={w.type}
+                      onClick={() => { canAfford && setSelectedWeapon(isSelected ? null : w.type); setConfirmAttack(false); }}
+                      style={{
+                        display: 'flex', alignItems: 'center', height: 56, padding: '0 16px',
+                        background: isSelected ? 'rgba(245,160,208,0.05)' : 'transparent',
+                        border: 'none', borderBottom: isSelected ? '2px solid #F5A0D0' : '1px solid #111',
+                        cursor: canAfford ? 'pointer' : 'not-allowed', opacity: canAfford ? 1 : 0.4,
+                        width: '100%', textAlign: 'left',
+                      }}
+                    >
+                      <span style={{ fontSize: 20, width: 32 }}>{w.icon}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontFamily: bebas, fontSize: 16, color: '#FFF', letterSpacing: '0.03em' }}>{w.name}</span>
+                        <span style={{ fontFamily: sans, fontSize: 10, color: '#999', marginLeft: 8 }}>{w.desc}</span>
+                      </div>
+                      <span style={{ fontFamily: bebas, fontSize: 18, color: canAfford ? '#F5A0D0' : '#FF3333' }}>{w.cost}CR</span>
+                    </button>
+                  );
+                })}
+
+                {/* Launch button with confirmation — FIX #6 */}
+                {selectedWeapon && (
+                  <div style={{ padding: 16 }}>
+                    {confirmAttack && (
+                      <div style={{ fontFamily: mono, fontSize: 12, color: '#999', textAlign: 'center', marginBottom: 8 }}>
+                        Spend {WEAPONS.find(w => w.type === selectedWeapon)?.cost}CR on {WEAPONS.find(w => w.type === selectedWeapon)?.name}? You&apos;ll have {credits - (WEAPONS.find(w => w.type === selectedWeapon)?.cost ?? 0)}CR left.
+                      </div>
+                    )}
+                    <button
+                      onClick={handleAttack}
+                      disabled={!!(cooldownEnd && cooldownRemaining > 0)}
+                      className={confirmAttack ? '' : 'shake'}
+                      style={{
+                        width: '100%', height: 64,
+                        background: (cooldownEnd && cooldownRemaining > 0) ? '#333' : confirmAttack ? '#FF3333' : '#F5A0D0',
+                        color: confirmAttack ? '#FFF' : '#0A0A0A',
+                        border: 'none', fontFamily: bebas, fontSize: 24, letterSpacing: '0.08em',
+                        cursor: (cooldownEnd && cooldownRemaining > 0) ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {confirmAttack ? '⚡ CONFIRM ATTACK' : '⚡ LAUNCH ATTACK'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* =========================================================== */}
           {/* PREDICT TAB                                                  */}
           {/* =========================================================== */}
-          {tab === 'predict' && (
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {/* Header */}
-              <div style={{ padding: '16px 16px 12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ fontFamily: bebas, fontSize: 28, color: '#FFF', letterSpacing: '0.03em' }}>WHO WINS ROUND {round?.round_number ?? '-'}?</div>
-                  {isLowTime && !currentBet?.locked && (
-                    <div style={{ fontFamily: mono, fontSize: 14, color: '#FF3333', animation: 'pulse 1s infinite', fontWeight: 700 }}>
-                      {remainingStr}
-                    </div>
-                  )}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
-                  <span style={{ fontFamily: mono, fontSize: 12, color: '#999' }}>{totalBets} BETS PLACED</span>
-                  {betStreak > 0 && <span style={{ fontFamily: bebas, fontSize: 12, color: '#F5A0D0' }}>🔥 {betStreak} STREAK</span>}
+          <div style={{ display: tab === 'predict' ? 'flex' : 'none', flexDirection: 'column' }}>
+            {/* Header */}
+            <div style={{ padding: '16px 16px 12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ fontFamily: bebas, fontSize: 28, color: '#FFF', letterSpacing: '0.03em' }}>WHO WINS ROUND {round?.round_number ?? '-'}?</div>
+                {isLowTime && !currentBet?.locked && (
+                  <div style={{ fontFamily: mono, fontSize: 14, color: '#FF3333', animation: 'pulse 1s infinite', fontWeight: 700 }}>
+                    {remainingStr}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
+                <span style={{ fontFamily: mono, fontSize: 12, color: '#999' }}>{totalBets} BETS PLACED</span>
+                {betStreak > 0 && <span style={{ fontFamily: bebas, fontSize: 12, color: '#F5A0D0' }}>🔥 {betStreak} STREAK</span>}
+                <span style={{ fontFamily: mono, fontSize: 10, color: '#444', animation: 'pulse 2s infinite' }}>● LIVE ODDS</span>
+              </div>
+            </div>
+
+            {/* Bet result */}
+            {currentBet?.result === 'won' && (
+              <div style={{ padding: 32, textAlign: 'center', background: 'rgba(0,255,136,0.08)', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ fontSize: 56, animation: 'bounceIn 0.5s ease-out' }}>🏆</div>
+                <div style={{ fontFamily: bebas, fontSize: 52, color: '#00FF88', marginTop: 8, textShadow: '0 0 30px rgba(0,255,136,0.5)', animation: 'bounceIn 0.5s ease-out 0.1s both' }}>YOU CALLED IT</div>
+                <div style={{ fontFamily: bebas, fontSize: 52, color: '#00FF88', animation: 'bounceIn 0.5s ease-out 0.2s both' }}>+{currentBet.potential_payout}CR</div>
+                {betStreak > 1 && (
+                  <div style={{ fontFamily: bebas, fontSize: 24, color: '#F5A0D0', marginTop: 8, animation: 'bounceIn 0.5s ease-out 0.3s both' }}>
+                    {betStreak} STREAK 🔥
+                  </div>
+                )}
+              </div>
+            )}
+            {currentBet?.result === 'lost' && (
+              <div style={{ padding: 32, textAlign: 'center' }}>
+                <div style={{ fontFamily: bebas, fontSize: 72, color: '#FF3333', textShadow: '0 0 20px rgba(255,51,51,0.3)' }}>rekt.</div>
+                <div style={{ fontFamily: sans, fontSize: 14, color: '#999', marginTop: 8 }}>-{currentBet.amount}CR · better luck next round</div>
+              </div>
+            )}
+
+            {/* Locked bet display */}
+            {currentBet?.locked && !currentBet.result && (
+              <div style={{ padding: '16px', borderBottom: '1px solid #1A1A1A', background: 'rgba(245,160,208,0.05)' }}>
+                <div style={{ fontFamily: bebas, fontSize: 16, color: '#FFF' }}>YOU BET {currentBet.amount}CR ON {currentBet.team_name}</div>
+                <div style={{ fontFamily: bebas, fontSize: 20, color: '#00FF88', marginTop: 4 }}>POTENTIAL: +{currentBet.potential_payout}CR</div>
+                <div style={{ fontFamily: mono, fontSize: 12, color: '#999', marginTop: 2 }}>
+                  LIVE ODDS: {outcomes.find((o) => o.id === currentBet.outcome_id)?.odds.toFixed(1) ?? '?'}X · BET LOCKED
                 </div>
               </div>
+            )}
 
-              {/* Bet result */}
-              {currentBet?.result === 'won' && (
-                <div style={{ padding: 32, textAlign: 'center', background: 'rgba(0,255,136,0.08)', position: 'relative', overflow: 'hidden' }}>
-                  <div style={{ fontSize: 56, animation: 'bounceIn 0.5s ease-out' }}>🏆</div>
-                  <div style={{ fontFamily: bebas, fontSize: 52, color: '#00FF88', marginTop: 8, textShadow: '0 0 30px rgba(0,255,136,0.5)', animation: 'bounceIn 0.5s ease-out 0.1s both' }}>YOU CALLED IT</div>
-                  <div style={{ fontFamily: bebas, fontSize: 52, color: '#00FF88', animation: 'bounceIn 0.5s ease-out 0.2s both' }}>+{currentBet.potential_payout}CR</div>
-                  {betStreak > 1 && (
-                    <div style={{ fontFamily: bebas, fontSize: 24, color: '#F5A0D0', marginTop: 8, animation: 'bounceIn 0.5s ease-out 0.3s both' }}>
-                      {betStreak} STREAK 🔥
+            {/* Team cards */}
+            {!currentBet?.locked && outcomes.map((o, idx) => {
+              const trader = activeTraders.find((t) => t.team_id === o.team_id);
+              const isTop = idx === 0;
+              const isLongShot = idx === outcomes.length - 1 && outcomes.length > 1;
+              const isSelected = selectedOutcome === o.id;
+
+              return (
+                <button
+                  key={o.id}
+                  onClick={() => { setSelectedOutcome(isSelected ? null : o.id); setConfirmBet(false); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', height: 64, padding: '0 16px',
+                    background: isSelected ? '#111' : 'transparent', border: 'none',
+                    borderBottom: '1px solid #111', borderLeft: isSelected ? '1px solid #F5A0D0' : '1px solid transparent',
+                    cursor: 'pointer', width: '100%', textAlign: 'left', position: 'relative',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+                    <span style={{ fontFamily: mono, fontSize: 11, color: '#666', width: 20 }}>#{trader?.rank ?? idx + 1}</span>
+                    <div style={{ width: 36, height: 36, background: '#1A1A1A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: bebas, fontSize: 16, color: '#999', flexShrink: 0 }}>
+                      {o.team_name.charAt(0)}
                     </div>
-                  )}
-                </div>
-              )}
-              {currentBet?.result === 'lost' && (
-                <div style={{ padding: 32, textAlign: 'center' }}>
-                  <div style={{ fontFamily: bebas, fontSize: 72, color: '#FF3333', textShadow: '0 0 20px rgba(255,51,51,0.3)' }}>rekt.</div>
-                  <div style={{ fontFamily: sans, fontSize: 14, color: '#999', marginTop: 8 }}>-{currentBet.amount}CR · better luck next round</div>
-                </div>
-              )}
-
-              {/* Locked bet display */}
-              {currentBet?.locked && !currentBet.result && (
-                <div style={{ padding: '16px', borderBottom: '1px solid #1A1A1A', background: 'rgba(245,160,208,0.05)' }}>
-                  <div style={{ fontFamily: bebas, fontSize: 16, color: '#FFF' }}>YOU BET {currentBet.amount}CR ON {currentBet.team_name}</div>
-                  <div style={{ fontFamily: bebas, fontSize: 20, color: '#00FF88', marginTop: 4 }}>POTENTIAL: +{currentBet.potential_payout}CR</div>
-                  <div style={{ fontFamily: mono, fontSize: 12, color: '#999', marginTop: 2 }}>
-                    ODDS: {outcomes.find((o) => o.id === currentBet.outcome_id)?.odds.toFixed(1) ?? '?'}X · BET LOCKED
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontFamily: bebas, fontSize: 18, color: '#FFF', letterSpacing: '0.03em' }}>{o.team_name}</span>
+                        {isTop && <span style={{ fontFamily: bebas, fontSize: 9, color: '#00FF88', border: '1px solid #00FF88', padding: '1px 5px' }}>POPULAR</span>}
+                        {isLongShot && <span style={{ fontFamily: bebas, fontSize: 9, color: '#F5A0D0', border: '1px solid #F5A0D0', padding: '1px 5px' }}>LONG SHOT</span>}
+                      </div>
+                      <span style={{ fontFamily: mono, fontSize: 14, color: (trader?.return_pct ?? 0) >= 0 ? '#00FF88' : '#FF3333' }}>
+                        {(trader?.return_pct ?? 0) >= 0 ? '+' : ''}{(trader?.return_pct ?? 0).toFixed(1)}%
+                      </span>
+                    </div>
                   </div>
-                </div>
-              )}
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontFamily: bebas, fontSize: 24, color: '#FFF' }}>{o.odds.toFixed(1)}X</div>
+                    <div style={{ fontFamily: mono, fontSize: 10, color: '#999' }}>{(o.probability * 100).toFixed(0)}%</div>
+                  </div>
+                  <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: '#111' }}>
+                    <div style={{ height: 3, background: '#F5A0D0', width: `${(o.volume / maxVolume) * 100}%`, transition: 'width 0.3s' }} />
+                  </div>
+                </button>
+              );
+            })}
 
-              {/* Team cards */}
-              {!currentBet?.locked && outcomes.map((o, idx) => {
-                const trader = activeTraders.find((t) => t.team_id === o.team_id);
-                const isTop = idx === 0;
-                const isLongShot = idx === outcomes.length - 1 && outcomes.length > 1;
-                const isSelected = selectedOutcome === o.id;
-
-                return (
-                  <button
-                    key={o.id}
-                    onClick={() => setSelectedOutcome(isSelected ? null : o.id)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      height: 64,
-                      padding: '0 16px',
-                      background: isSelected ? '#111' : 'transparent',
-                      border: 'none',
-                      borderBottom: '1px solid #111',
-                      borderLeft: isSelected ? '1px solid #F5A0D0' : '1px solid transparent',
-                      cursor: 'pointer',
-                      width: '100%',
-                      textAlign: 'left',
-                      position: 'relative',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-                      <span style={{ fontFamily: mono, fontSize: 11, color: '#666', width: 20 }}>#{trader?.rank ?? idx + 1}</span>
-                      <div style={{ width: 36, height: 36, background: '#1A1A1A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: bebas, fontSize: 16, color: '#999', flexShrink: 0 }}>
-                        {o.team_name.charAt(0)}
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontFamily: bebas, fontSize: 18, color: '#FFF', letterSpacing: '0.03em' }}>{o.team_name}</span>
-                          {isTop && <span style={{ fontFamily: bebas, fontSize: 9, color: '#00FF88', border: '1px solid #00FF88', padding: '1px 5px' }}>POPULAR</span>}
-                          {isLongShot && <span style={{ fontFamily: bebas, fontSize: 9, color: '#F5A0D0', border: '1px solid #F5A0D0', padding: '1px 5px' }}>LONG SHOT</span>}
-                        </div>
-                        <span style={{ fontFamily: mono, fontSize: 14, color: (trader?.return_pct ?? 0) >= 0 ? '#00FF88' : '#FF3333' }}>
-                          {(trader?.return_pct ?? 0) >= 0 ? '+' : ''}{(trader?.return_pct ?? 0).toFixed(1)}%
-                        </span>
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontFamily: bebas, fontSize: 24, color: '#FFF' }}>{o.odds.toFixed(1)}X</div>
-                      <div style={{ fontFamily: mono, fontSize: 10, color: '#999' }}>{(o.probability * 100).toFixed(0)}%</div>
-                    </div>
-                    {/* Volume bar */}
-                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: '#111' }}>
-                      <div style={{ height: 3, background: '#F5A0D0', width: `${(o.volume / maxVolume) * 100}%`, transition: 'width 0.3s' }} />
-                    </div>
-                  </button>
-                );
-              })}
-
-              {/* Bet placement */}
-              {selectedOutcome && !currentBet?.locked && (
-                <div className="slideUp" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12, borderTop: '1px solid #1A1A1A' }}>
-                  <div style={{ fontFamily: sans, fontSize: 9, color: '#999', textTransform: 'uppercase', letterSpacing: '0.1em' }}>YOUR BET</div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {[50, 100, 200].map((amt) => (
-                      <button
-                        key={amt}
-                        onClick={() => setBetAmount(betAmount === amt ? null : amt)}
-                        style={{
-                          flex: 1,
-                          padding: '10px 0',
-                          background: betAmount === amt ? '#F5A0D0' : 'transparent',
-                          color: betAmount === amt ? '#0A0A0A' : '#666',
-                          border: `1px solid ${betAmount === amt ? '#F5A0D0' : '#333'}`,
-                          fontFamily: bebas,
-                          fontSize: 16,
-                          cursor: credits >= amt ? 'pointer' : 'not-allowed',
-                          opacity: credits >= amt ? 1 : 0.4,
-                        }}
-                      >
-                        {amt}CR
-                      </button>
-                    ))}
+            {/* Bet placement with confirmation — FIX #6 */}
+            {selectedOutcome && !currentBet?.locked && (
+              <div className="slideUp" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12, borderTop: '1px solid #1A1A1A' }}>
+                <div style={{ fontFamily: sans, fontSize: 9, color: '#999', textTransform: 'uppercase', letterSpacing: '0.1em' }}>YOUR BET</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {[50, 100, 200].map((amt) => (
                     <button
-                      onClick={() => setBetAmount(betAmount === credits ? null : credits)}
+                      key={amt}
+                      onClick={() => { setBetAmount(betAmount === amt ? null : amt); setConfirmBet(false); }}
                       style={{
-                        flex: 1,
-                        padding: '10px 0',
-                        background: betAmount === credits ? '#F5A0D0' : 'transparent',
-                        color: betAmount === credits ? '#0A0A0A' : '#666',
-                        border: `1px solid ${betAmount === credits ? '#F5A0D0' : '#333'}`,
-                        fontFamily: bebas,
-                        fontSize: 16,
-                        cursor: 'pointer',
+                        flex: 1, padding: '10px 0',
+                        background: betAmount === amt ? '#F5A0D0' : 'transparent',
+                        color: betAmount === amt ? '#0A0A0A' : '#666',
+                        border: `1px solid ${betAmount === amt ? '#F5A0D0' : '#333'}`,
+                        fontFamily: bebas, fontSize: 16,
+                        cursor: credits >= amt ? 'pointer' : 'not-allowed',
+                        opacity: credits >= amt ? 1 : 0.4,
                       }}
                     >
-                      ALL IN
+                      {amt}CR
                     </button>
-                  </div>
-
-                  {betAmount && (
-                    <>
-                      <div style={{
-                        fontFamily: bebas,
-                        fontSize: 28,
-                        color: '#00FF88',
-                        textAlign: 'center',
-                        textShadow: '0 0 20px rgba(0,255,136,0.4)',
-                      }}>
-                        POTENTIAL PAYOUT: +{potentialPayout}CR
-                      </div>
-
-                      <button
-                        onClick={handlePlaceBet}
-                        style={{
-                          width: '100%',
-                          height: 72,
-                          background: '#F5A0D0',
-                          color: '#0A0A0A',
-                          border: 'none',
-                          fontFamily: bebas,
-                          fontSize: 28,
-                          letterSpacing: '0.08em',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        🎲 PLACE BET
-                      </button>
-                    </>
-                  )}
+                  ))}
+                  <button
+                    onClick={() => { setBetAmount(betAmount === credits ? null : credits); setConfirmBet(false); }}
+                    style={{
+                      flex: 1, padding: '10px 0',
+                      background: betAmount === credits ? '#F5A0D0' : 'transparent',
+                      color: betAmount === credits ? '#0A0A0A' : '#666',
+                      border: `1px solid ${betAmount === credits ? '#F5A0D0' : '#333'}`,
+                      fontFamily: bebas, fontSize: 16, cursor: 'pointer',
+                    }}
+                  >
+                    ALL IN
+                  </button>
                 </div>
-              )}
-            </div>
-          )}
+
+                {betAmount && (
+                  <>
+                    <div style={{
+                      fontFamily: bebas, fontSize: 28, color: '#00FF88', textAlign: 'center',
+                      textShadow: '0 0 20px rgba(0,255,136,0.4)',
+                    }}>
+                      POTENTIAL PAYOUT: +{potentialPayout}CR
+                    </div>
+
+                    {confirmBet && (
+                      <div style={{ fontFamily: mono, fontSize: 11, color: '#999', textAlign: 'center' }}>
+                        {betAmount}CR on {selectedOutcomeData?.team_name} at {selectedOutcomeData?.odds.toFixed(1)}X odds. You&apos;ll have {credits - betAmount}CR left.
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handlePlaceBet}
+                      style={{
+                        width: '100%', height: 64,
+                        background: confirmBet ? '#FF3333' : '#F5A0D0',
+                        color: confirmBet ? '#FFF' : '#0A0A0A',
+                        border: 'none', fontFamily: bebas, fontSize: 24, letterSpacing: '0.08em', cursor: 'pointer',
+                      }}
+                    >
+                      {confirmBet ? `🎲 CONFIRM ${betAmount}CR BET` : '🎲 PLACE BET'}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ============================================================= */}
@@ -1020,16 +1181,9 @@ export default function SpectatePage() {
               key={t.key}
               onClick={() => setTab(t.key)}
               style={{
-                flex: 1,
-                padding: '8px 0 6px',
-                background: 'transparent',
-                border: 'none',
+                flex: 1, padding: '8px 0 6px', background: 'transparent', border: 'none',
                 borderTop: tab === t.key ? '2px solid #F5A0D0' : '2px solid transparent',
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 2,
+                cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
               }}
             >
               <span style={{ fontSize: 18 }}>{t.icon}</span>
@@ -1050,15 +1204,20 @@ export default function SpectatePage() {
             <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
               {CREDIT_PACKAGES.map(pkg => {
                 const tc = totalCredits(pkg);
+                const attackCount = Math.floor(tc / cheapestWeapon);
                 return (
                   <div key={pkg.id} style={{ border: pkg.popular ? '2px solid #F5A0D0' : '1px solid #222', background: pkg.popular ? 'rgba(245,160,208,0.04)' : '#111', padding: 12 }}>
                     {pkg.popular && <div style={{ fontFamily: bebas, fontSize: 9, color: '#F5A0D0', marginBottom: 4, letterSpacing: '0.1em' }}>MOST POPULAR</div>}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                       <div>
-                        <span style={{ fontFamily: bebas, fontSize: 18, color: '#FFF' }}>{pkg.label}</span>
-                        {pkg.bonus_pct > 0 && <span style={{ fontFamily: mono, fontSize: 10, color: '#00FF88', marginLeft: 8 }}>+{pkg.bonus_pct}%</span>}
+                        <span style={{ fontFamily: bebas, fontSize: 18, color: '#FFF' }}>{tc} CREDITS</span>
+                        {pkg.bonus_pct > 0 && <span style={{ fontFamily: mono, fontSize: 10, color: '#00FF88', marginLeft: 8 }}>+{pkg.bonus_pct}% BONUS</span>}
                       </div>
                       <span style={{ fontFamily: mono, fontSize: 14, color: '#F5A0D0' }}>${(pkg.price_usd / 100).toFixed(2)}</span>
+                    </div>
+                    {/* FIX #3: Show what credits buy */}
+                    <div style={{ fontFamily: mono, fontSize: 10, color: '#555', marginBottom: 8 }}>
+                      = {attackCount} attacks or {Math.floor(tc / 50)} bets
                     </div>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button onClick={() => handlePurchase(pkg, 'stripe')} disabled={purchaseLoading !== null} style={{ flex: 1, fontFamily: bebas, fontSize: 12, color: '#FFF', background: '#1A1A1A', border: '1px solid #333', padding: '7px 0', cursor: purchaseLoading ? 'wait' : 'pointer' }}>
@@ -1071,7 +1230,6 @@ export default function SpectatePage() {
                   </div>
                 );
               })}
-              <div style={{ fontFamily: sans, fontSize: 9, color: '#444', textAlign: 'center' }}>BTC, ETH, SOL, USDC, DOGE, LTC, MATIC, SHIB & more</div>
             </div>
           </div>
         </div>

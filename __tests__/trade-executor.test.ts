@@ -102,7 +102,7 @@ describe('PaperOnlyExecutor', () => {
 
   test('rejects frozen asset trade', async () => {
     setMockResult('sessions', {
-      data: { positions_locked: false, frozen_asset: 'ETHUSDT' },
+      data: { positions_locked: false, frozen_asset: 'BTCUSDT' },
       error: null,
     });
 

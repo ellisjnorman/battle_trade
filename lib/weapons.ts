@@ -18,6 +18,7 @@ export const DEFENSES = [
   { id: 'deflect',     name: 'DEFLECT', icon: '🔄', cost: 200, duration: 0,   desc: 'Send it back',          kind: 'defense' as const },
   { id: 'ghost_mode',  name: 'GHOST',   icon: '👻', cost: 300, duration: 120, desc: 'Hide positions 2m',     kind: 'defense' as const },
   { id: 'speed_boost', name: 'BOOST',   icon: '⏩', cost: 100, duration: 60,  desc: '2x activity speed 60s', kind: 'defense' as const },
+  { id: 'unfreeze',    name: 'UNFREEZE', icon: '🔥', cost: 125, duration: 0,   desc: 'Remove freeze or lockout', kind: 'defense' as const },
 ] as const;
 
 export const ALL_WEAPONS = [...ATTACKS, ...DEFENSES] as const;

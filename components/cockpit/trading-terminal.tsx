@@ -270,7 +270,16 @@ export default function TradingTerminal() {
         if (result === 'shielded') { flash('#00BFFF'); addToast('ATTACK SHIELDED! 50% refund', 'defense', '🛡'); addFeedItem('Attack was SHIELDED', '#00BFFF', '🛡'); }
         if (result === 'deflected') { flash('#00BFFF'); addToast('ATTACK DEFLECTED back!', 'defense', '🔄'); addFeedItem('Attack DEFLECTED!', '#00BFFF', '🔄'); }
       }
-      if (st === 'defense_activated') { const dt = (m.defense_type as string) ?? 'shield'; const dur = dt === 'ghost_mode' ? 120 : dt === 'speed_boost' ? 60 : null; if (dur) addEffect(dt, 'defense', dur); }
+      if (st === 'defense_activated') {
+        const dt = (m.defense_type as string) ?? 'shield';
+        if (dt === 'unfreeze') {
+          setIsLockedOut(false); setLockoutTime(0); setFrozenAsset(null); setActiveOverlay(null);
+          setActiveEffects(p => p.filter(e => e.type !== 'asset_freeze'));
+          flash('#00FF88'); addToast('UNFROZEN! All restrictions cleared', 'success', '🔥'); addFeedItem('UNFREEZE activated!', '#00FF88', '🔥');
+        } else {
+          const dur = dt === 'ghost_mode' ? 120 : dt === 'speed_boost' ? 60 : null; if (dur) addEffect(dt, 'defense', dur);
+        }
+      }
     }).on('broadcast', { event: 'liquidation' }, ({ payload }) => {
       const m = payload as Record<string, unknown>;
       const sym = (m.symbol as string) ?? '???';
@@ -441,18 +450,21 @@ export default function TradingTerminal() {
       if (r.ok) {
         flash('#F5A0D0');
         const tgtName = allTraders.find(t => t.id === targetId)?.name ?? '???';
+        // Always use server-provided balance if available
+        if (d.credits_remaining !== undefined) setCredits(p => ({ ...p, balance: d.credits_remaining }));
+        else setCredits(p => ({ ...p, balance: p.balance - weapon!.cost }));
+
         if (d.result === 'shielded') {
           addToast(`${weapon?.name} was SHIELDED! +${d.refund}CR refund`, 'defense', '🛡');
-          if (d.refund) setCredits(p => ({ ...p, balance: p.balance - weapon!.cost + d.refund }));
+          addFeedItem(`${weapon?.name} SHIELDED by ${tgtName}!`, '#00BFFF', '🛡');
         } else if (d.result === 'deflected') {
           addToast(`${weapon?.name} DEFLECTED back at you!`, 'error', '🔄');
-          setCredits(p => ({ ...p, balance: p.balance - weapon!.cost }));
+          addFeedItem(`${weapon?.name} DEFLECTED by ${tgtName}!`, '#00BFFF', '🔄');
         } else {
           addToast(`${weapon?.icon} ${weapon?.name} launched at ${tgtName}! — ${weapon?.desc}`, 'attack', weapon?.icon);
-          if (d.credits_remaining !== undefined) setCredits(p => ({ ...p, balance: d.credits_remaining }));
-          else setCredits(p => ({ ...p, balance: p.balance - weapon!.cost }));
+          addFeedItem(`${weapon?.icon} ${weapon?.name} → ${tgtName}`, '#F5A0D0', weapon?.icon ?? '⚡');
         }
-        setCooldownRemaining(180); // 3 min cooldown
+        setCooldownRemaining(45); // match server cooldown
       } else if (r.status === 429) {
         setCooldownRemaining(d.remainingSeconds ?? 180);
         addToast(`Cooldown: ${Math.ceil((d.remainingSeconds ?? 180) / 60)}m left`, 'error', '⏳');
@@ -473,10 +485,11 @@ export default function TradingTerminal() {
         const d = await r.json();
         flash('#00BFFF');
         addToast(`${def?.icon} ${def?.name} activated! — ${def?.desc}`, 'defense', def?.icon);
+        addFeedItem(`${def?.icon} ${def?.name} activated!`, '#00BFFF', def?.icon ?? '🛡');
         if (d.credits_remaining !== undefined) setCredits(p => ({ ...p, balance: d.credits_remaining }));
         else setCredits(p => ({ ...p, balance: p.balance - def!.cost }));
         if (def?.duration) addEffect(defId, 'defense', def.duration);
-        setDefenseCooldown(90); // 90s defense cooldown
+        setDefenseCooldown(30); // 30s defense cooldown
       } else {
         const d = await r.json();
         if (r.status === 429) {
