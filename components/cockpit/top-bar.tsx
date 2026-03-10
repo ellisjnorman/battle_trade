@@ -17,9 +17,13 @@ export function TopBar({ lobbyName, trader, round, credits, portfolioValue, retu
     <header className="h-[40px] bg-[#0D0D0D] border-b border-[#1A1A1A] flex items-center justify-between px-[12px] shrink-0">
       {/* Left: Logo + Lobby */}
       <div className="flex items-center gap-[12px]">
-        <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.1em' }} className="text-[18px] text-[#F5A0D0]">
-          BATTLE TRADE
-        </span>
+        <a href="/" className="flex items-center gap-[8px]" style={{ textDecoration: 'none' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/logo-icon.png" alt="" style={{ height: 24, width: 'auto' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+          <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.1em' }} className="text-[18px] text-[#F5A0D0]">
+            BATTLE TRADE
+          </span>
+        </a>
         <div className="w-px h-[20px] bg-[#1A1A1A]" />
         <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em' }} className="text-[14px] text-[#333]">
           {lobbyName}

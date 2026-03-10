@@ -500,22 +500,28 @@ export default function AdminPanel() {
     fetchActiveSabotages();
     fetchRoundHistory();
     fetchRevenue();
-    const interval = setInterval(() => {
+    // Fast poll: standings + prices (1.5s) — what the admin stares at
+    const fastInterval = setInterval(() => {
       fetchStatus();
-      fetchEvents();
       fetchPrices();
+      fetchActiveSabotages();
+    }, 1500);
+    // Medium poll: markets, sabotage feed, credits (5s)
+    const medInterval = setInterval(() => {
+      fetchEvents();
       fetchSabotage();
       fetchCredits();
       fetchMarket();
-      fetchActiveSabotages();
+    }, 5000);
+    // Slow poll: revenue, history (15s)
+    const slowInterval = setInterval(() => {
+      fetchRoundHistory();
       fetchRevenue();
-    }, 3000);
-    // Round history less frequent
-    const histInterval = setInterval(fetchRoundHistory, 15000);
-    // Keep price feed alive — ping health every 10s
+    }, 15000);
+    // Keep price feed alive
     fetch('/api/health').catch(() => {});
     const healthInterval = setInterval(() => { fetch('/api/health').catch(() => {}); }, 10000);
-    return () => { clearInterval(interval); clearInterval(histInterval); clearInterval(healthInterval); };
+    return () => { clearInterval(fastInterval); clearInterval(medInterval); clearInterval(slowInterval); clearInterval(healthInterval); };
   }, [authenticated, fetchStatus, fetchEvents, fetchPrices, fetchSabotage, fetchCredits, fetchMarket, fetchActiveSabotages, fetchRoundHistory, fetchRevenue]);
 
   // Round countdown timer
@@ -552,57 +558,25 @@ export default function AdminPanel() {
   // ---------------------------------------------------------------------------
 
   const handleStartRound = async () => {
-    // If no round or round is completed/frozen, create a new one then start it
+    // If no round or round is completed/frozen, create via API then start
     if (!round || round.status === 'completed' || round.status === 'frozen') {
-      const roundNumber = (round?.round_number ?? 0) + 1;
+      // Create round via admin API (uses service role, no RLS issues)
+      const createData = await adminPost('round/next', {
+        settings: { starting_balance: 10000, duration_seconds: 600, elimination_pct: 0.25 },
+      });
+      if (!createData?.round) return;
+      setRound(createData.round);
 
-      // Try full insert first, then minimal fallback
-      let newRound: RoundData | null = null;
-      const { data: r1, error: e1 } = await supabase
-        .from('rounds')
-        .insert({
-          lobby_id: lobbyId,
-          round_number: roundNumber,
-          status: 'pending',
-          leverage_tier: leverage,
-          starting_balance: 10000,
-          duration_seconds: 600,
-          elimination_pct: 0.25,
-        })
-        .select()
-        .single();
-
-      if (e1) {
-        console.warn('Round create (full):', e1.message, '— retrying minimal');
-        const { data: r2, error: e2 } = await supabase
-          .from('rounds')
-          .insert({
-            lobby_id: lobbyId,
-            round_number: roundNumber,
-            status: 'pending',
-          })
-          .select()
-          .single();
-        if (e2 || !r2) {
-          alert(`Failed to create round: ${e2?.message ?? 'Unknown error'}`);
-          return;
-        }
-        newRound = r2;
-      } else {
-        newRound = r1;
-      }
-
-      if (!newRound) return;
-      setRound(newRound as RoundData);
-      const data = await adminPost('round/start', { round_id: newRound.id });
-      if (data.round) setRound(data.round);
+      // Immediately start it — no second click needed
+      const startData = await adminPost('round/start', { round_id: createData.round.id });
+      if (startData?.round) setRound(startData.round);
       return;
     }
 
     // If round exists but is pending, start it
     if (round.status === 'pending') {
       const data = await adminPost('round/start', { round_id: round.id });
-      if (data.round) setRound(data.round);
+      if (data?.round) setRound(data.round);
       return;
     }
   };
@@ -902,8 +876,10 @@ export default function AdminPanel() {
         <div style={{ position: 'fixed', inset: 0, background: 'repeating-linear-gradient(rgba(0,0,0,0.03) 1px, transparent 1px)', backgroundSize: '2px 2px', pointerEvents: 'none', zIndex: 999 }} />
         <div style={{ background: '#0A0A0A', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ width: 400, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 32 }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/logo-main.png" alt="Battle Trade" style={{ width: 280, height: 'auto' }} />
+            <a href="/">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/brand/logo-main.png" alt="Battle Trade" style={{ width: 280, height: 'auto' }} />
+            </a>
             <div style={{ fontFamily: bebas, fontSize: 20, color: '#999999', letterSpacing: '0.15em' }}>MISSION CONTROL</div>
             <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
               <input
@@ -962,10 +938,12 @@ export default function AdminPanel() {
         {/* TOP BAR — COMMAND STRIP                                           */}
         {/* ================================================================= */}
         <div style={{ height: 64, borderBottom: '2px solid #1A1A1A', display: 'flex', alignItems: 'center', padding: '0 24px', gap: 24, flexShrink: 0 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/logo-main.png" alt="Battle Trade" style={{ height: 28, width: 'auto' }} />
-          <div style={{ width: 1, height: 32, background: '#1A1A1A' }} />
-          <div style={{ fontFamily: bebas, fontSize: 20, color: '#999999', letterSpacing: '0.1em' }}>MISSION CONTROL</div>
+          <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/logo-main.png" alt="Battle Trade" style={{ height: 28, width: 'auto' }} />
+            <div style={{ width: 1, height: 32, background: '#1A1A1A' }} />
+            <div style={{ fontFamily: bebas, fontSize: 20, color: '#999999', letterSpacing: '0.1em' }}>MISSION CONTROL</div>
+          </a>
           <div style={{ flex: 1 }} />
 
           {/* Live prices — top assets */}
@@ -1021,18 +999,18 @@ export default function AdminPanel() {
           {/* ============================================================= */}
           {/* LEFT — ROUND COMMAND + HEALTH — 400px                           */}
           {/* ============================================================= */}
-          <div style={{ width: 400, flexShrink: 0, borderRight: '1px solid #1A1A1A', padding: 24, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+          <div style={{ width: 380, flexShrink: 0, borderRight: '1px solid #1A1A1A', padding: '12px 16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
 
             {/* BIG ACTION BUTTONS — ALWAYS FIRST, ALWAYS VISIBLE */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <button
                 onClick={handleStartRound}
                 disabled={round?.status === 'active'}
                 style={{
-                  width: '100%', height: 72,
+                  width: '100%', height: 52,
                   background: round?.status === 'active' ? '#111111' : '#00FF88',
                   color: '#0A0A0A', border: 'none',
-                  fontFamily: bebas, fontSize: 32, letterSpacing: '0.08em',
+                  fontFamily: bebas, fontSize: 26, letterSpacing: '0.08em',
                   cursor: round?.status === 'active' ? 'not-allowed' : 'pointer',
                   opacity: round?.status === 'active' ? 0.2 : 1,
                   textShadow: round?.status !== 'active' ? '0 0 10px rgba(0,255,136,0.3)' : 'none',
@@ -1045,10 +1023,10 @@ export default function AdminPanel() {
                 onClick={handleFreezeRound}
                 disabled={!round || round.status !== 'active'}
                 style={{
-                  width: '100%', height: 48,
+                  width: '100%', height: 36,
                   background: round?.status === 'active' ? '#F5A0D0' : '#111111',
                   color: '#0A0A0A', border: 'none',
-                  fontFamily: bebas, fontSize: 22, letterSpacing: '0.08em',
+                  fontFamily: bebas, fontSize: 18, letterSpacing: '0.08em',
                   cursor: round?.status !== 'active' ? 'not-allowed' : 'pointer',
                   opacity: round?.status !== 'active' ? 0.2 : 1,
                 }}
@@ -1062,10 +1040,10 @@ export default function AdminPanel() {
                   onClick={() => setShowEliminateConfirm(true)}
                   disabled={!round || round.status !== 'frozen'}
                   style={{
-                    flex: 1, height: 72,
+                    flex: 1, height: 44,
                     background: round?.status === 'frozen' ? '#FF3333' : '#111111',
                     color: '#FFF', border: 'none',
-                    fontFamily: bebas, fontSize: 24, letterSpacing: '0.08em',
+                    fontFamily: bebas, fontSize: 18, letterSpacing: '0.08em',
                     cursor: round?.status !== 'frozen' ? 'not-allowed' : 'pointer',
                     opacity: round?.status !== 'frozen' ? 0.2 : 1,
                     textShadow: round?.status === 'frozen' ? '0 0 10px rgba(255,51,51,0.4)' : 'none',
@@ -1088,10 +1066,10 @@ export default function AdminPanel() {
                   onClick={handleNextRound}
                   disabled={!round || (round.status !== 'completed' && round.status !== 'frozen')}
                   style={{
-                    flex: 1, height: 72,
+                    flex: 1, height: 44,
                     background: (round?.status === 'completed' || round?.status === 'frozen') ? '#222222' : '#111111',
                     color: '#888888', border: 'none',
-                    fontFamily: bebas, fontSize: 24, letterSpacing: '0.08em',
+                    fontFamily: bebas, fontSize: 18, letterSpacing: '0.08em',
                     cursor: (round?.status !== 'completed' && round?.status !== 'frozen') ? 'not-allowed' : 'pointer',
                     opacity: (round?.status !== 'completed' && round?.status !== 'frozen') ? 0.2 : 1,
                   }}
@@ -1105,117 +1083,33 @@ export default function AdminPanel() {
                   ELIMINATES: {lastPlace.name} ({lastPlace.return_pct >= 0 ? '+' : ''}{lastPlace.return_pct.toFixed(1)}%)
                 </div>
               )}
-
-              {/* RESET GAME */}
-              <div style={{ marginTop: 16, borderTop: '1px solid #1A1A1A', paddingTop: 16 }}>
-                {!showResetConfirm ? (
-                  <button
-                    onClick={() => setShowResetConfirm(true)}
-                    style={{
-                      width: '100%', height: 40,
-                      background: 'transparent', border: '1px solid #333',
-                      color: '#555', fontFamily: bebas, fontSize: 14, letterSpacing: '0.08em',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    RESET GAME
-                  </button>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, border: '2px solid #FF3333', background: 'rgba(255,51,51,0.05)' }}>
-                    <div style={{ fontFamily: bebas, fontSize: 16, color: '#FF3333', textAlign: 'center', letterSpacing: '0.05em' }}>CLEAR EVERYTHING?</div>
-                    <div style={{ fontFamily: sans, fontSize: 10, color: '#999', textAlign: 'center' }}>Deletes all rounds, positions, sabotages. Resets credits. Un-eliminates all traders.</div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => setShowResetConfirm(false)} style={{ flex: 1, height: 40, background: '#1A1A1A', color: '#888', border: 'none', fontFamily: bebas, fontSize: 14, letterSpacing: '0.05em', cursor: 'pointer' }}>CANCEL</button>
-                      <button onClick={handleResetGame} style={{ flex: 1, height: 40, background: '#FF3333', color: '#FFF', border: 'none', fontFamily: bebas, fontSize: 14, letterSpacing: '0.05em', cursor: 'pointer' }}>CONFIRM RESET</button>
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
 
-            {/* Round display */}
-            <div style={{ textAlign: 'center', padding: '16px 0' }}>
-              <div style={{ fontFamily: bebas, fontSize: 48, color: '#FFF', lineHeight: 1 }}>
-                ROUND {round?.round_number ?? '—'} <span style={{ color: '#999999', fontSize: 20 }}>OF {totalRounds}</span>
+            {/* Round display — compact inline */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0' }}>
+              <div style={{ fontFamily: bebas, fontSize: 28, color: '#FFF', lineHeight: 1, whiteSpace: 'nowrap' }}>
+                R{round?.round_number ?? '—'} <span style={{ color: '#555', fontSize: 14 }}>/ {totalRounds}</span>
               </div>
-              <div style={{ display: 'inline-block', marginTop: 8, padding: '2px 16px', border: `2px solid ${statusColor}` }}
-                className={round?.status === 'active' ? 'live-glow' : ''}
-              >
-                <span style={{ fontFamily: bebas, fontSize: 16, color: statusColor, letterSpacing: '0.15em' }}>
-                  {round?.status?.toUpperCase() ?? 'NO ROUND'}
-                </span>
+              <div style={{ padding: '1px 8px', border: `1px solid ${statusColor}` }} className={round?.status === 'active' ? 'live-glow' : ''}>
+                <span style={{ fontFamily: bebas, fontSize: 11, color: statusColor, letterSpacing: '0.1em' }}>{round?.status?.toUpperCase() ?? 'NONE'}</span>
               </div>
-              <div style={{ marginTop: 8 }}>
-                <span className={timerDanger ? 'danger-pulse' : ''} style={{ fontFamily: mono, fontSize: 48, fontWeight: 700, color: timerDanger ? '#FF3333' : '#FFF', letterSpacing: '-0.02em' }}>
-                  {round?.status === 'active' ? `${remainingMin}:${remainingSec}` : '--:--'}
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 12 }}>
+              <span className={timerDanger ? 'danger-pulse' : ''} style={{ fontFamily: mono, fontSize: 28, fontWeight: 700, color: timerDanger ? '#FF3333' : '#FFF', letterSpacing: '-0.02em' }}>
+                {round?.status === 'active' ? `${remainingMin}:${remainingSec}` : '--:--'}
+              </span>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontFamily: mono, fontSize: 20, color: '#F5A0D0', fontWeight: 700 }}>{leverage}X</div>
-                  <div style={{ fontFamily: sans, fontSize: 8, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em' }}>LEV</div>
+                  <div style={{ fontFamily: mono, fontSize: 14, color: '#F5A0D0', fontWeight: 700 }}>{leverage}X</div>
+                  <div style={{ fontFamily: sans, fontSize: 7, color: '#666', textTransform: 'uppercase' }}>LEV</div>
                 </div>
-                <div style={{ width: 1, background: '#1A1A1A' }} />
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontFamily: mono, fontSize: 20, color: '#F5A0D0', fontWeight: 700 }}>${(minSize / 1000).toFixed(0)}K</div>
-                  <div style={{ fontFamily: sans, fontSize: 8, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em' }}>MIN</div>
+                  <div style={{ fontFamily: mono, fontSize: 14, color: '#F5A0D0', fontWeight: 700 }}>${(minSize / 1000).toFixed(0)}K</div>
+                  <div style={{ fontFamily: sans, fontSize: 7, color: '#666', textTransform: 'uppercase' }}>MIN</div>
                 </div>
-                <div style={{ width: 1, background: '#1A1A1A' }} />
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontFamily: mono, fontSize: 20, color: '#888888', fontWeight: 700 }}>{activeTraders.length}</div>
-                  <div style={{ fontFamily: sans, fontSize: 8, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em' }}>ALIVE</div>
+                  <div style={{ fontFamily: mono, fontSize: 14, color: '#888', fontWeight: 700 }}>{activeTraders.length}</div>
+                  <div style={{ fontFamily: sans, fontSize: 7, color: '#666', textTransform: 'uppercase' }}>ALIVE</div>
                 </div>
               </div>
-            </div>
-
-            {/* Settings */}
-            <div style={{ height: 1, background: '#1A1A1A' }} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div>
-                <div style={{ fontFamily: sans, fontSize: 9, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>LEVERAGE</div>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  {LEVERAGE_OPTIONS.map((lev) => (
-                    <button key={lev} onClick={() => setLeverage(lev)} style={{ flex: 1, height: 40, background: leverage === lev ? '#F5A0D0' : 'transparent', color: leverage === lev ? '#0A0A0A' : '#555555', border: `1px solid ${leverage === lev ? '#F5A0D0' : '#222222'}`, fontFamily: mono, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-                      {lev}X
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontFamily: sans, fontSize: 9, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>MIN POSITION SIZE</div>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  {SIZE_OPTIONS.map((sz) => (
-                    <button key={sz} onClick={() => setMinSize(sz)} style={{ flex: 1, height: 40, background: minSize === sz ? '#F5A0D0' : 'transparent', color: minSize === sz ? '#0A0A0A' : '#555555', border: `1px solid ${minSize === sz ? '#F5A0D0' : '#222222'}`, fontFamily: mono, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                      ${sz >= 1000 ? `${sz / 1000}K` : sz}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* ── LIQUIDATION CHECK ── */}
-            <div style={{ borderTop: '1px solid #1A1A1A', paddingTop: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <div style={{ fontFamily: sans, fontSize: 9, color: '#999', textTransform: 'uppercase', letterSpacing: '0.08em' }}>LIQUIDATION</div>
-                <div style={{ fontFamily: mono, fontSize: 9, color: '#555' }}>AUTO EVERY 2s</div>
-              </div>
-              {!showLiquidateConfirm ? (
-              <button
-                onClick={() => setShowLiquidateConfirm(true)}
-                style={{ fontFamily: bebas, fontSize: 14, color: '#FFF', background: '#FF3333', border: 'none', padding: '8px 20px', cursor: 'pointer', letterSpacing: '0.05em', width: '100%' }}
-              >
-                RUN LIQUIDATION SWEEP
-              </button>
-              ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 10, border: '2px solid #FF3333', background: 'rgba(255,51,51,0.05)' }}>
-                <div style={{ fontFamily: bebas, fontSize: 14, color: '#FF3333', textAlign: 'center', letterSpacing: '0.05em' }}>FORCE-CLOSE UNDERWATER POSITIONS?</div>
-                <div style={{ fontFamily: sans, fontSize: 9, color: '#999', textAlign: 'center' }}>Closes all positions below liquidation threshold.</div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button onClick={() => setShowLiquidateConfirm(false)} style={{ flex: 1, height: 36, background: '#1A1A1A', color: '#888', border: 'none', fontFamily: bebas, fontSize: 12, letterSpacing: '0.05em', cursor: 'pointer' }}>CANCEL</button>
-                  <button onClick={async () => { setShowLiquidateConfirm(false); const res = await adminPost('liquidate'); if (res) { const count = res.liquidated ?? 0; alert(count > 0 ? `Liquidated ${count} position(s)` : 'No positions to liquidate'); } }} style={{ flex: 1, height: 36, background: '#FF3333', color: '#FFF', border: 'none', fontFamily: bebas, fontSize: 12, letterSpacing: '0.05em', cursor: 'pointer' }}>CONFIRM</button>
-                </div>
-              </div>
-              )}
             </div>
 
             {/* ── HEALTH BAR STANDINGS ── */}
@@ -1321,19 +1215,67 @@ export default function AdminPanel() {
 
             {/* ── ELIMINATED ── */}
             {eliminatedTraders.length > 0 && (
-              <div style={{ borderTop: '1px solid #1A1A1A', paddingTop: 10 }}>
-                <div style={{ fontFamily: sans, fontSize: 9, color: '#999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>ELIMINATED</div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <div style={{ borderTop: '1px solid #1A1A1A', paddingTop: 6 }}>
+                <div style={{ fontFamily: sans, fontSize: 8, color: '#999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>ELIMINATED</div>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                   {eliminatedTraders.map(t => (
-                    <div key={t.trader_id} style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '2px 6px', border: '1px solid #1A1A1A', background: '#0D0D0D' }}>
-                      <span style={{ fontFamily: bebas, fontSize: 9, color: '#FF3333' }}>KO</span>
-                      <span style={{ fontFamily: bebas, fontSize: 11, color: '#666', textDecoration: 'line-through' }}>{t.name}</span>
-                      <span style={{ fontFamily: mono, fontSize: 9, color: '#FF3333' }}>{t.return_pct.toFixed(1)}%</span>
+                    <div key={t.trader_id} style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '1px 4px', border: '1px solid #1A1A1A', background: '#0D0D0D' }}>
+                      <span style={{ fontFamily: bebas, fontSize: 8, color: '#FF3333' }}>KO</span>
+                      <span style={{ fontFamily: bebas, fontSize: 10, color: '#666', textDecoration: 'line-through' }}>{t.name}</span>
+                      <span style={{ fontFamily: mono, fontSize: 8, color: '#FF3333' }}>{t.return_pct.toFixed(1)}%</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
+
+            {/* ── SETTINGS — compact row ── */}
+            <div style={{ borderTop: '1px solid #1A1A1A', paddingTop: 8, display: 'flex', gap: 8 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: sans, fontSize: 8, color: '#666', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>LEVERAGE</div>
+                <div style={{ display: 'flex', gap: 2 }}>
+                  {LEVERAGE_OPTIONS.map((lev) => (
+                    <button key={lev} onClick={() => setLeverage(lev)} style={{ flex: 1, height: 28, background: leverage === lev ? '#F5A0D0' : 'transparent', color: leverage === lev ? '#0A0A0A' : '#555', border: `1px solid ${leverage === lev ? '#F5A0D0' : '#222'}`, fontFamily: mono, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                      {lev}X
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: sans, fontSize: 8, color: '#666', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>MIN SIZE</div>
+                <div style={{ display: 'flex', gap: 2 }}>
+                  {SIZE_OPTIONS.map((sz) => (
+                    <button key={sz} onClick={() => setMinSize(sz)} style={{ flex: 1, height: 28, background: minSize === sz ? '#F5A0D0' : 'transparent', color: minSize === sz ? '#0A0A0A' : '#555', border: `1px solid ${minSize === sz ? '#F5A0D0' : '#222'}`, fontFamily: mono, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+                      ${sz >= 1000 ? `${sz / 1000}K` : sz}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* ── LIQUIDATION + RESET — compact row ── */}
+            <div style={{ borderTop: '1px solid #1A1A1A', paddingTop: 8, display: 'flex', gap: 6 }}>
+              {!showLiquidateConfirm ? (
+                <button onClick={() => setShowLiquidateConfirm(true)} style={{ flex: 1, height: 28, fontFamily: bebas, fontSize: 11, color: '#FF3333', background: 'transparent', border: '1px solid #FF3333', cursor: 'pointer', letterSpacing: '0.05em' }}>
+                  LIQUIDATION SWEEP
+                </button>
+              ) : (
+                <div style={{ flex: 1, display: 'flex', gap: 4 }}>
+                  <button onClick={() => setShowLiquidateConfirm(false)} style={{ flex: 1, height: 28, background: '#1A1A1A', color: '#888', border: 'none', fontFamily: bebas, fontSize: 10, cursor: 'pointer' }}>CANCEL</button>
+                  <button onClick={async () => { setShowLiquidateConfirm(false); const res = await adminPost('liquidate'); if (res) { const count = res.liquidated ?? 0; alert(count > 0 ? `Liquidated ${count} position(s)` : 'No positions to liquidate'); } }} style={{ flex: 1, height: 28, background: '#FF3333', color: '#FFF', border: 'none', fontFamily: bebas, fontSize: 10, cursor: 'pointer' }}>CONFIRM</button>
+                </div>
+              )}
+              {!showResetConfirm ? (
+                <button onClick={() => setShowResetConfirm(true)} style={{ flex: 1, height: 28, background: 'transparent', border: '1px solid #333', color: '#444', fontFamily: bebas, fontSize: 11, letterSpacing: '0.05em', cursor: 'pointer' }}>
+                  RESET GAME
+                </button>
+              ) : (
+                <div style={{ flex: 1, display: 'flex', gap: 4 }}>
+                  <button onClick={() => setShowResetConfirm(false)} style={{ flex: 1, height: 28, background: '#1A1A1A', color: '#888', border: 'none', fontFamily: bebas, fontSize: 10, cursor: 'pointer' }}>CANCEL</button>
+                  <button onClick={handleResetGame} style={{ flex: 1, height: 28, background: '#FF3333', color: '#FFF', border: 'none', fontFamily: bebas, fontSize: 10, cursor: 'pointer' }}>CONFIRM</button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* ============================================================= */}

@@ -157,3 +157,77 @@ export interface EventConfig {
   elimination_pct: number;
   created_at: string;
 }
+
+// ---------------------------------------------------------------------------
+// Reputation & Social
+// ---------------------------------------------------------------------------
+
+export type RankTier = 'paper_hands' | 'retail' | 'swing_trader' | 'market_maker' | 'whale' | 'degen_king' | 'legendary';
+
+export interface TRScore {
+  total: number;
+  performance: number;
+  combat: number;
+  strategy: number;
+  community: number;
+  streak: number;
+  tier: RankTier;
+}
+
+export interface DailyStats {
+  trader_id: string;
+  date: string;
+  lobbies_played: number;
+  rounds: number;
+  trades: number;
+  avg_return: number;
+  pnl: number;
+  attacks_sent: number;
+  attacks_received: number;
+  defenses_used: number;
+}
+
+export interface Strategy {
+  id: string;
+  author_id: string;
+  title: string;
+  body: string;
+  tags: string[];
+  upvotes: number;
+  usage_count: number;
+  win_rate: number;
+  created_at: string;
+  // Joined fields
+  author_name?: string;
+  author_rank_tier?: RankTier;
+  author_tr_score?: number;
+  voted?: boolean;
+}
+
+export interface Follow {
+  follower_id: string;
+  following_id: string;
+  created_at: string;
+}
+
+export interface ProfileFull extends Profile {
+  auth_user_id: string | null;
+  email: string | null;
+  wallet_address: string | null;
+  badges: Array<{ id: string; name: string; icon: string; earned_at: string }>;
+  elo_rating: number;
+  total_earnings: number;
+  streak_current: number;
+  streak_best: number;
+  tr_score: number;
+  tr_performance: number;
+  tr_combat: number;
+  tr_strategy: number;
+  tr_community: number;
+  tr_streak: number;
+  rank_tier: RankTier;
+  bio: string | null;
+  location: string | null;
+  followers_count: number;
+  following_count: number;
+}

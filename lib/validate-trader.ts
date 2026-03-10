@@ -7,10 +7,10 @@ import { supabase } from './supabase';
 export async function validateTraderInLobby(
   traderId: string,
   lobbyId: string,
-): Promise<{ id: string; name: string; lobby_id: string } | null> {
+): Promise<{ id: string; name: string; lobby_id: string; is_competitor: boolean } | null> {
   const { data } = await supabase
     .from('traders')
-    .select('id, name, lobby_id')
+    .select('id, name, lobby_id, is_competitor')
     .eq('id', traderId)
     .eq('lobby_id', lobbyId)
     .single();
