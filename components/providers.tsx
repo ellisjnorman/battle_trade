@@ -9,7 +9,14 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => setMounted(true), []);
 
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
-  if (!mounted || !appId) return <>{children}</>;
+
+  // During SSR/SSG or before client mount, show a minimal loading shell
+  // instead of rendering children bare (which would crash usePrivy hooks)
+  if (!mounted || !appId) {
+    return (
+      <div style={{ background: '#0A0A0A', minHeight: '100vh' }} />
+    );
+  }
 
   return (
     <ErrorBoundary>
