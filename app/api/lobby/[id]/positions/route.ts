@@ -3,6 +3,10 @@ import { supabase } from '@/lib/supabase';
 import { calcUnrealizedPnl } from '@/lib/pnl';
 import { getLobbyConfig } from '@/lib/lobby';
 import { getExecutor } from '@/lib/trade-executor';
+import { validateTraderInLobby } from '@/lib/validate-trader';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { logger } from '@/lib/logger';
+import { parseBody, OpenPositionSchema } from '@/lib/validation';
 import type { Position } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -11,16 +15,22 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // Rate limit: 30 trades per minute per IP
+  const ip = getClientIp(request);
+  const rl = rateLimit(`trade:${ip}`, 30);
+  if (!rl.ok) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+
   const { id: lobbyId } = await params;
   const body = await request.json();
-  const { trader_id, round_id, symbol, direction, size, leverage } = body;
+  const parsed = parseBody(OpenPositionSchema, body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
-  if (!trader_id || !round_id || !symbol || !direction || !size || !leverage) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-  }
+  const { trader_id, round_id, symbol, direction, size, leverage, order_type, limit_price, stop_price, trail_pct } = parsed.data;
 
-  if (direction !== 'long' && direction !== 'short') {
-    return NextResponse.json({ error: 'Direction must be long or short' }, { status: 400 });
+  // Verify trader belongs to this lobby
+  const trader = await validateTraderInLobby(trader_id, lobbyId);
+  if (!trader) {
+    return NextResponse.json({ error: 'Invalid trader for this lobby' }, { status: 403 });
   }
 
   // Validate leverage against lobby config
@@ -78,6 +88,10 @@ export async function POST(
     size_usd: size,
     entry_price: priceRow.price,
     leverage,
+    order_type: order_type || 'market',
+    limit_price: limit_price ?? undefined,
+    stop_price: stop_price ?? undefined,
+    trail_pct: trail_pct ?? undefined,
   });
 
   if (!result.success) {
@@ -146,10 +160,34 @@ export async function DELETE(
     return NextResponse.json({ error: 'Missing position_id' }, { status: 400 });
   }
 
+  // Check if this is a pending limit order — cancel it directly
+  const { data: pendingOrder } = await supabase
+    .from('positions')
+    .select('*')
+    .eq('id', position_id)
+    .eq('status', 'pending')
+    .single();
+
+  if (pendingOrder) {
+    const { data: cancelled, error: cancelErr } = await supabase
+      .from('positions')
+      .update({ status: 'cancelled', closed_at: new Date().toISOString() })
+      .eq('id', position_id)
+      .select()
+      .single();
+
+    if (cancelErr) {
+      return NextResponse.json({ error: cancelErr.message }, { status: 500 });
+    }
+    return NextResponse.json(cancelled);
+  }
+
+  // Otherwise close an open position at market price
   const { data: position, error: fetchError } = await supabase
     .from('positions')
     .select('*')
     .eq('id', position_id)
+    .eq('status', 'open')
     .is('closed_at', null)
     .single();
 
@@ -178,6 +216,7 @@ export async function DELETE(
       exit_price: exitPrice,
       realized_pnl: realizedPnl,
       closed_at: new Date().toISOString(),
+      status: 'closed',
     })
     .eq('id', position_id)
     .select()

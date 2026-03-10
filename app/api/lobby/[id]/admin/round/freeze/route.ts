@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
+import { logAdminAction } from '@/lib/audit';
 import { checkAuth, unauthorized } from '../../auth';
 
 export const dynamic = 'force-dynamic';
@@ -31,14 +33,17 @@ export async function POST(
   // Broadcast round frozen
   try {
     const channel = supabase.channel(`lobby-${lobbyId}`);
-    await channel.send({
-      type: 'broadcast',
-      event: 'round_frozen',
-      payload: { type: 'round_frozen', round: data },
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await channel.send({ type: 'broadcast', event: 'round_frozen', payload: { type: 'round_frozen', round: data } });
+        setTimeout(() => supabase.removeChannel(channel), 1000);
+      }
     });
-  } catch {
-    // Broadcast is best-effort
+  } catch (err) {
+    logger.warn('Broadcast failed (best-effort)', { action: 'freeze' }, err);
   }
+
+  logAdminAction(lobbyId, 'round_freeze', { round_id });
 
   return NextResponse.json({ action: 'freeze_round', round: data });
 }

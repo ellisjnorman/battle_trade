@@ -223,11 +223,34 @@ export class MockProvider implements MarketProvider {
 
     if (!winningOutcome) return;
 
+    // Get market to find lobby and rake config
+    const { data: marketRow } = await supabase
+      .from('prediction_markets')
+      .select('lobby_id')
+      .eq('id', id)
+      .single();
+
+    let rakePct = 10; // default 10%
+    if (marketRow) {
+      const { data: lobby } = await supabase
+        .from('lobbies')
+        .select('config')
+        .eq('id', marketRow.lobby_id)
+        .single();
+      const cfg = lobby?.config as Record<string, unknown> | undefined;
+      if (cfg?.prediction_rake_pct !== undefined) {
+        rakePct = Number(cfg.prediction_rake_pct);
+      }
+    }
+
     // Get all bets for this market
     const { data: bets } = await supabase
       .from('bets')
       .select('*')
       .eq('market_id', id);
+
+    let totalRake = 0;
+    let totalPaid = 0;
 
     for (const bet of bets ?? []) {
       const won = bet.outcome_id === winningOutcome.id;
@@ -236,8 +259,14 @@ export class MockProvider implements MarketProvider {
         .update({ status: won ? 'won' : 'lost' })
         .eq('id', bet.id);
 
-      // Payout winners
+      // Payout winners (minus rake)
       if (won && bet.potential_payout) {
+        const grossPayout = Number(bet.potential_payout);
+        const rake = Math.round(grossPayout * (rakePct / 100));
+        const netPayout = grossPayout - rake;
+        totalRake += rake;
+        totalPaid += netPayout;
+
         const { data: profile } = await supabase
           .from('profiles')
           .select('credits')
@@ -247,79 +276,93 @@ export class MockProvider implements MarketProvider {
         if (profile) {
           await supabase
             .from('profiles')
-            .update({ credits: Number(profile.credits) + Number(bet.potential_payout) })
+            .update({ credits: Number(profile.credits) + netPayout })
             .eq('id', bet.bettor_id);
         }
+
+        // Update bet record with actual payout
+        await supabase
+          .from('bets')
+          .update({ actual_payout: netPayout, rake_amount: rake })
+          .eq('id', bet.id);
       }
+    }
+
+    // Record total rake on the market
+    if (totalRake > 0) {
+      await supabase
+        .from('prediction_markets')
+        .update({ total_rake: totalRake })
+        .eq('id', id);
     }
   }
 }
 
 // ---------------------------------------------------------------------------
-// PolymarketProvider (stub)
+// PolymarketProvider — falls back to MockProvider until CLOB API is wired
 // ---------------------------------------------------------------------------
 
 export class PolymarketProvider implements MarketProvider {
-  async getMarket(_id: string): Promise<PredictionMarket> {
-    throw new NotImplementedError('Polymarket integration pending — connect CLOB API');
+  private fallback = new MockProvider();
+  async getMarket(id: string): Promise<PredictionMarket> {
+    console.warn('[PolymarketProvider] Using mock fallback — CLOB API not yet connected');
+    return this.fallback.getMarket(id);
   }
-  async placeBet(_params: BetParams): Promise<BetResult> {
-    throw new NotImplementedError('Polymarket integration pending — connect CLOB API');
+  async placeBet(params: BetParams): Promise<BetResult> {
+    return this.fallback.placeBet(params);
   }
-  async resolveMarket(_id: string, _winner: string): Promise<void> {
-    throw new NotImplementedError('Polymarket integration pending — connect CLOB API');
+  async resolveMarket(id: string, winner: string): Promise<void> {
+    return this.fallback.resolveMarket(id, winner);
   }
 }
 
 // ---------------------------------------------------------------------------
-// KalshiProvider (stub)
+// KalshiProvider — falls back to MockProvider until REST API is wired
 // ---------------------------------------------------------------------------
 
 export class KalshiProvider implements MarketProvider {
-  async getMarket(_id: string): Promise<PredictionMarket> {
-    throw new NotImplementedError('Kalshi integration pending — connect REST API');
+  private fallback = new MockProvider();
+  async getMarket(id: string): Promise<PredictionMarket> {
+    console.warn('[KalshiProvider] Using mock fallback — REST API not yet connected');
+    return this.fallback.getMarket(id);
   }
-  async placeBet(_params: BetParams): Promise<BetResult> {
-    throw new NotImplementedError('Kalshi integration pending — connect REST API');
+  async placeBet(params: BetParams): Promise<BetResult> {
+    return this.fallback.placeBet(params);
   }
-  async resolveMarket(_id: string, _winner: string): Promise<void> {
-    throw new NotImplementedError('Kalshi integration pending — connect REST API');
+  async resolveMarket(id: string, winner: string): Promise<void> {
+    return this.fallback.resolveMarket(id, winner);
   }
 }
 
 // ---------------------------------------------------------------------------
-// OnChainProvider (stub — Monad testnet)
+// OnChainProvider — falls back to MockProvider until contract is deployed
 // ---------------------------------------------------------------------------
-
-// Expected contract interface:
-// createMarket(roundId: bytes32, teamIds: bytes32[], duration: uint256)
-// placeBet(marketId: bytes32, outcomeId: bytes32, amount: uint256)
-// resolveMarket(marketId: bytes32, winnerOutcomeId: bytes32)
-// claimWinnings(betId: bytes32)
+// Target: Monad testnet (chainId 10143)
+// Contract interface:
+//   createMarket(roundId, teamIds, duration)
+//   placeBet(marketId, outcomeId, amount)
+//   resolveMarket(marketId, winnerOutcomeId)
+//   claimWinnings(betId)
 
 export class OnChainProvider implements MarketProvider {
   contractAddress: string;
   chainId: number;
+  private fallback = new MockProvider();
 
   constructor(contractAddress: string = '0x0000000000000000000000000000000000000000', chainId: number = 10143) {
     this.contractAddress = contractAddress;
     this.chainId = chainId;
   }
 
-  async getMarket(_id: string): Promise<PredictionMarket> {
-    throw new NotImplementedError(
-      'Deploy Battle Trade prediction market contract to Monad, then wire ABI here'
-    );
+  async getMarket(id: string): Promise<PredictionMarket> {
+    console.warn(`[OnChainProvider] Using mock fallback — contract not deployed at ${this.contractAddress}`);
+    return this.fallback.getMarket(id);
   }
-  async placeBet(_params: BetParams): Promise<BetResult> {
-    throw new NotImplementedError(
-      'Deploy Battle Trade prediction market contract to Monad, then wire ABI here'
-    );
+  async placeBet(params: BetParams): Promise<BetResult> {
+    return this.fallback.placeBet(params);
   }
-  async resolveMarket(_id: string, _winner: string): Promise<void> {
-    throw new NotImplementedError(
-      'Deploy Battle Trade prediction market contract to Monad, then wire ABI here'
-    );
+  async resolveMarket(id: string, winner: string): Promise<void> {
+    return this.fallback.resolveMarket(id, winner);
   }
 }
 

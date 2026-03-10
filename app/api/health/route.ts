@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { startPriceFeed } from '@/lib/prices';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,8 +21,9 @@ export async function GET() {
   try {
     const { error } = await supabase.from('lobbies').select('id', { count: 'exact', head: true });
     supabaseOk = !error;
-  } catch {
-    // supabase down
+    if (error) logger.warn('Health check: Supabase query failed', { route: '/api/health' }, error);
+  } catch (err) {
+    logger.error('Health check: Supabase unreachable', { route: '/api/health' }, err);
   }
 
   try {
@@ -34,10 +36,11 @@ export async function GET() {
 
     if (!error && data?.recorded_at) {
       const age = Date.now() - new Date(data.recorded_at).getTime();
-      priceFeedOk = age < 30_000; // stale if older than 30s
+      priceFeedOk = age < 30_000;
+      if (!priceFeedOk) logger.warn('Health check: Price feed stale', { route: '/api/health', action: 'price_feed', age: `${age}ms` });
     }
-  } catch {
-    // price feed down
+  } catch (err) {
+    logger.error('Health check: Price feed query failed', { route: '/api/health' }, err);
   }
 
   try {
@@ -46,15 +49,19 @@ export async function GET() {
       .select('id', { count: 'exact', head: true })
       .eq('status', 'active');
     activeLobbies = count ?? 0;
-  } catch {
-    // silent
+  } catch (err) {
+    logger.error('Health check: Active lobbies query failed', { route: '/api/health' }, err);
   }
 
+  const recentErrors = logger.getRecentErrors();
+
   return NextResponse.json({
-    status: 'ok',
+    status: supabaseOk ? 'ok' : 'degraded',
     supabase: supabaseOk,
     price_feed: priceFeedOk,
     active_lobbies: activeLobbies,
+    recent_errors: recentErrors.length,
+    last_error: recentErrors.length > 0 ? recentErrors[recentErrors.length - 1] : null,
     timestamp: new Date().toISOString(),
   });
 }

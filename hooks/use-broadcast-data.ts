@@ -248,6 +248,18 @@ export function useBroadcastData(lobbyId: string) {
       })
       .subscribe()
 
+    // Admin-fired event alerts (broadcast on lobby-{id} channel)
+    const adminEventChannel = supabase.channel(`lobby-${lobbyId}`)
+    adminEventChannel.on('broadcast', { event: 'volatility_event' }, (payload) => {
+      const msg = payload.payload as Record<string, unknown>
+      const dur = (msg.duration_seconds as number) ?? 60
+      setVolatilityEvent({
+        type: (msg.type as string) ?? 'flash_crash',
+        asset: (msg.asset as string) ?? 'ALL',
+        secondsRemaining: dur,
+      })
+    }).subscribe()
+
     const presenceChannel = supabase.channel(`lobby-${lobbyId}-presence`)
     presenceChannel
       .on('presence', { event: 'sync' }, () => {
@@ -257,7 +269,7 @@ export function useBroadcastData(lobbyId: string) {
         setConnected(status === 'SUBSCRIBED')
       })
 
-    channelsRef.current = [posChannel, priceChannel, traderChannel, roundChannel, lobbyChannel, eventChannel, sabotageChannel, marketChannel, presenceChannel]
+    channelsRef.current = [posChannel, priceChannel, traderChannel, roundChannel, lobbyChannel, eventChannel, sabotageChannel, marketChannel, presenceChannel, adminEventChannel]
 
     return () => {
       for (const ch of channelsRef.current) {

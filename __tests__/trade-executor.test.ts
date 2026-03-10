@@ -255,18 +255,11 @@ describe('PaperPlusOnchainExecutor', () => {
 // ---------------------------------------------------------------------------
 
 describe('LiveExecutor', () => {
-  const executor = new LiveExecutor();
-
-  test('execute throws not implemented', async () => {
-    await expect(executor.execute({} as TradeParams)).rejects.toThrow(
-      'Live trading not implemented',
-    );
-  });
-
-  test('closePosition throws not implemented', async () => {
-    await expect(executor.closePosition({} as CloseParams)).rejects.toThrow(
-      'Live trading not implemented',
-    );
+  test('is an instance of TradeExecutor', () => {
+    const executor = new LiveExecutor();
+    expect(executor).toBeDefined();
+    expect(typeof executor.execute).toBe('function');
+    expect(typeof executor.closePosition).toBe('function');
   });
 });
 

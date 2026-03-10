@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { validateTraderInLobby } from '@/lib/validate-trader';
 import { MockProvider } from '@/lib/prediction-markets';
+import { parseBody, PlaceBetSchema } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,14 +12,15 @@ export async function POST(
 ) {
   const { id: lobbyId } = await params;
   const body = await request.json();
-  const { bettor_id, outcome_id, amount_credits } = body;
+  const parsed = parseBody(PlaceBetSchema, { ...body, amount: body.amount_credits ?? body.amount });
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
-  if (!bettor_id || !outcome_id || !amount_credits) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-  }
+  const { bettor_id, outcome_id, amount: amount_credits } = parsed.data;
 
-  if (amount_credits <= 0) {
-    return NextResponse.json({ error: 'Amount must be positive' }, { status: 400 });
+  // Verify bettor belongs to this lobby (trader or spectator)
+  const bettor = await validateTraderInLobby(bettor_id, lobbyId);
+  if (!bettor) {
+    return NextResponse.json({ error: 'Invalid bettor' }, { status: 403 });
   }
 
   // Get active market for this lobby
@@ -65,14 +68,12 @@ export async function POST(
 
   // Broadcast odds update
   const fullMarket = await provider.getMarket(market.id);
-  const channel = supabase.channel(`lobby-${lobbyId}-markets`);
-  await channel.send({
-    type: 'broadcast',
-    event: 'market',
-    payload: {
-      type: 'odds_update',
-      outcomes: fullMarket.outcomes,
-    },
+  const ch = supabase.channel(`lobby-${lobbyId}-markets`);
+  ch.subscribe(async (status) => {
+    if (status === 'SUBSCRIBED') {
+      await ch.send({ type: 'broadcast', event: 'market', payload: { type: 'odds_update', outcomes: fullMarket.outcomes } });
+      setTimeout(() => supabase.removeChannel(ch), 500);
+    }
   });
 
   return NextResponse.json(result, { status: 201 });

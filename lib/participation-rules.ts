@@ -1,4 +1,19 @@
 // ---------------------------------------------------------------------------
+// Broadcast helper: subscribe, send, clean up
+// ---------------------------------------------------------------------------
+
+async function broadcastEvent(channelName: string, event: string, payload: Record<string, unknown>) {
+  const { supabase } = await import('./supabase');
+  const ch = supabase.channel(channelName);
+  ch.subscribe(async (status) => {
+    if (status === 'SUBSCRIBED') {
+      await ch.send({ type: 'broadcast', event, payload });
+      setTimeout(() => supabase.removeChannel(ch), 500);
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -204,10 +219,8 @@ export async function executeForcedTrade(
     .eq('id', lobby_id)
     .single();
 
-  const symbols: string[] =
-    (lobby?.config as Record<string, unknown>)?.available_symbols as string[] ??
-    ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
-
+  const cfgSymbols = (lobby?.config as Record<string, unknown>)?.available_symbols as string[] ?? [];
+  const symbols: string[] = cfgSymbols.length > 0 ? cfgSymbols : ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
   const asset = symbols[Math.floor(Math.random() * symbols.length)];
   const direction: 'long' | 'short' = Math.random() > 0.5 ? 'long' : 'short';
 
@@ -242,35 +255,23 @@ export async function executeForcedTrade(
     .eq('id', trader_id)
     .single();
 
-  // Broadcast to trader
-  const traderChannel = supabase.channel(`trader-${trader_id}`);
-  await traderChannel.send({
-    type: 'broadcast',
-    event: 'forced_trade',
-    payload: {
-      type: 'forced_trade',
-      position_id: result.position_id,
-      asset,
-      direction,
-      size_usd: config.min_position_size_usd,
-      entry_price: priceRow.price,
-      message: 'You were idle too long. Position opened.',
-    },
+  broadcastEvent(`t-${trader_id}`, 'forced_trade', {
+    type: 'forced_trade',
+    position_id: result.position_id,
+    asset,
+    direction,
+    size_usd: config.min_position_size_usd,
+    entry_price: priceRow.price,
+    message: 'You were idle too long. Position opened.',
   });
 
-  // Broadcast to lobby feed
-  const lobbyChannel = supabase.channel(`lobby-${lobby_id}-sabotage`);
-  await lobbyChannel.send({
-    type: 'broadcast',
-    event: 'forced_trade_public',
-    payload: {
-      type: 'forced_trade_public',
-      trader_id,
-      trader_name: trader?.name ?? 'Unknown',
-      asset,
-      direction,
-      size_usd: config.min_position_size_usd,
-    },
+  broadcastEvent(`lobby-${lobby_id}-sabotage`, 'forced_trade_public', {
+    type: 'forced_trade_public',
+    trader_id,
+    trader_name: trader?.name ?? 'Unknown',
+    asset,
+    direction,
+    size_usd: config.min_position_size_usd,
   });
 }
 
@@ -317,12 +318,7 @@ export async function startParticipationLoop(
       statuses.push(status);
 
       // Send personal status update
-      const traderChannel = supabase.channel(`trader-${trader.id}`);
-      await traderChannel.send({
-        type: 'broadcast',
-        event: 'activity_update',
-        payload: { type: 'activity_update', ...status },
-      });
+      broadcastEvent(`t-${trader.id}`, 'activity_update', { type: 'activity_update', ...status });
 
       // Execute forced trade on critical
       if (status.status === 'critical' && config.auto_trade_on_violation) {
@@ -331,12 +327,7 @@ export async function startParticipationLoop(
     }
 
     // Broadcast all statuses to leaderboard
-    const leaderboardChannel = supabase.channel(`lobby-${lobby_id}-leaderboard`);
-    await leaderboardChannel.send({
-      type: 'broadcast',
-      event: 'activity_status_update',
-      payload: { type: 'activity_status_update', statuses },
-    });
+    broadcastEvent(`lobby-${lobby_id}-leaderboard`, 'activity_status_update', { type: 'activity_status_update', statuses });
   };
 
   const intervalId = setInterval(tick, 10_000);

@@ -15,6 +15,12 @@ function makePosition(overrides: Partial<Position> = {}): Position {
     realized_pnl: null,
     opened_at: '2026-01-01T00:00:00Z',
     closed_at: null,
+    order_type: 'market',
+    limit_price: null,
+    stop_price: null,
+    trail_pct: null,
+    trail_peak: null,
+    status: 'open',
     ...overrides,
   };
 }

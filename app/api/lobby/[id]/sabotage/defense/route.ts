@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { validateTraderInLobby } from '@/lib/validate-trader';
 import {
   DEFENSE_DEFS,
   DEFENSE_TYPES,
@@ -20,6 +21,12 @@ export async function POST(
 
   if (!trader_id || !type) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+  }
+
+  // Verify trader belongs to this lobby
+  const trader = await validateTraderInLobby(trader_id, lobbyId);
+  if (!trader) {
+    return NextResponse.json({ error: 'Invalid trader' }, { status: 403 });
   }
 
   if (!DEFENSE_TYPES.includes(type as DefenseType)) {
@@ -61,21 +68,18 @@ export async function POST(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Broadcast to trader personal channel
-  const traderChannel = supabase.channel(`trader-${trader_id}`);
-  await traderChannel.send({
-    type: 'broadcast',
-    event: 'sabotage',
-    payload: { type: 'defense_activated', defense_type: type },
-  });
-
-  // Broadcast to lobby feed
-  const lobbyChannel = supabase.channel(`lobby-${lobbyId}-sabotage`);
-  await lobbyChannel.send({
-    type: 'broadcast',
-    event: 'sabotage',
-    payload: { type: 'defense_activated', trader_id, defense_type: type },
-  });
+  // Broadcast to trader personal channel + lobby feed
+  const bc = (name: string, event: string, payload: Record<string, unknown>) => {
+    const ch = supabase.channel(name);
+    ch.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await ch.send({ type: 'broadcast', event, payload });
+        setTimeout(() => supabase.removeChannel(ch), 500);
+      }
+    });
+  };
+  bc(`t-${trader_id}`, 'sabotage', { type: 'defense_activated', defense_type: type });
+  bc(`lobby-${lobbyId}-sabotage`, 'sabotage', { type: 'defense_activated', trader_id, defense_type: type });
 
   return NextResponse.json({ result: 'success', defense }, { status: 201 });
 }

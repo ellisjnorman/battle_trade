@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { MockProvider } from '@/lib/prediction-markets';
+import { logger } from '@/lib/logger';
+import { logAdminAction } from '@/lib/audit';
 import { checkAuth, unauthorized } from '../../auth';
 
 export const dynamic = 'force-dynamic';
@@ -69,21 +71,24 @@ export async function POST(
         }
       }
     }
-  } catch {
-    // Market resolution is best-effort
+  } catch (err) {
+    logger.warn('Market resolution failed (best-effort)', { lobbyId, action: 'eliminate' }, err);
   }
 
   // Broadcast elimination
   try {
     const channel = supabase.channel(`lobby-${lobbyId}`);
-    await channel.send({
-      type: 'broadcast',
-      event: 'elimination',
-      payload: { type: 'elimination', trader_id, trader: data },
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await channel.send({ type: 'broadcast', event: 'elimination', payload: { type: 'elimination', trader_id, trader: data } });
+        setTimeout(() => supabase.removeChannel(channel), 1000);
+      }
     });
-  } catch {
-    // Broadcast is best-effort
+  } catch (err) {
+    logger.warn('Broadcast failed (best-effort)', { lobbyId, action: 'eliminate' }, err);
   }
+
+  logAdminAction(lobbyId, 'eliminate', { trader_id, trader_name: data.name });
 
   return NextResponse.json({ action: 'eliminate_trader', trader: data });
 }

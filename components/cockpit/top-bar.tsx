@@ -1,89 +1,85 @@
 'use client'
 
 interface TopBarProps {
-  trader: { name: string; handle: string; avatar: string; rank: number; totalTraders: number; balance: number; returnPct: number }
-  round: { current: number; total: number; leverage: string; timeRemaining: string; isUrgent: boolean }
+  lobbyName: string
+  trader: { name: string; avatar: string; rank: number; totalTraders: number }
+  round: { current: number; total: number; timeRemaining: string; isUrgent: boolean }
   credits: number
-  activityStatus: 'active' | 'warning' | 'critical'
+  portfolioValue: number
+  returnPct: number
 }
 
-export function TopBar({ trader, round, credits, activityStatus }: TopBarProps) {
-  const isProfit = trader.returnPct >= 0
+export function TopBar({ lobbyName, trader, round, credits, portfolioValue, returnPct }: TopBarProps) {
+  const isProfit = returnPct >= 0
   const initial = trader.name.charAt(0).toUpperCase()
+
   return (
-    <header className="h-[48px] bg-[#0D0D0D] border-b border-[#1A1A1A] flex items-center justify-between px-[16px]">
+    <header className="h-[40px] bg-[#0D0D0D] border-b border-[#1A1A1A] flex items-center justify-between px-[12px] shrink-0">
+      {/* Left: Logo + Lobby */}
       <div className="flex items-center gap-[12px]">
-        <div className="w-[32px] h-[32px] overflow-hidden flex items-center justify-center" style={{ border: '2px solid #F5A0D0', backgroundColor: '#1A1A1A' }}>
-          {trader.avatar && !trader.avatar.includes('logo-icon') ? (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img src={trader.avatar} alt={trader.name} width={32} height={32} className="w-full h-full object-cover" />
-          ) : (
-            <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, color: '#F5A0D0' }}>{initial}</span>
-          )}
-        </div>
-        <div className="flex flex-col">
-          <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em' }} className="text-[20px] text-white leading-none">{trader.name}</span>
-          <span style={{ fontFamily: "'DM Sans', sans-serif" }} className="text-[9px] text-[#555]">{trader.handle}</span>
-        </div>
-        <div className="w-px h-[24px] bg-[#1A1A1A]" />
-        <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em' }} className="text-[16px] text-[#F5A0D0]">#{trader.rank} OF {trader.totalTraders}</span>
-        <div className="w-px h-[24px] bg-[#1A1A1A]" />
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '-0.02em' }} className="text-[15px] text-white">${trader.balance.toLocaleString()}</span>
-        <span
-          style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em' }}
-          className="text-[15px]"
-        >
-          <span style={{ color: isProfit ? '#00FF88' : '#FF3333' }}>
-            {isProfit ? '+' : ''}{trader.returnPct.toFixed(1)}%
-          </span>
+        <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.1em' }} className="text-[18px] text-[#F5A0D0]">
+          BATTLE TRADE
+        </span>
+        <div className="w-px h-[20px] bg-[#1A1A1A]" />
+        <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em' }} className="text-[14px] text-[#333]">
+          {lobbyName}
         </span>
       </div>
-      <div className="flex items-center gap-[8px]">
-        <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em' }} className="text-[15px] text-[#444]">ROUND {round.current} OF {round.total}</span>
-        <span className="text-[15px] text-[#444]">·</span>
-        <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em' }} className="text-[15px] text-[#F5A0D0]">LEVERAGE {round.leverage}</span>
-        <span className="text-[15px] text-[#444]">·</span>
+
+      {/* Center: Round + Timer */}
+      <div className="flex items-center gap-[12px]">
+        <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em' }} className="text-[13px] text-[#444]">
+          ROUND {round.current}/{round.total}
+        </span>
+        <div
+          className="px-[12px] py-[2px]"
+          style={{ border: `1px solid ${round.isUrgent ? '#FF3333' : '#1A1A1A'}` }}
+        >
+          <span
+            style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '-0.02em' }}
+            className={`text-[16px] ${round.isUrgent ? 'text-[#FF3333] animate-pulse' : 'text-white'}`}
+          >
+            {round.timeRemaining}
+          </span>
+        </div>
         <span
           style={{ fontFamily: "'DM Sans', sans-serif" }}
-          className="text-[9px] text-[#333] border border-[#1A1A1A] px-[8px] py-[4px]"
+          className="text-[9px] text-[#333] border border-[#1A1A1A] px-[6px] py-[2px]"
         >
-          PAPER TRADING
+          PAPER
         </span>
       </div>
-      <div className="flex items-center gap-[12px]">
-        <div className="flex flex-col items-end">
-          <span style={{ fontFamily: "'DM Sans', sans-serif" }} className="text-[8px] text-[#444]">ENDS IN</span>
-          <span
-            style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em' }}
-            className="text-[32px] leading-none"
-          >
-            <span style={{ color: round.isUrgent ? '#FF3333' : 'white' }}>
-              {round.timeRemaining}
-            </span>
-          </span>
-        </div>
-        <div className="w-px h-[32px] bg-[#1A1A1A]" />
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '-0.02em' }} className="text-[12px] text-[#F5A0D0]">{credits}CR</span>
-        <div className="w-px h-[32px] bg-[#1A1A1A]" />
-        <div className="flex items-center gap-[4px]">
-          {activityStatus === 'active' && (
-            <span className="inline-flex items-center gap-[4px]" style={{ padding: '4px 8px' }}>
-              <span className="block w-[8px] h-[8px] bg-[#00FF88]" />
-              <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em' }} className="text-[10px] text-[#00FF88]">ACTIVE</span>
-            </span>
-          )}
-          {activityStatus === 'warning' && (
-            <span className="inline-flex items-center gap-[4px]" style={{ padding: '4px 8px' }}>
-              <span className="block w-[8px] h-[8px] bg-[#FF3333] animate-pulse" />
-              <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em' }} className="text-[10px] text-[#FF3333]">IDLE</span>
-            </span>
-          )}
-          {activityStatus === 'critical' && (
-            <span className="inline-flex items-center gap-[4px]" style={{ padding: '4px 8px' }}>
-              <span className="block w-[8px] h-[8px] bg-[#FF3333]" />
-              <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em' }} className="text-[10px] text-[#FF3333]">CRITICAL</span>
-            </span>
-          )}
+
+      {/* Right: Trader info */}
+      <div className="flex items-center gap-[10px]">
+        <span
+          style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '-0.02em' }}
+          className="text-[13px] text-white"
+        >
+          ${portfolioValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+        </span>
+        <span
+          style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '-0.02em', color: isProfit ? '#00FF88' : '#FF3333' }}
+          className="text-[13px]"
+        >
+          {isProfit ? '+' : ''}{returnPct.toFixed(1)}%
+        </span>
+        <div className="w-px h-[20px] bg-[#1A1A1A]" />
+        <span style={{ fontFamily: "'JetBrains Mono', monospace" }} className="text-[11px] text-[#F5A0D0]">{credits}CR</span>
+        <div className="w-px h-[20px] bg-[#1A1A1A]" />
+        <div className="flex items-center gap-[6px]">
+          <div className="w-[24px] h-[24px] flex items-center justify-center" style={{ border: '1px solid #F5A0D0', backgroundColor: '#1A1A1A' }}>
+            {trader.avatar && !trader.avatar.includes('logo-icon') ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={trader.avatar} alt={trader.name} width={24} height={24} className="w-full h-full object-cover" />
+            ) : (
+              <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 14, color: '#F5A0D0' }}>{initial}</span>
+            )}
+          </div>
+          <div className="flex flex-col">
+            <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em' }} className="text-[13px] text-white leading-none">{trader.name}</span>
+            <span style={{ fontFamily: "'DM Sans', sans-serif" }} className="text-[8px] text-[#555]">#{trader.rank} of {trader.totalTraders}</span>
+          </div>
         </div>
       </div>
     </header>
@@ -92,10 +88,10 @@ export function TopBar({ trader, round, credits, activityStatus }: TopBarProps) 
 
 export function AutoCloseWarning({ secondsRemaining }: { secondsRemaining: number }) {
   return (
-    <div className="h-[32px] w-full flex items-center justify-center border-b bg-[#0D0D0D] border-[#FF3333]">
+    <div className="h-[28px] w-full flex items-center justify-center border-b bg-[#0D0D0D] border-[#FF3333] shrink-0">
       <span
         style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em' }}
-        className="text-[14px] text-white animate-pulse"
+        className="text-[13px] text-white animate-pulse"
       >
         ALL POSITIONS AUTO-CLOSE IN {Math.floor(secondsRemaining / 60)}:{(secondsRemaining % 60).toString().padStart(2, '0')}
       </span>

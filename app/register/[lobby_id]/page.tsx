@@ -8,9 +8,9 @@ import QRCode from 'qrcode';
 // Fonts
 // ---------------------------------------------------------------------------
 
-const bebas = "'Bebas Neue', sans-serif";
-const mono = "'JetBrains Mono', monospace";
-const sans = "'DM Sans', sans-serif";
+const bebas = "var(--font-bebas, 'Bebas Neue'), sans-serif";
+const mono = "var(--font-jetbrains, 'JetBrains Mono'), monospace";
+const sans = "var(--font-dm-sans, 'DM Sans'), sans-serif";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -189,7 +189,7 @@ export default function RegisterPage() {
 
             {/* Tagline */}
             <div className="fade-up-1" style={{ textAlign: 'center' }}>
-              <div style={{ fontFamily: sans, fontSize: 13, color: '#555555', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              <div style={{ fontFamily: sans, fontSize: 13, color: '#999999', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                 THE FUTURE OF FINANCE IS MULTIPLAYER
               </div>
             </div>
@@ -203,7 +203,7 @@ export default function RegisterPage() {
               <div style={{ fontFamily: bebas, fontSize: 28, color: '#F5A0D0', letterSpacing: '0.15em' }}>
                 {lobbyName ?? 'BATTLE TRADE'}
               </div>
-              <div style={{ fontFamily: mono, fontSize: 11, color: '#444444', letterSpacing: '-0.02em', marginTop: 4 }}>
+              <div style={{ fontFamily: mono, fontSize: 11, color: '#999999', letterSpacing: '-0.02em', marginTop: 4 }}>
                 LIVE ELIMINATION TRADING
               </div>
             </div>
@@ -226,7 +226,7 @@ export default function RegisterPage() {
                 onClick={() => { setIsCompetitor(false); setScreen('register'); }}
                 style={{
                   width: '100%', height: 56,
-                  background: 'transparent', color: '#444444',
+                  background: 'transparent', color: '#999999',
                   border: '1px solid #1A1A1A', fontFamily: bebas,
                   fontSize: 24, letterSpacing: '0.08em',
                   cursor: 'pointer',
@@ -237,7 +237,7 @@ export default function RegisterPage() {
             </div>
 
             {/* Bottom line */}
-            <div style={{ fontFamily: sans, fontSize: 10, color: '#333333', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            <div style={{ fontFamily: sans, fontSize: 10, color: '#888888', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
               POWERED BY CRACKED LABS
             </div>
           </div>
@@ -253,7 +253,7 @@ export default function RegisterPage() {
               <div style={{ fontFamily: bebas, fontSize: 40, color: '#FFF', letterSpacing: '0.05em', lineHeight: 1 }}>
                 {isCompetitor ? 'LOCK IN' : 'JOIN THE CROWD'}
               </div>
-              <div style={{ fontFamily: sans, fontSize: 12, color: '#555555', marginTop: 8 }}>
+              <div style={{ fontFamily: sans, fontSize: 12, color: '#999999', marginTop: 8 }}>
                 {isCompetitor
                   ? 'Register your team. Trade live. Last one standing wins.'
                   : 'Watch the chaos. Launch sabotages. Bet on winners.'}
@@ -264,7 +264,7 @@ export default function RegisterPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {isCompetitor && (
                 <div className="slide-in">
-                  <div style={{ fontFamily: sans, fontSize: 9, color: '#444444', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
+                  <div style={{ fontFamily: sans, fontSize: 9, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
                     TEAM NAME
                   </div>
                   <input
@@ -285,7 +285,7 @@ export default function RegisterPage() {
               )}
 
               <div className="slide-in" style={{ animationDelay: '50ms' }}>
-                <div style={{ fontFamily: sans, fontSize: 9, color: '#444444', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
+                <div style={{ fontFamily: sans, fontSize: 9, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
                   HANDLE
                 </div>
                 <input
@@ -304,8 +304,8 @@ export default function RegisterPage() {
               </div>
 
               <div className="slide-in" style={{ animationDelay: '100ms' }}>
-                <div style={{ fontFamily: sans, fontSize: 9, color: '#444444', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
-                  WALLET ADDRESS <span style={{ color: '#333333' }}>OPTIONAL</span>
+                <div style={{ fontFamily: sans, fontSize: 9, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
+                  WALLET ADDRESS <span style={{ color: '#888888' }}>OPTIONAL</span>
                 </div>
                 <input
                   value={walletAddress}
@@ -344,7 +344,7 @@ export default function RegisterPage() {
 
             <button
               onClick={handleReset}
-              style={{ background: 'transparent', border: 'none', fontFamily: sans, fontSize: 12, color: '#333333', cursor: 'pointer', alignSelf: 'center' }}
+              style={{ background: 'transparent', border: 'none', fontFamily: sans, fontSize: 12, color: '#888888', cursor: 'pointer', alignSelf: 'center' }}
             >
               BACK
             </button>
@@ -361,14 +361,14 @@ export default function RegisterPage() {
               <div style={{ fontFamily: bebas, fontSize: 40, color: '#FFF', letterSpacing: '0.05em', lineHeight: 1 }}>
                 TELL US MORE
               </div>
-              <div style={{ fontFamily: sans, fontSize: 12, color: '#555555', marginTop: 8 }}>
+              <div style={{ fontFamily: sans, fontSize: 12, color: '#999999', marginTop: 8 }}>
                 Help us match you with the right opponents and rewards.
               </div>
             </div>
 
             {/* What do you trade */}
             <div>
-              <div style={{ fontFamily: sans, fontSize: 9, color: '#444444', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+              <div style={{ fontFamily: sans, fontSize: 9, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
                 WHAT DO YOU TRADE?
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -398,7 +398,7 @@ export default function RegisterPage() {
 
             {/* Volume */}
             <div>
-              <div style={{ fontFamily: sans, fontSize: 9, color: '#444444', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+              <div style={{ fontFamily: sans, fontSize: 9, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
                 MONTHLY VOLUME
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -452,7 +452,7 @@ export default function RegisterPage() {
                 <div style={{ fontFamily: bebas, fontSize: 18, color: wantsWhitelist ? '#F5A0D0' : '#888888', letterSpacing: '0.05em' }}>
                   WHITELIST + REWARD OPPORTUNITIES
                 </div>
-                <div style={{ fontFamily: sans, fontSize: 11, color: '#444444', marginTop: 2 }}>
+                <div style={{ fontFamily: sans, fontSize: 11, color: '#999999', marginTop: 2 }}>
                   Get early access to drops, token rewards, and exclusive lobbies
                 </div>
               </div>
@@ -481,7 +481,7 @@ export default function RegisterPage() {
 
             <button
               onClick={() => setScreen('register')}
-              style={{ background: 'transparent', border: 'none', fontFamily: sans, fontSize: 12, color: '#333333', cursor: 'pointer', alignSelf: 'center' }}
+              style={{ background: 'transparent', border: 'none', fontFamily: sans, fontSize: 12, color: '#888888', cursor: 'pointer', alignSelf: 'center' }}
             >
               BACK
             </button>
@@ -523,7 +523,7 @@ export default function RegisterPage() {
                 {result.display_name}
               </div>
               {result.handle && (
-                <div style={{ fontFamily: sans, fontSize: 14, color: '#555555', marginTop: 4 }}>
+                <div style={{ fontFamily: sans, fontSize: 14, color: '#999999', marginTop: 4 }}>
                   {result.handle}
                 </div>
               )}
@@ -543,7 +543,7 @@ export default function RegisterPage() {
                   height={200}
                   style={{ imageRendering: 'pixelated' }}
                 />
-                <div style={{ fontFamily: sans, fontSize: 11, color: '#444444', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'center' }}>
+                <div style={{ fontFamily: sans, fontSize: 11, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'center' }}>
                   SCAN TO OPEN YOUR {result.is_competitor ? 'COCKPIT' : 'VIEW'}
                 </div>
               </div>
@@ -559,7 +559,7 @@ export default function RegisterPage() {
                 <div style={{ fontFamily: mono, fontSize: 28, color: '#F5A0D0', fontWeight: 700, letterSpacing: '-0.02em' }}>
                   {result.credits}
                 </div>
-                <div style={{ fontFamily: sans, fontSize: 9, color: '#444444', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                <div style={{ fontFamily: sans, fontSize: 9, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   CREDITS
                 </div>
               </div>
@@ -568,20 +568,38 @@ export default function RegisterPage() {
                 <div style={{ fontFamily: mono, fontSize: 28, color: '#FFF', fontWeight: 700, letterSpacing: '-0.02em' }}>
                   {result.code}
                 </div>
-                <div style={{ fontFamily: sans, fontSize: 9, color: '#444444', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                <div style={{ fontFamily: sans, fontSize: 9, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   ACCESS CODE
                 </div>
               </div>
             </div>
 
+            {/* Enter terminal button */}
+            <button
+              onClick={() => {
+                const path = result.is_competitor
+                  ? `/lobby/${result.lobby_id}/trade?code=${result.code}`
+                  : `/lobby/${result.lobby_id}/spectate?code=${result.code}`;
+                window.location.href = path;
+              }}
+              style={{
+                width: '100%', height: 72,
+                background: '#F5A0D0', color: '#0A0A0A',
+                border: 'none', fontFamily: bebas,
+                fontSize: 32, letterSpacing: '0.08em',
+                cursor: 'pointer',
+              }}
+            >
+              {result.is_competitor ? 'ENTER TRADING TERMINAL' : 'ENTER SPECTATOR VIEW'}
+            </button>
+
             {/* Register another */}
             <button
               onClick={handleReset}
               style={{
-                marginTop: 8,
                 background: 'transparent',
                 border: '1px solid #1A1A1A',
-                color: '#444444',
+                color: '#777',
                 fontFamily: bebas,
                 fontSize: 18,
                 letterSpacing: '0.08em',

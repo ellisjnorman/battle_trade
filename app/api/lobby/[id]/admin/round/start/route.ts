@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { createMarket } from '@/lib/prediction-markets';
 import { startPriceFeed } from '@/lib/prices';
+import { logger } from '@/lib/logger';
+import { parseBody, AdminRoundSchema } from '@/lib/validation';
+import { logAdminAction } from '@/lib/audit';
 import { checkAuth, unauthorized } from '../../auth';
 
 // Track if price feed is already running
@@ -17,11 +20,10 @@ export async function POST(
 
   const { id: lobbyId } = await params;
   const body = await request.json();
-  const { round_id } = body;
+  const parsed = parseBody(AdminRoundSchema, body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
-  if (!round_id) {
-    return NextResponse.json({ error: 'Missing round_id' }, { status: 400 });
-  }
+  const { round_id } = parsed.data;
 
   const { data, error } = await supabase
     .from('rounds')
@@ -55,8 +57,8 @@ export async function POST(
         await createMarket(lobbyId, round_id, teams);
       }
     }
-  } catch {
-    // Market creation is best-effort
+  } catch (err) {
+    logger.warn('Market creation failed (best-effort)', { lobbyId, action: 'start_round' }, err);
   }
 
   // Start price feed if not already running
@@ -79,14 +81,17 @@ export async function POST(
   // Broadcast round start
   try {
     const channel = supabase.channel(`lobby-${lobbyId}`);
-    await channel.send({
-      type: 'broadcast',
-      event: 'round_start',
-      payload: { type: 'round_start', round: data },
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await channel.send({ type: 'broadcast', event: 'round_start', payload: { type: 'round_start', round: data } });
+        setTimeout(() => supabase.removeChannel(channel), 1000);
+      }
     });
-  } catch {
-    // Broadcast is best-effort
+  } catch (err) {
+    logger.warn('Broadcast failed (best-effort)', { lobbyId, action: 'round_start' }, err);
   }
+
+  logAdminAction(lobbyId, 'round_start', { round_id, round_number: data.round_number });
 
   return NextResponse.json({ action: 'start_round', round: data });
 }

@@ -228,8 +228,24 @@ export async function applySabotageEffect(
 ): Promise<void> {
   const { supabase } = await import('./supabase');
 
-  const traderChannel = supabase.channel(`trader-${sabotage.target_id}`);
-  const lobbyChannel = supabase.channel(`lobby-${lobby_id}-sabotage`);
+  // Helper: subscribe, send, then clean up
+  const broadcast = async (channelName: string, event: string, payload: Record<string, unknown>) => {
+    const ch = supabase.channel(channelName);
+    return new Promise<void>((resolve) => {
+      ch.subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await ch.send({ type: 'broadcast', event, payload });
+          setTimeout(() => { supabase.removeChannel(ch); resolve(); }, 500);
+        }
+      });
+      // Fallback timeout
+      setTimeout(() => { supabase.removeChannel(ch); resolve(); }, 3000);
+    });
+  };
+  const traderBroadcast = (event: string, payload: Record<string, unknown>) =>
+    broadcast(`t-${sabotage.target_id}`, event, payload);
+  const lobbyBroadcast = (event: string, payload: Record<string, unknown>) =>
+    broadcast(`lobby-${lobby_id}-sabotage`, event, payload);
 
   switch (sabotage.type) {
     case 'lockout': {
@@ -255,11 +271,12 @@ export async function applySabotageEffect(
             .update({ status: 'expired' })
             .eq('id', sabotage.id);
 
-          const ch = sb.channel(`trader-${sabotage.target_id}`);
-          await ch.send({
-            type: 'broadcast',
-            event: 'sabotage',
-            payload: { type: 'lockout_lifted' },
+          const ch = sb.channel(`t-${sabotage.target_id}-unlock`);
+          ch.subscribe(async (status) => {
+            if (status === 'SUBSCRIBED') {
+              await ch.send({ type: 'broadcast', event: 'sabotage', payload: { type: 'lockout_lifted' } });
+              setTimeout(() => sb.removeChannel(ch), 500);
+            }
           });
         }, sabotage.duration_seconds * 1000);
       }
@@ -270,11 +287,7 @@ export async function applySabotageEffect(
       const headline =
         (sabotage.payload?.headline as string) ??
         'BREAKING: Exchange halting all withdrawals';
-      await traderChannel.send({
-        type: 'broadcast',
-        event: 'sabotage',
-        payload: { type: 'fake_news', headline },
-      });
+      await traderBroadcast('sabotage', { type: 'fake_news', headline });
       break;
     }
 
@@ -351,11 +364,7 @@ export async function applySabotageEffect(
     }
 
     case 'glitch': {
-      await traderChannel.send({
-        type: 'broadcast',
-        event: 'sabotage',
-        payload: { type: 'glitch', duration: 10 },
-      });
+      await traderBroadcast('sabotage', { type: 'glitch', duration: 10 });
       break;
     }
 
@@ -367,9 +376,8 @@ export async function applySabotageEffect(
         .eq('id', lobby_id)
         .single();
 
-      const symbols: string[] =
-        (lobby?.config as Record<string, unknown>)?.available_symbols as string[] ??
-        ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
+      const cfgSymbols = (lobby?.config as Record<string, unknown>)?.available_symbols as string[] ?? [];
+      const symbols: string[] = cfgSymbols.length > 0 ? cfgSymbols : ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
       const symbol = symbols[Math.floor(Math.random() * symbols.length)];
       const direction = Math.random() > 0.5 ? 'long' : 'short';
 
@@ -414,32 +422,24 @@ export async function applySabotageEffect(
         opened_at: new Date().toISOString(),
       });
 
-      await traderChannel.send({
-        type: 'broadcast',
-        event: 'sabotage',
-        payload: {
+      await traderBroadcast('sabotage', {
           type: 'forced_trade',
           symbol,
           direction,
           size,
           entry_price: priceRow.price,
-        },
       });
       break;
     }
   }
 
   // Broadcast to lobby feed
-  await lobbyChannel.send({
-    type: 'broadcast',
-    event: 'sabotage',
-    payload: {
-      type: 'sabotage_launched',
-      attacker_id: sabotage.attacker_id,
-      target_id: sabotage.target_id,
-      sabotage_type: sabotage.type,
-      cost: sabotage.cost,
-      sponsor_name: sabotage.sponsor_name,
-    },
+  await lobbyBroadcast('sabotage', {
+    type: 'sabotage_launched',
+    attacker_id: sabotage.attacker_id,
+    target_id: sabotage.target_id,
+    sabotage_type: sabotage.type,
+    cost: sabotage.cost,
+    sponsor_name: sabotage.sponsor_name,
   });
 }

@@ -78,7 +78,7 @@ function PreShowState({ countdown, sponsorLogo }: { countdown: number; sponsorLo
         {/* Logo */}
         <div className="mb-[24px] animate-fade-in">
           <img
-            src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Main%20Logo-nybM2MPFM4KGqFqGIh2sVD8QFiTxQt.png"
+            src="/brand/logo-main.png"
             alt="Battle Trade"
             className="h-[80px] w-auto"
             style={{ filter: 'drop-shadow(0 0 40px rgba(245, 160, 208, 0.3))' }}

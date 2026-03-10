@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { validateTraderInLobby } from '@/lib/validate-trader';
 import {
   SABOTAGES,
   SABOTAGE_TYPES,
@@ -15,6 +16,17 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+/** Subscribe, send, then clean up after 500ms */
+function broadcastEvent(channelName: string, event: string, payload: Record<string, unknown>) {
+  const ch = supabase.channel(channelName);
+  ch.subscribe(async (status) => {
+    if (status === 'SUBSCRIBED') {
+      await ch.send({ type: 'broadcast', event, payload });
+      setTimeout(() => supabase.removeChannel(ch), 500);
+    }
+  });
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -25,6 +37,12 @@ export async function POST(
 
   if (!attacker_id || !target_id || !type) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+  }
+
+  // Verify attacker belongs to this lobby
+  const attacker = await validateTraderInLobby(attacker_id, lobbyId);
+  if (!attacker) {
+    return NextResponse.json({ error: 'Invalid attacker' }, { status: 403 });
   }
 
   // Validate sabotage type
@@ -115,26 +133,9 @@ export async function POST(
       .single();
 
     // Broadcast to both parties
-    const targetChannel = supabase.channel(`trader-${target_id}`);
-    await targetChannel.send({
-      type: 'broadcast',
-      event: 'sabotage',
-      payload: { type: 'defense_result', result: 'shielded' },
-    });
-
-    const attackerChannel = supabase.channel(`trader-${attacker_id}`);
-    await attackerChannel.send({
-      type: 'broadcast',
-      event: 'sabotage',
-      payload: { type: 'defense_result', result: 'shielded', refund },
-    });
-
-    const lobbyChannel = supabase.channel(`lobby-${lobbyId}-sabotage`);
-    await lobbyChannel.send({
-      type: 'broadcast',
-      event: 'sabotage',
-      payload: { type: 'sabotage_shielded', target_id },
-    });
+    broadcastEvent(`t-${target_id}`, 'sabotage', { type: 'defense_result', result: 'shielded' });
+    broadcastEvent(`t-${attacker_id}`, 'sabotage', { type: 'defense_result', result: 'shielded', refund });
+    broadcastEvent(`lobby-${lobbyId}-sabotage`, 'sabotage', { type: 'sabotage_shielded', target_id });
 
     return NextResponse.json({ result: 'shielded', sabotage, refund }, { status: 200 });
   }
@@ -190,26 +191,9 @@ export async function POST(
     await applySabotageEffect(deflectedSabotage, lobbyId);
 
     // Broadcast to both parties
-    const targetChannel = supabase.channel(`trader-${target_id}`);
-    await targetChannel.send({
-      type: 'broadcast',
-      event: 'sabotage',
-      payload: { type: 'defense_result', result: 'deflected' },
-    });
-
-    const attackerChannel = supabase.channel(`trader-${attacker_id}`);
-    await attackerChannel.send({
-      type: 'broadcast',
-      event: 'sabotage',
-      payload: { type: 'sabotage_received', sabotage: deflectedSabotage },
-    });
-
-    const lobbyChannel = supabase.channel(`lobby-${lobbyId}-sabotage`);
-    await lobbyChannel.send({
-      type: 'broadcast',
-      event: 'sabotage',
-      payload: { type: 'sabotage_deflected', attacker_id, target_id },
-    });
+    broadcastEvent(`t-${target_id}`, 'sabotage', { type: 'defense_result', result: 'deflected' });
+    broadcastEvent(`t-${attacker_id}`, 'sabotage', { type: 'sabotage_received', sabotage: deflectedSabotage as unknown as Record<string, unknown> });
+    broadcastEvent(`lobby-${lobbyId}-sabotage`, 'sabotage', { type: 'sabotage_deflected', attacker_id, target_id });
 
     return NextResponse.json({ result: 'deflected', sabotage }, { status: 200 });
   }
@@ -256,12 +240,7 @@ export async function POST(
   await applySabotageEffect(sabotageRecord, lobbyId);
 
   // Broadcast to target
-  const targetChannel = supabase.channel(`trader-${target_id}`);
-  await targetChannel.send({
-    type: 'broadcast',
-    event: 'sabotage',
-    payload: { type: 'sabotage_received', sabotage: sabotageRecord },
-  });
+  broadcastEvent(`t-${target_id}`, 'sabotage', { type: 'sabotage_received', sabotage: sabotageRecord as unknown as Record<string, unknown> });
 
   return NextResponse.json({ result: 'success', sabotage: sabotageRecord }, { status: 201 });
 }

@@ -21,8 +21,13 @@ export interface LobbyConfig {
   available_symbols: string[];
   leverage_tiers: number[];
   volatility_engine: 'manual' | 'algorithmic' | 'off';
-  round_duration_seconds: number;
+  round_duration_seconds: number;           // each round (default 300 = 5 min)
+  lobby_duration_minutes?: number;          // total lobby length (15-60 min, optional)
+  scoring_mode?: 'best_round' | 'cumulative' | 'last_round';  // how winner is decided (default best_round)
   trade_execution_mode?: 'paper_only' | 'paper_plus_onchain' | 'live';
+  prediction_rake_pct?: number;   // 0-100, platform rake on prediction market payouts (default 10)
+  entry_fee?: number;             // credits required to enter (0 = free / IRL events)
+  entry_rake_pct?: number;        // 0-100, platform cut of entry fee pot (default 20)
   sponsor_api?: {
     base_url: string;
     api_key: string;
@@ -109,6 +114,9 @@ export interface Round {
   created_at: string;
 }
 
+export type OrderType = 'market' | 'limit' | 'stop_limit' | 'trailing_stop';
+export type PositionStatus = 'open' | 'pending' | 'closed' | 'cancelled' | 'stopped';
+
 export interface Position {
   id: string;
   trader_id: string;
@@ -122,6 +130,12 @@ export interface Position {
   realized_pnl: number | null;
   opened_at: string;
   closed_at: string | null;
+  order_type: OrderType;
+  limit_price: number | null;
+  stop_price: number | null;
+  trail_pct: number | null;
+  trail_peak: number | null;
+  status: PositionStatus;
 }
 
 export interface Price {

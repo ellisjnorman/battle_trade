@@ -25,13 +25,17 @@ export async function GET(
       .single();
 
     if (!latestRound) {
-      return NextResponse.json({ standings: [] });
+      return NextResponse.json({ standings: [] }, {
+        headers: { 'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=10' },
+      });
     }
     resolvedRoundId = latestRound.id;
   }
 
   if (!resolvedRoundId) {
-    return NextResponse.json({ standings: [] });
+    return NextResponse.json({ standings: [] }, {
+      headers: { 'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=10' },
+    });
   }
 
   const standings = await getLobbyStandings(lobbyId, resolvedRoundId);
@@ -56,5 +60,7 @@ export async function GET(
     teamName: s.trader.team_id ? teamMap[s.trader.team_id] ?? null : null,
   }));
 
-  return NextResponse.json({ standings: enriched });
+  return NextResponse.json({ standings: enriched }, {
+    headers: { 'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=10' },
+  });
 }

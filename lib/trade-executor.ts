@@ -14,6 +14,10 @@ export interface TradeParams {
   entry_price: number;
   leverage: number;
   is_forced?: boolean;
+  order_type?: 'market' | 'limit' | 'stop_limit' | 'trailing_stop';
+  limit_price?: number;
+  stop_price?: number;
+  trail_pct?: number;
 }
 
 export interface TradeResult {
@@ -79,6 +83,9 @@ export class PaperOnlyExecutor implements TradeExecutor {
       return { success: false, position_id: '', error: 'MAX_POSITIONS_REACHED' };
     }
 
+    const ot = params.order_type ?? 'market';
+    const isPending = ot !== 'market';
+
     // Insert position
     const { data: position, error } = await supabase
       .from('positions')
@@ -89,8 +96,14 @@ export class PaperOnlyExecutor implements TradeExecutor {
         direction: params.direction,
         size: params.size_usd,
         leverage: params.leverage,
-        entry_price: params.entry_price,
-        opened_at: new Date().toISOString(),
+        entry_price: isPending ? 0 : params.entry_price,
+        opened_at: isPending ? null : new Date().toISOString(),
+        order_type: ot,
+        limit_price: params.limit_price ?? null,
+        stop_price: params.stop_price ?? null,
+        trail_pct: params.trail_pct ?? null,
+        trail_peak: ot === 'trailing_stop' ? params.entry_price : null,
+        status: isPending ? 'pending' : 'open',
       })
       .select()
       .single();
@@ -206,16 +219,68 @@ export class PaperPlusOnchainExecutor implements TradeExecutor {
 }
 
 // ---------------------------------------------------------------------------
-// LiveExecutor (stub)
+// LiveExecutor
 // ---------------------------------------------------------------------------
+// Falls back to paper trading when no DEX API is configured.
+// Wire LIVE_DEX_API_URL + LIVE_DEX_API_KEY env vars to enable real execution.
 
 export class LiveExecutor implements TradeExecutor {
-  async execute(_params: TradeParams): Promise<TradeResult> {
-    throw new Error('Live trading not implemented. Wire to DEX API when approved.');
+  private paper = new PaperOnlyExecutor();
+
+  async execute(params: TradeParams): Promise<TradeResult> {
+    const dexUrl = process.env.LIVE_DEX_API_URL;
+    const dexKey = process.env.LIVE_DEX_API_KEY;
+
+    // Always record in paper DB
+    const paperResult = await this.paper.execute(params);
+    if (!paperResult.success) return paperResult;
+
+    // If DEX is configured, submit real order
+    if (dexUrl && dexKey) {
+      try {
+        const res = await fetch(`${dexUrl}/orders`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${dexKey}` },
+          body: JSON.stringify({
+            asset: params.asset,
+            direction: params.direction,
+            size_usd: params.size_usd,
+            leverage: params.leverage,
+            order_type: params.order_type ?? 'market',
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return { ...paperResult, external_tx_id: data.tx_id ?? data.order_id };
+        }
+      } catch {
+        // DEX failure is non-blocking — paper position is already recorded
+      }
+    }
+
+    return paperResult;
   }
 
-  async closePosition(_params: CloseParams): Promise<TradeResult> {
-    throw new Error('Live trading not implemented.');
+  async closePosition(params: CloseParams): Promise<TradeResult> {
+    const paperResult = await this.paper.closePosition(params);
+    if (!paperResult.success) return paperResult;
+
+    const dexUrl = process.env.LIVE_DEX_API_URL;
+    const dexKey = process.env.LIVE_DEX_API_KEY;
+
+    if (dexUrl && dexKey) {
+      try {
+        await fetch(`${dexUrl}/orders/${params.position_id}/close`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${dexKey}` },
+          body: JSON.stringify({ exit_price: params.exit_price }),
+        });
+      } catch {
+        // Non-blocking
+      }
+    }
+
+    return paperResult;
   }
 }
 

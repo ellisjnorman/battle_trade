@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { chargeEntryFee, getEntryFee } from '@/lib/entry-fees';
+import { parseBody, RegisterTraderSchema } from '@/lib/validation';
+import type { LobbyConfig } from '@/types';
 import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
@@ -14,11 +17,11 @@ export async function POST(
 ) {
   const { id: lobbyId } = await params;
   const body = await request.json();
-  const { display_name, handle, is_competitor, wallet_address, team_name, trading_assets, monthly_volume, wants_whitelist } = body;
+  const parsed = parseBody(RegisterTraderSchema, body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
-  if (!display_name) {
-    return NextResponse.json({ error: 'Missing display_name' }, { status: 400 });
-  }
+  const { display_name: trimmedName, handle: safeHandle, team_name: safeTeamName, wallet_address: safeWallet, wants_whitelist } = parsed.data;
+  const { is_competitor, trading_assets, monthly_volume } = body;
 
   // Capture geo from Vercel/Cloudflare headers (works in production)
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
@@ -34,24 +37,36 @@ export async function POST(
     ?? request.headers.get('cf-region')
     ?? null;
 
-  // Verify lobby exists
-  const { data: lobby } = await supabase
+  // Verify lobby exists — try UUID first, then invite code
+  let { data: lobby } = await supabase
     .from('lobbies')
     .select('id, name, config')
     .eq('id', lobbyId)
     .single();
 
   if (!lobby) {
+    const { data: byCode } = await supabase
+      .from('lobbies')
+      .select('id, name, config')
+      .eq('invite_code', lobbyId.toUpperCase())
+      .single();
+    lobby = byCode;
+  }
+
+  if (!lobby) {
     return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
   }
 
+  // Use the actual UUID for all DB inserts
+  const realLobbyId = lobby.id;
+
   // Find or create profile by handle
   let profileId: string | null = null;
-  if (handle) {
+  if (safeHandle) {
     const { data: existing } = await supabase
       .from('profiles')
       .select('id')
-      .eq('handle', handle)
+      .eq('handle', safeHandle)
       .single();
 
     if (existing) {
@@ -71,8 +86,8 @@ export async function POST(
       const { data: newProfile } = await supabase
         .from('profiles')
         .insert({
-          display_name,
-          handle,
+          display_name: trimmedName,
+          handle: safeHandle,
           credits: 0,
           is_active_trader: is_competitor !== false,
           trading_assets: trading_assets ?? null,
@@ -91,7 +106,7 @@ export async function POST(
     const { data: newProfile } = await supabase
       .from('profiles')
       .insert({
-        display_name,
+        display_name: trimmedName,
         credits: 0,
         is_active_trader: is_competitor !== false,
         trading_assets: trading_assets ?? null,
@@ -111,23 +126,23 @@ export async function POST(
   const { data: latestRound } = await supabase
     .from('rounds')
     .select('event_id')
-    .eq('lobby_id', lobbyId)
+    .eq('lobby_id', realLobbyId)
     .order('round_number', { ascending: false })
     .limit(1)
     .single();
 
-  const eventId = latestRound?.event_id ?? lobbyId;
+  const eventId = latestRound?.event_id ?? realLobbyId;
 
   // Generate unique code
   const code = generateCode();
 
   // Find or create team if team_name provided
   let teamId: string | null = null;
-  if (team_name && is_competitor !== false) {
+  if (safeTeamName && is_competitor !== false) {
     const { data: existingTeam } = await supabase
       .from('teams')
       .select('id')
-      .eq('name', team_name)
+      .eq('name', safeTeamName)
       .eq('event_id', eventId)
       .single();
 
@@ -136,7 +151,7 @@ export async function POST(
     } else {
       const { data: newTeam } = await supabase
         .from('teams')
-        .insert({ name: team_name, event_id: eventId })
+        .insert({ name: safeTeamName, event_id: eventId })
         .select()
         .single();
       if (newTeam) teamId = newTeam.id;
@@ -147,12 +162,12 @@ export async function POST(
   const { data: trader, error: traderError } = await supabase
     .from('traders')
     .insert({
-      name: display_name,
+      name: trimmedName,
       code,
-      lobby_id: lobbyId,
+      lobby_id: realLobbyId,
       event_id: eventId,
       is_eliminated: false,
-      wallet_address: wallet_address || null,
+      wallet_address: safeWallet,
       avatar_url: null,
       team_id: teamId,
     })
@@ -171,7 +186,7 @@ export async function POST(
     .from('sessions')
     .insert({
       trader_id: trader.id,
-      lobby_id: lobbyId,
+      lobby_id: realLobbyId,
       starting_balance: startingBalance,
     });
 
@@ -185,12 +200,26 @@ export async function POST(
   await supabase
     .from('credit_allocations')
     .insert({
-      lobby_id: lobbyId,
+      lobby_id: realLobbyId,
       trader_id: trader.id,
       balance: creditBalance,
       total_earned: creditBalance,
       total_spent: 0,
     });
+
+  // Charge entry fee (if configured — skipped for IRL / free lobbies)
+  const lobbyConfig = lobby.config as LobbyConfig;
+  const entryFee = getEntryFee(lobbyConfig);
+  if (entryFee > 0 && is_competitor !== false) {
+    const feeResult = await chargeEntryFee({
+      trader_id: trader.id,
+      lobby_id: realLobbyId,
+      config: lobbyConfig,
+    });
+    if (feeResult.error) {
+      return NextResponse.json({ error: feeResult.error }, { status: 400 });
+    }
+  }
 
   // Update profile credits
   if (profileId) {
@@ -212,14 +241,14 @@ export async function POST(
     {
       trader_id: trader.id,
       code,
-      lobby_id: lobbyId,
+      lobby_id: realLobbyId,
       lobby_name: lobby.name,
-      display_name,
-      handle: handle ?? null,
+      display_name: trimmedName,
+      handle: safeHandle,
       is_competitor: is_competitor !== false,
       credits: creditBalance,
-      trade_url: `${baseUrl}/lobby/${lobbyId}/trade?code=${code}`,
-      spectate_url: `${baseUrl}/lobby/${lobbyId}/spectate?code=${code}`,
+      trade_url: `${baseUrl}/lobby/${realLobbyId}/trade?code=${code}`,
+      spectate_url: `${baseUrl}/lobby/${realLobbyId}/spectate?code=${code}`,
     },
     { status: 201 },
   );

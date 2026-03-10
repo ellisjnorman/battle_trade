@@ -1,16 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { MockProvider, createMarket } from '@/lib/prediction-markets';
+import { checkAuth } from '@/app/api/lobby/[id]/admin/auth';
 
 export const dynamic = 'force-dynamic';
-
-function checkAuth(request: NextRequest): boolean {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader) return false;
-  const password = process.env.ADMIN_PASSWORD;
-  if (!password) return false;
-  return authHeader === password;
-}
 
 export async function GET(
   _request: NextRequest,
@@ -28,8 +21,10 @@ export async function GET(
     .limit(1)
     .single();
 
+  const cacheHeaders = { 'Cache-Control': 'public, s-maxage=3, stale-while-revalidate=5' };
+
   if (!activeRound) {
-    return NextResponse.json({ market: null });
+    return NextResponse.json({ market: null }, { headers: cacheHeaders });
   }
 
   const { data: market } = await supabase
@@ -40,13 +35,13 @@ export async function GET(
     .single();
 
   if (!market) {
-    return NextResponse.json({ market: null });
+    return NextResponse.json({ market: null }, { headers: cacheHeaders });
   }
 
   const provider = new MockProvider();
   const fullMarket = await provider.getMarket(market.id);
 
-  return NextResponse.json({ market: fullMarket });
+  return NextResponse.json({ market: fullMarket }, { headers: cacheHeaders });
 }
 
 export async function POST(

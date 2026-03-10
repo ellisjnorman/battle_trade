@@ -4,14 +4,16 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { ATTACKS as WEAPONS_LIST } from '@/lib/weapons';
+import { CREDIT_PACKAGES, totalCredits, type CreditPackage, type PaymentMethod } from '@/lib/payments';
+import { useToastStore } from '@/lib/toast-store';
 
 // ---------------------------------------------------------------------------
 // Fonts
 // ---------------------------------------------------------------------------
 
-const bebas = "'Bebas Neue', sans-serif";
-const mono = "'JetBrains Mono', monospace";
-const sans = "'DM Sans', sans-serif";
+const bebas = "var(--font-bebas, 'Bebas Neue'), sans-serif";
+const mono = "var(--font-jetbrains, 'JetBrains Mono'), monospace";
+const sans = "var(--font-dm-sans, 'DM Sans'), sans-serif";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -99,6 +101,9 @@ export default function SpectatePage() {
 
   const [tab, setTab] = useState<Tab>('watch');
   const [spectatorId, setSpectatorId] = useState<string | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const addToast = useToastStore((s) => s.addToast);
+  const [betStreak, setBetStreak] = useState(0);
 
   // Round
   const [round, setRound] = useState<RoundData | null>(null);
@@ -127,23 +132,52 @@ export default function SpectatePage() {
   const [selectedOutcome, setSelectedOutcome] = useState<string | null>(null);
   const [betAmount, setBetAmount] = useState<number | null>(null);
   const [currentBet, setCurrentBet] = useState<BetState | null>(null);
+  const [eventAlert, setEventAlert] = useState<{ headline: string; expiresAt: number } | null>(null);
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [purchaseLoading, setPurchaseLoading] = useState<string | null>(null);
+
+  const handlePurchase = useCallback(async (pkg: CreditPackage, method: PaymentMethod) => {
+    if (!spectatorId) return;
+    setPurchaseLoading(`${pkg.id}-${method}`);
+    try {
+      const res = await fetch(`/api/lobby/${lobbyId}/credits/purchase`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ package_id: pkg.id, payment_method: method, trader_id: spectatorId }),
+      });
+      const data = await res.json();
+      if (!res.ok) { addToast(data.error || 'Purchase failed', 'error'); return; }
+      if (data.url) window.open(data.url, '_blank');
+    } catch { addToast('Purchase failed', 'error'); }
+    finally { setPurchaseLoading(null); }
+  }, [spectatorId, lobbyId]);
 
   // ---------------------------------------------------------------------------
   // Initialize spectator
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
-    // Look up spectator by code (simplified — use trader_id from URL or first available)
     const initSpectator = async () => {
-      if (!spectatorCode) return;
-      // For now, get all traders and use the code as lookup
+      if (!spectatorCode || !lobbyId) return;
+      // Look up trader by their unique code in this lobby
       const { data } = await supabase
         .from('traders')
         .select('id')
         .eq('lobby_id', lobbyId)
-        .limit(1)
+        .eq('code', spectatorCode)
         .single();
-      if (data) setSpectatorId(data.id);
+      if (data) {
+        setSpectatorId(data.id);
+      } else {
+        // Fallback: try using code as a trader_id directly
+        const { data: byId } = await supabase
+          .from('traders')
+          .select('id')
+          .eq('lobby_id', lobbyId)
+          .eq('id', spectatorCode)
+          .single();
+        if (byId) setSpectatorId(byId.id);
+      }
     };
     initSpectator();
   }, [lobbyId, spectatorCode]);
@@ -154,16 +188,22 @@ export default function SpectatePage() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(`/api/lobby/${lobbyId}/admin/status`, {
-        headers: { Authorization: process.env.NEXT_PUBLIC_ADMIN_PASSWORD ?? '' },
-      });
-      const data = await res.json();
-      if (data.round) setRound(data.round);
-      if (data.traders) setTraders(data.traders);
-    } catch {
-      // Fallback: fetch leaderboard
-      try {
-        const res = await fetch(`/api/lobby/${lobbyId}/leaderboard`);
+      // Fetch active round directly from supabase
+      const { data: rnds } = await supabase
+        .from('rounds')
+        .select('id, round_number, status, started_at, duration_seconds')
+        .eq('lobby_id', lobbyId)
+        .in('status', ['active', 'frozen', 'pending'])
+        .order('round_number', { ascending: false })
+        .limit(1);
+      const activeRound = rnds?.[0] ?? null;
+      if (activeRound) setRound(activeRound as RoundData);
+
+      // Fetch leaderboard from public endpoint
+      const roundId = activeRound?.id ?? round?.id;
+      const url = roundId ? `/api/lobby/${lobbyId}/leaderboard?round_id=${roundId}` : `/api/lobby/${lobbyId}/leaderboard`;
+      const res = await fetch(url);
+      if (res.ok) {
         const data = await res.json();
         if (data.standings) {
           setTraders(data.standings.map((s: Record<string, unknown>) => ({
@@ -178,9 +218,9 @@ export default function SpectatePage() {
             activity_status: null,
           })));
         }
-      } catch {
-        // silent
       }
+    } catch {
+      // silent
     }
   }, [lobbyId]);
 
@@ -257,7 +297,14 @@ export default function SpectatePage() {
 
     // Lobby channel — round events, forced trades
     const lobbyCh = supabase.channel(`lobby-${lobbyId}`);
-    lobbyCh.on('broadcast', { event: 'forced_trade_public' }, ({ payload }) => {
+    lobbyCh.on('broadcast', { event: 'volatility_event' }, ({ payload }) => {
+      if (!payload) return;
+      const headline = (payload.headline as string) ?? `${(payload.type as string ?? 'EVENT').replace(/_/g, ' ').toUpperCase()}`;
+      const dur = (payload.duration_seconds as number) ?? 60;
+      setEventAlert({ headline, expiresAt: Date.now() + dur * 1000 });
+      const id = `feed-${++feedIdCounter.current}`;
+      setFeed((prev) => [{ id, type: 'market_event' as const, title: headline, subtitle: `${dur}s duration`, color: '#FF3333', icon: '⚡', timestamp: Date.now() }, ...prev].slice(0, 30));
+    }).on('broadcast', { event: 'forced_trade_public' }, ({ payload }) => {
       if (!payload) return;
       const id = `feed-${++feedIdCounter.current}`;
       setFeed((prev) => [{
@@ -283,9 +330,7 @@ export default function SpectatePage() {
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
-    fetchStatus();
-    fetchCredits();
-    fetchMarket();
+    Promise.all([fetchStatus(), fetchCredits(), fetchMarket()]).finally(() => setInitialLoading(false));
     const interval = setInterval(() => {
       fetchStatus();
       fetchCredits();
@@ -344,6 +389,13 @@ export default function SpectatePage() {
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
   }, [round]);
+
+  // Event alert countdown
+  useEffect(() => {
+    if (!eventAlert) return;
+    const i = setInterval(() => { if (Date.now() >= eventAlert.expiresAt) setEventAlert(null); }, 1000);
+    return () => clearInterval(i);
+  }, [eventAlert]);
 
   // Cooldown timer
   useEffect(() => {
@@ -416,9 +468,13 @@ export default function SpectatePage() {
         setSelectedTarget(null);
         setSelectedWeapon(null);
         fetchCredits();
+        addToast(`${weapon.icon} ${weapon.name} launched at ${targetName}!`, 'attack', weapon.icon);
+        setAttackHits((h) => ({ ...h, [selectedTarget!]: (h[selectedTarget!] ?? 0) + 1 }));
+      } else {
+        addToast(data?.error || 'Attack failed', 'error');
       }
     } catch {
-      // silent
+      addToast('Network error', 'error');
     }
   };
 
@@ -439,18 +495,22 @@ export default function SpectatePage() {
 
       if (res.ok && data.success) {
         const outcome = outcomes.find((o) => o.id === selectedOutcome);
+        const payout = data.potential_payout ?? Math.round(betAmount * (outcome?.odds ?? 1));
         setCurrentBet({
           outcome_id: selectedOutcome,
           team_name: outcome?.team_name ?? '???',
           amount: betAmount,
-          potential_payout: data.potential_payout ?? Math.round(betAmount * (outcome?.odds ?? 1)),
+          potential_payout: payout,
           locked: true,
         });
         setCredits(data.new_balance ?? credits - betAmount);
         fetchMarket();
+        addToast(`${betAmount}CR on ${outcome?.team_name ?? '???'} · Payout: +${payout}CR`, 'success', '🎲');
+      } else {
+        addToast(data?.error || 'Bet failed', 'error');
       }
     } catch {
-      // silent
+      addToast('Network error', 'error');
     }
   };
 
@@ -462,7 +522,7 @@ export default function SpectatePage() {
   const remainingStr = `${Math.floor(remaining / 60).toString().padStart(2, '0')}:${(remaining % 60).toString().padStart(2, '0')}`;
   const isLowTime = remaining < 120 && remaining > 0;
 
-  const activeTraders = traders.filter((t) => !t.is_eliminated && t.rank !== null).sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+  const activeTraders = traders.filter((t) => !t.is_eliminated && t.rank !== null && t.trader_id !== spectatorId).sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
 
   const selectedOutcomeData = outcomes.find((o) => o.id === selectedOutcome);
   const potentialPayout = betAmount && selectedOutcomeData ? Math.round(betAmount * selectedOutcomeData.odds) : 0;
@@ -473,6 +533,16 @@ export default function SpectatePage() {
   // Render
   // ---------------------------------------------------------------------------
 
+  if (initialLoading) {
+    return (
+      <div style={{ background: '#0A0A0A', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+        <div style={{ width: 8, height: 8, background: '#F5A0D0', animation: 'pulse 1s infinite' }} />
+        <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, letterSpacing: '0.05em', color: '#999' }}>LOADING SPECTATOR VIEW...</span>
+        <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }`}</style>
+      </div>
+    );
+  }
+
   return (
     <>
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
@@ -482,6 +552,8 @@ export default function SpectatePage() {
         @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
         @keyframes slideUp { from{transform:translateY(100%);opacity:0} to{transform:translateY(0);opacity:1} }
+        @keyframes bounceIn { 0%{transform:scale(0.3);opacity:0} 50%{transform:scale(1.05)} 70%{transform:scale(0.95)} 100%{transform:scale(1);opacity:1} }
+        @keyframes urgentPulse { 0%,100%{border-color:#FF3333;box-shadow:0 0 8px rgba(255,51,51,0.3)} 50%{border-color:#FF6666;box-shadow:0 0 16px rgba(255,51,51,0.5)} }
         .shake { animation: shake 0.3s ease-in-out; }
         .pulse { animation: pulse 1s ease-in-out infinite; }
         .slideUp { animation: slideUp 0.3s ease-out; }
@@ -505,12 +577,23 @@ export default function SpectatePage() {
           </div>
         )}
 
+        {/* EVENT ALERT BAR */}
+        {eventAlert && (
+          <div style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, borderBottom: '2px solid #FF3333', background: 'linear-gradient(90deg, rgba(255,51,51,0.12), rgba(245,160,208,0.08), rgba(255,51,51,0.12))', flexShrink: 0, animation: 'pulse 1.5s infinite' }}>
+            <span style={{ fontFamily: bebas, fontSize: 14, color: '#FF3333', letterSpacing: '0.05em' }}>⚡ {eventAlert.headline}</span>
+            <span style={{ fontFamily: mono, fontSize: 12, color: '#FF3333' }}>{Math.max(0, Math.ceil((eventAlert.expiresAt - Date.now()) / 1000))}s</span>
+          </div>
+        )}
+
         {/* ============================================================= */}
         {/* STICKY HEADER                                                 */}
         {/* ============================================================= */}
         <div style={{ padding: '12px 16px', borderBottom: '1px solid #1A1A1A', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, background: isLowTime ? 'rgba(255,51,51,0.05)' : '#0A0A0A' }}>
-          <div style={{ fontFamily: bebas, fontSize: 20, color: '#FFF', letterSpacing: '0.05em' }}>
-            ROUND {round?.round_number ?? '-'} · <span style={{ color: isLowTime ? '#FF3333' : '#FFF' }}>{round?.status === 'active' ? remainingStr : round?.status?.toUpperCase() ?? '--'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <img src="/brand/logo-main.png" alt="Battle Trade" style={{ height: 20, width: 'auto' }} />
+            <div style={{ fontFamily: bebas, fontSize: 20, color: '#FFF', letterSpacing: '0.05em' }}>
+              ROUND {round?.round_number ?? '-'} · <span style={{ color: isLowTime ? '#FF3333' : '#FFF' }}>{round?.status === 'active' ? remainingStr : round?.status?.toUpperCase() ?? '--'}</span>
+            </div>
           </div>
           <div style={{ fontFamily: bebas, fontSize: 16, color: '#F5A0D0' }}>LEVERAGE {currentLeverage}X</div>
         </div>
@@ -529,8 +612,8 @@ export default function SpectatePage() {
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {feed.length === 0 && (
                   <div style={{ padding: 32, textAlign: 'center' }}>
-                    <div style={{ fontFamily: bebas, fontSize: 24, color: '#333' }}>WAITING FOR ACTION...</div>
-                    <div style={{ fontFamily: sans, fontSize: 12, color: '#333', marginTop: 8 }}>Events will appear here in real-time</div>
+                    <div style={{ fontFamily: bebas, fontSize: 24, color: '#666' }}>WAITING FOR ACTION...</div>
+                    <div style={{ fontFamily: sans, fontSize: 12, color: '#666', marginTop: 8 }}>Events will appear here in real-time</div>
                   </div>
                 )}
                 {feed.map((item) => (
@@ -607,9 +690,11 @@ export default function SpectatePage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
               {/* Credits */}
               <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid #1A1A1A' }}>
-                <div style={{ fontFamily: sans, fontSize: 9, color: '#444', textTransform: 'uppercase', letterSpacing: '0.1em' }}>YOUR CREDITS</div>
-                <div style={{ fontFamily: bebas, fontSize: 48, color: '#FFF', lineHeight: 1, marginTop: 4 }}>{credits}CR</div>
-                <div style={{ fontFamily: sans, fontSize: 9, color: '#333', marginTop: 4 }}>SPONSORED BY PARTNER</div>
+                <div style={{ fontFamily: sans, fontSize: 9, color: '#999', textTransform: 'uppercase', letterSpacing: '0.1em' }}>YOUR CREDITS</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ fontFamily: bebas, fontSize: 48, color: '#FFF', lineHeight: 1, marginTop: 4 }}>{credits}CR</div>
+                  <button onClick={() => setShowPurchaseModal(true)} style={{ fontFamily: bebas, fontSize: 14, color: '#0A0A0A', background: '#F5A0D0', border: 'none', padding: '6px 14px', cursor: 'pointer', letterSpacing: '0.08em', marginTop: 4 }}>BUY MORE</button>
+                </div>
               </div>
 
               {/* Cooldown */}
@@ -628,6 +713,12 @@ export default function SpectatePage() {
                     <div style={{ fontFamily: bebas, fontSize: 16, color: '#888', letterSpacing: '0.05em' }}>CHOOSE YOUR TARGET</div>
                   </div>
 
+                  {activeTraders.length === 0 && (
+                    <div style={{ padding: 32, textAlign: 'center' }}>
+                      <div style={{ fontFamily: bebas, fontSize: 24, color: '#666' }}>NO TARGETS AVAILABLE</div>
+                      <div style={{ fontFamily: sans, fontSize: 12, color: '#666', marginTop: 8 }}>Waiting for traders to join the round</div>
+                    </div>
+                  )}
                   {activeTraders.map((t) => {
                     const hits = attackHits[t.name] ?? 0;
                     const chaosWidth = Math.min(100, hits * 15);
@@ -649,7 +740,7 @@ export default function SpectatePage() {
                         }}
                       >
                         <span style={{ fontFamily: mono, fontSize: 12, color: '#666', width: 24 }}>#{t.rank}</span>
-                        <div style={{ width: 32, height: 32, background: '#1A1A1A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: bebas, fontSize: 14, color: '#555', flexShrink: 0 }}>
+                        <div style={{ width: 32, height: 32, background: '#1A1A1A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: bebas, fontSize: 14, color: '#999', flexShrink: 0 }}>
                           {t.name.charAt(0)}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -672,7 +763,7 @@ export default function SpectatePage() {
                     <div style={{ fontFamily: bebas, fontSize: 20, color: '#FFF', letterSpacing: '0.03em' }}>
                       ATTACK {traders.find((t) => t.trader_id === selectedTarget)?.name ?? '???'}?
                     </div>
-                    <button onClick={() => { setSelectedTarget(null); setSelectedWeapon(null); }} style={{ fontFamily: sans, fontSize: 10, color: '#555', background: 'transparent', border: 'none', cursor: 'pointer' }}>← BACK</button>
+                    <button onClick={() => { setSelectedTarget(null); setSelectedWeapon(null); }} style={{ fontFamily: sans, fontSize: 10, color: '#999', background: 'transparent', border: 'none', cursor: 'pointer' }}>← BACK</button>
                   </div>
 
                   {WEAPONS.map((w) => {
@@ -699,7 +790,7 @@ export default function SpectatePage() {
                         <span style={{ fontSize: 20, width: 32 }}>{w.icon}</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <span style={{ fontFamily: bebas, fontSize: 16, color: '#FFF', letterSpacing: '0.03em' }}>{w.name}</span>
-                          <span style={{ fontFamily: sans, fontSize: 10, color: '#555', marginLeft: 8 }}>{w.desc}</span>
+                          <span style={{ fontFamily: sans, fontSize: 10, color: '#999', marginLeft: 8 }}>{w.desc}</span>
                         </div>
                         <span style={{ fontFamily: bebas, fontSize: 18, color: canAfford ? '#F5A0D0' : '#FF3333' }}>{w.cost}CR</span>
                       </button>
@@ -740,22 +831,37 @@ export default function SpectatePage() {
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {/* Header */}
               <div style={{ padding: '16px 16px 12px' }}>
-                <div style={{ fontFamily: bebas, fontSize: 28, color: '#FFF', letterSpacing: '0.03em' }}>WHO WINS ROUND {round?.round_number ?? '-'}?</div>
-                <div style={{ fontFamily: mono, fontSize: 12, color: '#555', marginTop: 4 }}>{totalBets} BETS PLACED</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontFamily: bebas, fontSize: 28, color: '#FFF', letterSpacing: '0.03em' }}>WHO WINS ROUND {round?.round_number ?? '-'}?</div>
+                  {isLowTime && !currentBet?.locked && (
+                    <div style={{ fontFamily: mono, fontSize: 14, color: '#FF3333', animation: 'pulse 1s infinite', fontWeight: 700 }}>
+                      {remainingStr}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
+                  <span style={{ fontFamily: mono, fontSize: 12, color: '#999' }}>{totalBets} BETS PLACED</span>
+                  {betStreak > 0 && <span style={{ fontFamily: bebas, fontSize: 12, color: '#F5A0D0' }}>🔥 {betStreak} STREAK</span>}
+                </div>
               </div>
 
               {/* Bet result */}
               {currentBet?.result === 'won' && (
-                <div style={{ padding: 32, textAlign: 'center', background: 'rgba(0,255,136,0.08)' }}>
-                  <div style={{ fontSize: 48 }}>🏆</div>
-                  <div style={{ fontFamily: bebas, fontSize: 48, color: '#00FF88', marginTop: 8 }}>YOU CALLED IT</div>
-                  <div style={{ fontFamily: bebas, fontSize: 48, color: '#00FF88' }}>+{currentBet.potential_payout}CR ADDED</div>
+                <div style={{ padding: 32, textAlign: 'center', background: 'rgba(0,255,136,0.08)', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ fontSize: 56, animation: 'bounceIn 0.5s ease-out' }}>🏆</div>
+                  <div style={{ fontFamily: bebas, fontSize: 52, color: '#00FF88', marginTop: 8, textShadow: '0 0 30px rgba(0,255,136,0.5)', animation: 'bounceIn 0.5s ease-out 0.1s both' }}>YOU CALLED IT</div>
+                  <div style={{ fontFamily: bebas, fontSize: 52, color: '#00FF88', animation: 'bounceIn 0.5s ease-out 0.2s both' }}>+{currentBet.potential_payout}CR</div>
+                  {betStreak > 1 && (
+                    <div style={{ fontFamily: bebas, fontSize: 24, color: '#F5A0D0', marginTop: 8, animation: 'bounceIn 0.5s ease-out 0.3s both' }}>
+                      {betStreak} STREAK 🔥
+                    </div>
+                  )}
                 </div>
               )}
               {currentBet?.result === 'lost' && (
                 <div style={{ padding: 32, textAlign: 'center' }}>
-                  <div style={{ fontFamily: bebas, fontSize: 64, color: '#FF3333' }}>rekt.</div>
-                  <div style={{ fontFamily: sans, fontSize: 14, color: '#555', marginTop: 8 }}>better luck next round</div>
+                  <div style={{ fontFamily: bebas, fontSize: 72, color: '#FF3333', textShadow: '0 0 20px rgba(255,51,51,0.3)' }}>rekt.</div>
+                  <div style={{ fontFamily: sans, fontSize: 14, color: '#999', marginTop: 8 }}>-{currentBet.amount}CR · better luck next round</div>
                 </div>
               )}
 
@@ -764,7 +870,7 @@ export default function SpectatePage() {
                 <div style={{ padding: '16px', borderBottom: '1px solid #1A1A1A', background: 'rgba(245,160,208,0.05)' }}>
                   <div style={{ fontFamily: bebas, fontSize: 16, color: '#FFF' }}>YOU BET {currentBet.amount}CR ON {currentBet.team_name}</div>
                   <div style={{ fontFamily: bebas, fontSize: 20, color: '#00FF88', marginTop: 4 }}>POTENTIAL: +{currentBet.potential_payout}CR</div>
-                  <div style={{ fontFamily: mono, fontSize: 12, color: '#555', marginTop: 2 }}>
+                  <div style={{ fontFamily: mono, fontSize: 12, color: '#999', marginTop: 2 }}>
                     ODDS: {outcomes.find((o) => o.id === currentBet.outcome_id)?.odds.toFixed(1) ?? '?'}X · BET LOCKED
                   </div>
                 </div>
@@ -798,7 +904,7 @@ export default function SpectatePage() {
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
                       <span style={{ fontFamily: mono, fontSize: 11, color: '#666', width: 20 }}>#{trader?.rank ?? idx + 1}</span>
-                      <div style={{ width: 36, height: 36, background: '#1A1A1A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: bebas, fontSize: 16, color: '#555', flexShrink: 0 }}>
+                      <div style={{ width: 36, height: 36, background: '#1A1A1A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: bebas, fontSize: 16, color: '#999', flexShrink: 0 }}>
                         {o.team_name.charAt(0)}
                       </div>
                       <div style={{ minWidth: 0 }}>
@@ -814,7 +920,7 @@ export default function SpectatePage() {
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontFamily: bebas, fontSize: 24, color: '#FFF' }}>{o.odds.toFixed(1)}X</div>
-                      <div style={{ fontFamily: mono, fontSize: 10, color: '#555' }}>{(o.probability * 100).toFixed(0)}%</div>
+                      <div style={{ fontFamily: mono, fontSize: 10, color: '#999' }}>{(o.probability * 100).toFixed(0)}%</div>
                     </div>
                     {/* Volume bar */}
                     <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: '#111' }}>
@@ -827,7 +933,7 @@ export default function SpectatePage() {
               {/* Bet placement */}
               {selectedOutcome && !currentBet?.locked && (
                 <div className="slideUp" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12, borderTop: '1px solid #1A1A1A' }}>
-                  <div style={{ fontFamily: sans, fontSize: 9, color: '#444', textTransform: 'uppercase', letterSpacing: '0.1em' }}>YOUR BET</div>
+                  <div style={{ fontFamily: sans, fontSize: 9, color: '#999', textTransform: 'uppercase', letterSpacing: '0.1em' }}>YOUR BET</div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     {[50, 100, 200].map((amt) => (
                       <button
@@ -932,6 +1038,44 @@ export default function SpectatePage() {
           ))}
         </div>
       </div>
+
+      {/* Purchase Modal */}
+      {showPurchaseModal && (
+        <div onClick={() => setShowPurchaseModal(false)} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 440, background: '#0A0A0A', border: '2px solid #F5A0D0', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid #1A1A1A', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontFamily: bebas, fontSize: 20, color: '#F5A0D0' }}>BUY CREDITS</span>
+              <button onClick={() => setShowPurchaseModal(false)} style={{ fontFamily: mono, fontSize: 16, color: '#555', background: 'none', border: 'none', cursor: 'pointer' }}>X</button>
+            </div>
+            <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {CREDIT_PACKAGES.map(pkg => {
+                const tc = totalCredits(pkg);
+                return (
+                  <div key={pkg.id} style={{ border: pkg.popular ? '2px solid #F5A0D0' : '1px solid #222', background: pkg.popular ? 'rgba(245,160,208,0.04)' : '#111', padding: 12 }}>
+                    {pkg.popular && <div style={{ fontFamily: bebas, fontSize: 9, color: '#F5A0D0', marginBottom: 4, letterSpacing: '0.1em' }}>MOST POPULAR</div>}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <div>
+                        <span style={{ fontFamily: bebas, fontSize: 18, color: '#FFF' }}>{pkg.label}</span>
+                        {pkg.bonus_pct > 0 && <span style={{ fontFamily: mono, fontSize: 10, color: '#00FF88', marginLeft: 8 }}>+{pkg.bonus_pct}%</span>}
+                      </div>
+                      <span style={{ fontFamily: mono, fontSize: 14, color: '#F5A0D0' }}>${(pkg.price_usd / 100).toFixed(2)}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => handlePurchase(pkg, 'stripe')} disabled={purchaseLoading !== null} style={{ flex: 1, fontFamily: bebas, fontSize: 12, color: '#FFF', background: '#1A1A1A', border: '1px solid #333', padding: '7px 0', cursor: purchaseLoading ? 'wait' : 'pointer' }}>
+                        {purchaseLoading === `${pkg.id}-stripe` ? '...' : 'CARD / APPLE PAY'}
+                      </button>
+                      <button onClick={() => handlePurchase(pkg, 'coinbase_commerce')} disabled={purchaseLoading !== null} style={{ flex: 1, fontFamily: bebas, fontSize: 12, color: '#FFF', background: '#1A1A1A', border: '1px solid #333', padding: '7px 0', cursor: purchaseLoading ? 'wait' : 'pointer' }}>
+                        {purchaseLoading === `${pkg.id}-coinbase_commerce` ? '...' : 'CRYPTO'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{ fontFamily: sans, fontSize: 9, color: '#444', textAlign: 'center' }}>BTC, ETH, SOL, USDC, DOGE, LTC, MATIC, SHIB & more</div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

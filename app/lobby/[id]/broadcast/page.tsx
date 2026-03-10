@@ -21,7 +21,7 @@ function TopBar({ lobbyState, sponsorLogo }: { lobbyState: LobbyState; sponsorLo
       <div className="flex items-center gap-[20px]">
         <div className="relative">
           <img
-            src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Main%20Logo-nybM2MPFM4KGqFqGIh2sVD8QFiTxQt.png"
+            src="/brand/logo-main.png"
             alt="Battle Trade"
             className="h-[32px] w-auto"
           />

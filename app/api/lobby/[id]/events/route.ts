@@ -2,16 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { suspendMarket, resumeMarket } from '@/lib/prediction-markets';
 import { getPreset } from '@/lib/event-presets';
+import { checkAuth } from '@/app/api/lobby/[id]/admin/auth';
+import { logAdminAction } from '@/lib/audit';
+import { parseBody, FireEventSchema } from '@/lib/validation';
 import type { PresetEvent } from '@/lib/event-presets';
 
 export const dynamic = 'force-dynamic';
 
-function checkAuth(request: NextRequest): boolean {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader) return false;
-  const password = process.env.ADMIN_PASSWORD;
-  if (!password) return false;
-  return authHeader === password;
+/** Subscribe, send, then clean up */
+function bc(channelName: string, event: string, payload: Record<string, unknown>) {
+  const ch = supabase.channel(channelName);
+  ch.subscribe(async (status) => {
+    if (status === 'SUBSCRIBED') {
+      await ch.send({ type: 'broadcast', event, payload });
+      setTimeout(() => supabase.removeChannel(ch), 500);
+    }
+  });
 }
 
 export async function GET(
@@ -86,9 +92,10 @@ export async function POST(
     return NextResponse.json({ preset_id, events_fired: firedEvents.length, events: firedEvents }, { status: 201 });
   }
 
-  if (!type) {
-    return NextResponse.json({ error: 'Missing event type' }, { status: 400 });
-  }
+  const parsed = parseBody(FireEventSchema, body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
+
+  const { type: validatedType, asset: validatedAsset, magnitude: validatedMagnitude, duration_seconds: validatedDuration, trigger_mode: validatedTriggerMode } = parsed.data;
 
   // Validate lobby has an active round
   const { data: activeRound } = await supabase
@@ -107,12 +114,12 @@ export async function POST(
     .from('volatility_events')
     .insert({
       lobby_id: lobbyId,
-      type,
-      asset: asset ?? null,
-      magnitude: magnitude ?? null,
-      duration_seconds: duration_seconds ?? null,
+      type: validatedType,
+      asset: validatedAsset ?? null,
+      magnitude: validatedMagnitude ?? null,
+      duration_seconds: validatedDuration ?? null,
       headline: headline ?? null,
-      trigger_mode: trigger_mode ?? 'manual',
+      trigger_mode: validatedTriggerMode,
       fired_at: new Date().toISOString(),
       created_by: created_by ?? null,
     })
@@ -124,15 +131,10 @@ export async function POST(
   }
 
   // Broadcast event_start to lobby channel
-  const channel = supabase.channel(`lobby-${lobbyId}-events`);
-  await channel.send({
-    type: 'broadcast',
-    event: 'volatility',
-    payload: {
-      type: 'event_start',
-      event: eventRecord,
-      secondsRemaining: duration_seconds ?? 60,
-    },
+  bc(`lobby-${lobbyId}-events`, 'volatility', {
+    type: 'event_start',
+    event: eventRecord,
+    secondsRemaining: validatedDuration ?? 60,
   });
 
   // If there's an active prediction market, suspend it during the event
@@ -145,42 +147,26 @@ export async function POST(
 
   if (market) {
     await suspendMarket(market.id);
-
-    // Broadcast market suspended
-    await channel.send({
-      type: 'broadcast',
-      event: 'market',
-      payload: { type: 'market_suspended', reason: `Volatility event: ${type}` },
-    });
+    bc(`lobby-${lobbyId}-events`, 'market', { type: 'market_suspended', reason: `Volatility event: ${validatedType}` });
   }
 
   // Schedule event completion
-  if (duration_seconds && duration_seconds > 0) {
+  if (validatedDuration && validatedDuration > 0) {
     setTimeout(async () => {
-      // Broadcast event_complete
-      const completeChannel = supabase.channel(`lobby-${lobbyId}-events`);
-      await completeChannel.send({
-        type: 'broadcast',
-        event: 'volatility',
-        payload: { type: 'event_complete', event: eventRecord },
-      });
-
-      // Resume market
+      bc(`lobby-${lobbyId}-events`, 'volatility', { type: 'event_complete', event: eventRecord });
       if (market) {
         await resumeMarket(market.id);
-        await completeChannel.send({
-          type: 'broadcast',
-          event: 'market',
-          payload: { type: 'market_resumed' },
-        });
+        bc(`lobby-${lobbyId}-events`, 'market', { type: 'market_resumed' });
       }
-    }, (duration_seconds ?? 60) * 1000);
+    }, (validatedDuration ?? 60) * 1000);
   }
 
   // Handle leverage_surge: double position sizes and check liquidations
-  if (type === 'leverage_surge') {
+  if (validatedType === 'leverage_surge') {
     await applyLeverageSurge(lobbyId);
   }
+
+  logAdminAction(lobbyId, 'fire_event', { type: validatedType, asset: validatedAsset });
 
   return NextResponse.json(eventRecord, { status: 201 });
 }
@@ -211,26 +197,16 @@ async function fireEvent(lobbyId: string, event: PresetEvent, headline: string) 
   if (error) return { error: error.message };
 
   // Broadcast
-  const channel = supabase.channel(`lobby-${lobbyId}-events`);
-  await channel.send({
-    type: 'broadcast',
-    event: 'volatility',
-    payload: {
-      type: 'event_start',
-      event: record,
-      secondsRemaining: event.duration_seconds,
-    },
+  bc(`lobby-${lobbyId}-events`, 'volatility', {
+    type: 'event_start',
+    event: record,
+    secondsRemaining: event.duration_seconds,
   });
 
   // Schedule completion
   if (event.duration_seconds > 0) {
-    setTimeout(async () => {
-      const ch = supabase.channel(`lobby-${lobbyId}-events`);
-      await ch.send({
-        type: 'broadcast',
-        event: 'volatility',
-        payload: { type: 'event_complete', event: record },
-      });
+    setTimeout(() => {
+      bc(`lobby-${lobbyId}-events`, 'volatility', { type: 'event_complete', event: record });
     }, event.duration_seconds * 1000);
   }
 
@@ -275,12 +251,7 @@ async function applyLeverageSurge(lobbyId: string) {
   }
 
   // Broadcast the surge
-  const channel = supabase.channel(`lobby-${lobbyId}-events`);
-  await channel.send({
-    type: 'broadcast',
-    event: 'volatility',
-    payload: { type: 'leverage_surge_applied', positions_affected: positions.length },
-  });
+  bc(`lobby-${lobbyId}-events`, 'volatility', { type: 'leverage_surge_applied', positions_affected: positions.length });
 
   // Check liquidations after surge
   const { data: prices } = await supabase.from('prices').select('symbol, price');

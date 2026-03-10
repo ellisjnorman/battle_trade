@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { startParticipationLoop } from '@/lib/participation-rules';
+import { logAdminAction } from '@/lib/audit';
 import { checkAuth, unauthorized } from '../../auth';
 import { getCleanup, setCleanup, removeCleanup } from '../../participation';
 
@@ -54,6 +55,8 @@ export async function POST(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  logAdminAction(lobbyId, 'next_round', { new_round_id: data.id });
 
   return NextResponse.json({ action: 'next_round', round: data });
 }

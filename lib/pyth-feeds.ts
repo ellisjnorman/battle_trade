@@ -6,20 +6,53 @@
 
 export type AssetCategory = 'crypto' | 'equity' | 'commodity';
 
+/** Market type for UI grouping — crypto / RWA / perps / spot */
+export type MarketType = 'crypto' | 'rwa' | 'perps' | 'spot';
+
 export interface FeedEntry {
   id: string;          // Pyth feed ID (hex, no 0x prefix)
   label: string;       // Human-readable label, e.g. "Bitcoin"
   category: AssetCategory;
+  market: MarketType;  // UI grouping
 }
 
-// ── Crypto ────────────────────────────────────────────────────────────
-const crypto = (id: string, label: string): FeedEntry => ({ id, label, category: 'crypto' });
+// ── Crypto (perps) ────────────────────────────────────────────────────
+const crypto = (id: string, label: string): FeedEntry => ({ id, label, category: 'crypto', market: 'crypto' });
 
-// ── Equities ──────────────────────────────────────────────────────────
-const equity = (id: string, label: string): FeedEntry => ({ id, label, category: 'equity' });
+// ── Equities (RWAs) ──────────────────────────────────────────────────
+const equity = (id: string, label: string): FeedEntry => ({ id, label, category: 'equity', market: 'rwa' });
 
-// ── Commodities / RWAs ────────────────────────────────────────────────
-const commodity = (id: string, label: string): FeedEntry => ({ id, label, category: 'commodity' });
+// ── Commodities (RWAs) ───────────────────────────────────────────────
+const commodity = (id: string, label: string): FeedEntry => ({ id, label, category: 'commodity', market: 'rwa' });
+
+/** Market type labels for UI */
+export const MARKET_TYPES: { key: MarketType; label: string }[] = [
+  { key: 'crypto', label: 'CRYPTO' },
+  { key: 'rwa', label: 'RWAs' },
+  { key: 'perps', label: 'PERPS' },
+  { key: 'spot', label: 'SPOT' },
+];
+
+/** Get feeds grouped by market type */
+export function getFeedsByMarket(): Record<MarketType, { symbol: string; entry: FeedEntry }[]> {
+  const groups: Record<MarketType, { symbol: string; entry: FeedEntry }[]> = { crypto: [], rwa: [], perps: [], spot: [] };
+  for (const [symbol, entry] of Object.entries(PYTH_FEEDS)) {
+    const sym = symbol.replace('USD', '');
+    // Crypto assets appear in both crypto and perps
+    if (entry.market === 'crypto') {
+      groups.crypto.push({ symbol: sym, entry });
+      groups.perps.push({ symbol: sym, entry: { ...entry, label: `${entry.label} Perp` } });
+    } else {
+      groups[entry.market].push({ symbol: sym, entry });
+    }
+  }
+  // Spot = stablecoins + major crypto spot pairs
+  // For now, spot mirrors crypto (all are spot-priced from Pyth)
+  if (groups.spot.length === 0) {
+    groups.spot = groups.crypto.map(g => ({ ...g, entry: { ...g.entry, label: `${g.entry.label} Spot` } }));
+  }
+  return groups;
+}
 
 export const PYTH_FEEDS: Record<string, FeedEntry> = {
   // ─── Layer 1s ─────────────────────────────────────────────────────

@@ -9,15 +9,27 @@ export async function GET(
 ) {
   const { id: lobbyId } = await params;
 
-  const { data: lobby } = await supabase
+  // Try by UUID first, then by invite code
+  let { data: lobby } = await supabase
     .from('lobbies')
     .select('id, name, format, status, is_public, invite_code, created_at')
     .eq('id', lobbyId)
     .single();
 
   if (!lobby) {
+    const { data: byCode } = await supabase
+      .from('lobbies')
+      .select('id, name, format, status, is_public, invite_code, created_at')
+      .eq('invite_code', lobbyId.toUpperCase())
+      .single();
+    lobby = byCode;
+  }
+
+  if (!lobby) {
     return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
   }
 
-  return NextResponse.json(lobby);
+  return NextResponse.json(lobby, {
+    headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' },
+  });
 }

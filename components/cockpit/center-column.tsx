@@ -1,200 +1,474 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { PYTH_FEEDS, MARKET_TYPES, getFeedsByMarket, type FeedEntry } from '@/lib/pyth-feeds'
 
-interface Asset { symbol: string; price: number; change24h: number; high24h: number; low24h: number; volume: string; funding: number }
-interface OrderHistory { time: string; asset: string; type: 'long' | 'short'; size: number; result: 'open' | number }
-interface CenterColumnProps {
-  assets: Asset[]; selectedAsset: string; onAssetChange: (symbol: string) => void
-  currentPosition?: { type: 'long' | 'short'; entryPrice: number; liqPrice: number }
-  roundMinimum: number; isLockedOut: boolean; lockoutTime?: number; isFrozen: boolean
-  isFullPositions: boolean; assetRestriction?: string; isIdleWarning: boolean
-  credits: number; orderHistory: OrderHistory[]; onExecute: (direction: 'long' | 'short', size: number) => void
+interface Position {
+  id: string
+  type: 'long' | 'short'
+  asset: string
+  size: number
+  entryPrice: number
+  leverage: number
+  pnl: number
+  pnlPct: number
+  liqPrice: number
+  isNearLiquidation?: boolean
 }
 
-export function CenterColumn({ assets, selectedAsset, onAssetChange, currentPosition, roundMinimum, isLockedOut, lockoutTime, isFrozen, isFullPositions, assetRestriction, orderHistory, onExecute }: CenterColumnProps) {
-  const [selectedDirection, setSelectedDirection] = useState<'long' | 'short' | null>(null)
-  const [selectedSize, setSelectedSize] = useState<number | 'ALL IN'>(2000)
-  const [timeframe, setTimeframe] = useState('5M')
-  const asset = assets.find(a => a.symbol === selectedAsset) || assets[0]
-  const isProfit = asset.change24h >= 0
-  const sizes = [500, 1000, 2000, 5000, 'ALL IN'] as const
-  const actualSize = selectedSize === 'ALL IN' ? 99999 : selectedSize
-  const canExecute = selectedDirection && (actualSize >= roundMinimum) && !isLockedOut && !isFrozen && !isFullPositions && (!assetRestriction || assetRestriction === selectedAsset)
-  const candles = useMemo(() => generateCandleData(60, asset.price), [asset.price])
+interface CenterColumnProps {
+  assets: { symbol: string; price: number }[]
+  selectedAsset: string
+  onAssetChange: (symbol: string) => void
+  positions: Position[]
+  onClosePosition: (id: string) => void
+  currentPosition?: { type: 'long' | 'short'; entryPrice: number; liqPrice: number }
+}
 
-  const executeLabel = isLockedOut
-    ? `LOCKED ${Math.floor((lockoutTime||0)/60)}:${((lockoutTime||0)%60).toString().padStart(2,'0')}`
-    : isFrozen ? 'FROZEN'
-    : isFullPositions ? 'FULL (3/3)'
-    : assetRestriction && assetRestriction !== selectedAsset ? `${assetRestriction} ONLY`
-    : 'EXECUTE'
+// Grouped asset categories for the selector
+const CORE_ASSETS = ['BTC', 'ETH', 'SOL', 'DOGE', 'AVAX', 'LINK', 'XRP']
 
-  const executeBg = isLockedOut || (assetRestriction && assetRestriction !== selectedAsset) ? '#0D0D0D'
-    : isFrozen || isFullPositions ? '#1A1A1A'
-    : !canExecute ? '#1A1A1A'
-    : '#F5A0D0'
+function getAssetMarket(symbol: string): string {
+  const key = `${symbol}USD`
+  const feed = PYTH_FEEDS[key] as FeedEntry | undefined
+  if (!feed) return 'other'
+  return feed.market
+}
 
-  const executeColor = isLockedOut || (assetRestriction && assetRestriction !== selectedAsset) ? '#FF3333'
-    : !canExecute ? '#333'
-    : '#0A0A0A'
+export function CenterColumn({ assets, selectedAsset, onAssetChange, positions, onClosePosition, currentPosition }: CenterColumnProps) {
+  const [showAssetPicker, setShowAssetPicker] = useState(false)
+  const currentAsset = assets.find(a => a.symbol === selectedAsset)
+  const price = currentAsset?.price ?? 0
+
+  const fmtPrice = (p: number) => {
+    if (p === 0) return '---'
+    return p > 100 ? p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : p > 1 ? p.toFixed(2) : p.toFixed(6)
+  }
+
+  // Non-core assets grouped by market type
+  const nonCoreAssets = assets.filter(a => !CORE_ASSETS.includes(a.symbol))
+  const marketGroups = MARKET_TYPES.map(mt => ({
+    label: mt.label,
+    items: nonCoreAssets.filter(a => getAssetMarket(a.symbol) === mt.key),
+  })).filter(g => g.items.length > 0)
 
   return (
-    <main className="flex-1 flex flex-col bg-[#0A0A0A] overflow-hidden">
-      <div className="h-[48px] flex items-end border-b border-[#1A1A1A] shrink-0">
-        {assets.map((a) => (
-          <button key={a.symbol} onClick={() => onAssetChange(a.symbol)}
-            style={{ paddingLeft: 24, paddingRight: 24, height: '100%', display: 'flex', alignItems: 'center', fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em', fontSize: 24, color: a.symbol === selectedAsset ? 'white' : '#333', borderBottom: a.symbol === selectedAsset ? '3px solid #F5A0D0' : 'none', backgroundColor: a.symbol === selectedAsset ? '#111' : 'transparent' }}>
-            {a.symbol}
-          </button>
-        ))}
-        <div className="ml-[16px] flex items-center h-full pb-[8px]">
-          <span style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '-0.02em' }} className="text-[12px] text-[#555]">${asset.price.toLocaleString()}</span>
-        </div>
-      </div>
-
-      <div className="px-[16px] py-[12px] flex items-start justify-between shrink-0">
-        <div>
-          <div style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '-0.02em', fontSize: 44, color: 'white', lineHeight: 1 }}>
-            ${asset.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <div style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em', fontSize: 16, marginTop: 4, color: isProfit ? '#00FF88' : '#FF3333' }}>
-            {isProfit ? '+' : ''}{asset.change24h.toFixed(2)}%
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-x-[16px] gap-y-[4px] text-right">
-          {[['24H HIGH', `${asset.high24h.toLocaleString()}`], ['24H LOW', `${asset.low24h.toLocaleString()}`], ['VOLUME', asset.volume], ['FUNDING', `${asset.funding >= 0 ? '+' : ''}${asset.funding.toFixed(2)}%`]].map(([label, val], i) => (<>
-            <span key={`l${i}`} style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '-0.02em' }} className="text-[10px] text-[#333]">{label}</span>
-            <span key={`v${i}`} style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '-0.02em', color: label === 'FUNDING' ? '#F5A0D0' : '#333' }} className="text-[10px]">{val}</span>
-          </>))}
-        </div>
-      </div>
-
-      <div className="flex-1 flex flex-col mx-[16px] mb-[16px]">
-        <div className="h-[320px] bg-[#0D0D0D] shrink-0 relative" style={{ borderTop: '3px solid #F5A0D0' }}>
-          <div className="absolute top-[8px] right-[8px] flex gap-[8px] z-10">
-            {['1M','5M','15M'].map(tf => (
-              <button key={tf} onClick={() => setTimeframe(tf)} style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em', fontSize: 11, color: tf === timeframe ? '#F5A0D0' : '#333' }}>{tf}</button>
-            ))}
-          </div>
-          <CandlestickChart candles={candles} currentPrice={asset.price} entryPrice={currentPosition?.entryPrice} liqPrice={currentPosition?.liqPrice} />
-        </div>
-
-        <div className="flex h-[80px] shrink-0">
-          {(['long','short'] as const).map(dir => (
-            <button key={dir} onClick={() => setSelectedDirection(dir)}
-              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em', fontSize: 36, backgroundColor: selectedDirection === dir ? (dir === 'long' ? '#00FF88' : '#FF3333') : '#0D0D0D', color: selectedDirection === dir ? (dir === 'long' ? '#0A0A0A' : 'white') : (dir === 'long' ? '#00FF88' : '#FF3333') }}>
-              {dir.toUpperCase()}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex h-[48px] shrink-0">
-          {sizes.map((size) => {
-            const isDisabled = typeof size === 'number' && size < roundMinimum
-            const isSelected = selectedSize === size
-            const isAllIn = size === 'ALL IN'
+    <div className="flex-1 flex flex-col bg-[#0A0A0A] min-w-0 overflow-hidden">
+      {/* Asset selector strip */}
+      <div className="h-[40px] flex items-center border-b border-[#1A1A1A] shrink-0">
+        {/* Core asset tabs */}
+        <div className="flex items-center h-full overflow-x-auto">
+          {CORE_ASSETS.map(sym => {
+            const a = assets.find(x => x.symbol === sym)
+            const isSelected = sym === selectedAsset
             return (
-              <button key={size} onClick={() => !isDisabled && setSelectedSize(size)} disabled={isDisabled}
-                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em', fontSize: 17, borderTop: isSelected ? '1px solid #F5A0D0' : '1px solid #1A1A1A', backgroundColor: isSelected ? '#1A1A1A' : '#0D0D0D', color: isDisabled ? '#333' : isAllIn ? '#F5A0D0' : 'white', cursor: isDisabled ? 'not-allowed' : 'pointer', outline: isAllIn && !isSelected ? '1px solid #F5A0D0' : 'none', textDecoration: isDisabled ? 'line-through' : 'none', opacity: isDisabled ? 0.5 : 1 }}>
-                {typeof size === 'number' ? `${size.toLocaleString()}` : size}
+              <button
+                key={sym}
+                onClick={() => onAssetChange(sym)}
+                className="h-full flex items-center gap-[6px] px-[14px] shrink-0"
+                style={{
+                  fontFamily: "'Bebas Neue', sans-serif",
+                  letterSpacing: '0.05em',
+                  fontSize: 16,
+                  color: isSelected ? 'white' : '#444',
+                  borderBottom: isSelected ? '2px solid #F5A0D0' : '2px solid transparent',
+                  backgroundColor: isSelected ? 'rgba(245,160,208,0.03)' : 'transparent',
+                }}
+              >
+                {sym}
+                {a && a.price > 0 && (
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: isSelected ? '#888' : '#333', letterSpacing: '-0.02em' }}>
+                    ${a.price > 100 ? a.price.toLocaleString(undefined, { maximumFractionDigits: 0 }) : a.price.toFixed(2)}
+                  </span>
+                )}
               </button>
             )
           })}
         </div>
 
-        <button onClick={() => selectedDirection && onExecute(selectedDirection, actualSize === 99999 ? 10000 : actualSize)} disabled={!canExecute}
-          style={{ height: 64, width: '100%', fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em', fontSize: 40, backgroundColor: executeBg, color: executeColor, border: (isLockedOut || (assetRestriction && assetRestriction !== selectedAsset)) ? '2px solid #FF3333' : 'none', cursor: canExecute ? 'pointer' : 'not-allowed' }}>
-          {executeLabel}
-        </button>
+        {/* More assets dropdown */}
+        <div className="relative h-full ml-auto shrink-0">
+          <button
+            onClick={() => setShowAssetPicker(!showAssetPicker)}
+            className="h-full px-[14px] flex items-center gap-[4px]"
+            style={{
+              fontFamily: "'Bebas Neue', sans-serif",
+              letterSpacing: '0.05em',
+              fontSize: 14,
+              color: !CORE_ASSETS.includes(selectedAsset) ? '#F5A0D0' : '#333',
+              borderBottom: !CORE_ASSETS.includes(selectedAsset) ? '2px solid #F5A0D0' : '2px solid transparent',
+            }}
+          >
+            {!CORE_ASSETS.includes(selectedAsset) ? selectedAsset : 'ALL ASSETS'} &#9662;
+          </button>
 
-        {selectedDirection && (
-          <div className="flex items-center justify-between py-[8px] shrink-0">
-            <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em', fontSize: 14, color: 'white' }}>
-              {selectedAsset} {selectedDirection.toUpperCase()} ${selectedSize === 'ALL IN' ? 'ALL IN' : selectedSize?.toLocaleString()} @ 5X
-            </span>
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '-0.02em' }} className="text-[10px] text-[#555]">
-              LIQ ${(asset.price * (selectedDirection === 'long' ? 0.8 : 1.2)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          {showAssetPicker && (
+            <div
+              className="absolute top-full right-0 z-50 w-[280px] max-h-[400px] overflow-y-auto"
+              style={{ backgroundColor: '#0D0D0D', border: '1px solid #333' }}
+            >
+              {marketGroups.map(group => group.items.length > 0 && (
+                <div key={group.label}>
+                  <div className="px-[12px] py-[6px]" style={{ backgroundColor: '#111' }}>
+                    <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.1em' }} className="text-[10px] text-[#333]">{group.label}</span>
+                  </div>
+                  {group.items.map(a => (
+                    <button
+                      key={a.symbol}
+                      onClick={() => { onAssetChange(a.symbol); setShowAssetPicker(false) }}
+                      className="w-full flex items-center justify-between px-[12px] py-[8px] border-b border-[#111]"
+                      style={{ backgroundColor: a.symbol === selectedAsset ? '#1A1A1A' : 'transparent' }}
+                    >
+                      <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em' }} className="text-[14px] text-white">{a.symbol}</span>
+                      {a.price > 0 && (
+                        <span style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '-0.02em' }} className="text-[11px] text-[#555]">
+                          ${fmtPrice(a.price)}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Price hero + stats */}
+      <div className="px-[16px] py-[8px] flex items-center justify-between shrink-0 border-b border-[#0D0D0D]">
+        <div className="flex items-center gap-[16px]">
+          <span
+            style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '-0.02em' }}
+            className="text-[32px] text-white leading-none"
+          >
+            ${fmtPrice(price)}
+          </span>
+          <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em' }} className="text-[20px] text-[#333]">
+            {selectedAsset}/USD
+          </span>
+        </div>
+      </div>
+
+      {/* Chart */}
+      <div className="flex-1 relative min-h-[200px]">
+        <LivePriceChart
+          price={price}
+          entryPrice={currentPosition?.entryPrice}
+          liqPrice={currentPosition?.liqPrice}
+          direction={currentPosition?.type}
+        />
+      </div>
+
+      {/* Positions strip */}
+      {positions.length > 0 && (
+        <div className="border-t border-[#1A1A1A] shrink-0">
+          <div className="flex items-center px-[16px] py-[6px] border-b border-[#0D0D0D]">
+            <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em' }} className="text-[11px] text-[#333]">
+              OPEN POSITIONS ({positions.length}/3)
             </span>
           </div>
-        )}
-
-        <div className="text-right shrink-0">
-          <span style={{ fontFamily: "'DM Sans', sans-serif" }} className="text-[8px] text-[#444]">ROUND MIN: ${roundMinimum.toLocaleString()}</span>
-        </div>
-
-        <div className="mt-auto pt-[8px] shrink-0">
-          <h4 style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em', fontSize: 10, color: '#1A1A1A', marginBottom: 4 }}>RECENT</h4>
-          <div className="flex flex-col gap-[4px]">
-            {orderHistory.slice(0,3).map((order, i) => (
-              <div key={i} className="flex items-center gap-[8px]">
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '-0.02em' }} className="text-[10px] text-[#444]">{order.time}</span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '-0.02em' }} className="text-[10px] text-[#444]">·</span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '-0.02em' }} className="text-[10px] text-[#444]">{order.asset} {order.type.toUpperCase()} ${order.size.toLocaleString()}</span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '-0.02em', color: order.result === 'open' ? '#444' : (order.result as number) >= 0 ? '#00FF88' : '#FF3333' }} className="text-[10px]">
-                  {order.result === 'open' ? 'OPEN' : `${(order.result as number) >= 0 ? '+' : ''}${order.result}`}
-                </span>
-              </div>
+          <div className="flex flex-col">
+            {positions.map(pos => (
+              <PositionRow key={pos.id} position={pos} onClose={onClosePosition} />
             ))}
           </div>
         </div>
-      </div>
-    </main>
-  )
-}
-
-interface Candle { open: number; high: number; low: number; close: number }
-
-function generateCandleData(count: number, currentPrice: number): Candle[] {
-  const candles: Candle[] = []
-  let price = currentPrice * 0.98
-  for (let i = 0; i < count; i++) {
-    const change = (Math.random() - 0.48) * 0.005 * price
-    const open = price, close = price + change
-    const high = Math.max(open, close) + Math.random() * 0.002 * price
-    const low = Math.min(open, close) - Math.random() * 0.002 * price
-    candles.push({ open, high, low, close })
-    price = close
-  }
-  if (candles.length > 0) candles[candles.length - 1].close = currentPrice
-  return candles
-}
-
-function CandlestickChart({ candles, currentPrice, entryPrice, liqPrice }: { candles: Candle[]; currentPrice: number; entryPrice?: number; liqPrice?: number }) {
-  const allPrices = candles.flatMap(c => [c.high, c.low])
-  if (entryPrice) allPrices.push(entryPrice)
-  if (liqPrice) allPrices.push(liqPrice)
-  const minPrice = Math.min(...allPrices) * 0.999
-  const maxPrice = Math.max(...allPrices) * 1.001
-  const priceRange = maxPrice - minPrice
-  const W = 100, H = 100
-  const cw = W / candles.length * 0.8, cg = W / candles.length * 0.2
-  const toY = (p: number) => ((maxPrice - p) / priceRange) * H
-  return (
-    <div className="w-full h-full p-[8px] pr-[64px] relative">
-      <div className="absolute right-[8px] top-[8px] bottom-[8px] flex flex-col justify-between">
-        {[maxPrice, maxPrice - priceRange*0.33, maxPrice - priceRange*0.66, minPrice].map((p, i) => (
-          <span key={i} style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '-0.02em' }} className="text-[9px] text-[#1A1A1A]">{p.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-        ))}
-      </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none">
-        {candles.map((c, i) => {
-          const x = i * (cw + cg) + cg / 2
-          const bull = c.close >= c.open
-          const col = bull ? '#00FF88' : '#FF3333'
-          const bodyTop = toY(Math.max(c.open, c.close))
-          const bodyH = Math.max(toY(Math.min(c.open, c.close)) - bodyTop, 0.5)
-          return (
-            <g key={i}>
-              <line x1={x+cw/2} y1={toY(c.high)} x2={x+cw/2} y2={toY(c.low)} stroke={col} strokeWidth="0.3" />
-              <rect x={x} y={bodyTop} width={cw} height={bodyH} fill={col} />
-            </g>
-          )
-        })}
-        <line x1="0" y1={toY(currentPrice)} x2={W} y2={toY(currentPrice)} stroke="#F5A0D0" strokeWidth="0.3" strokeDasharray="2 2" />
-        {entryPrice && <line x1="0" y1={toY(entryPrice)} x2={W} y2={toY(entryPrice)} stroke="#555" strokeWidth="0.3" />}
-        {liqPrice && <line x1="0" y1={toY(liqPrice)} x2={W} y2={toY(liqPrice)} stroke="#FF3333" strokeWidth="0.3" strokeDasharray="2 2" />}
-      </svg>
+      )}
     </div>
   )
+}
+
+// ---------------------------------------------------------------------------
+// Position Row — compact horizontal position display
+// ---------------------------------------------------------------------------
+
+function PositionRow({ position, onClose }: { position: Position; onClose: (id: string) => void }) {
+  const isLong = position.type === 'long'
+  const isProfit = position.pnl >= 0
+  const dirColor = isLong ? '#00FF88' : '#FF3333'
+
+  const fmtPrice = (p: number) => p > 100 ? p.toLocaleString(undefined, { maximumFractionDigits: 2 }) : p.toFixed(2)
+
+  return (
+    <div
+      className="flex items-center justify-between px-[16px] py-[8px] border-b border-[#0D0D0D]"
+      style={{ borderLeft: `3px solid ${dirColor}` }}
+    >
+      <div className="flex items-center gap-[12px]">
+        <span
+          className="w-[20px] h-[20px] flex items-center justify-center text-[10px]"
+          style={{ fontFamily: "'Bebas Neue', sans-serif", backgroundColor: dirColor, color: isLong ? '#0A0A0A' : 'white' }}
+        >
+          {isLong ? 'L' : 'S'}
+        </span>
+        <span style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em' }} className="text-[15px] text-white">{position.asset}</span>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace" }} className="text-[11px] text-[#555]">${position.size.toLocaleString()}</span>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace" }} className="text-[10px] text-[#333]">{position.leverage}x</span>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace" }} className="text-[10px] text-[#333]">@ ${fmtPrice(position.entryPrice)}</span>
+      </div>
+      <div className="flex items-center gap-[16px]">
+        <span
+          style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '-0.02em', color: isProfit ? '#00FF88' : '#FF3333' }}
+          className="text-[14px]"
+        >
+          {isProfit ? '+' : ''}${position.pnl.toFixed(2)} ({isProfit ? '+' : ''}{position.pnlPct.toFixed(1)}%)
+        </span>
+        <span
+          style={{ fontFamily: "'JetBrains Mono', monospace" }}
+          className={`text-[10px] text-[#FF3333] ${position.isNearLiquidation ? 'animate-pulse' : ''}`}
+        >
+          LIQ ${fmtPrice(position.liqPrice)}
+        </span>
+        <button
+          onClick={() => onClose(position.id)}
+          className="px-[10px] py-[4px]"
+          style={{
+            fontFamily: "'Bebas Neue', sans-serif",
+            letterSpacing: '0.05em',
+            fontSize: 11,
+            backgroundColor: '#1A1A1A',
+            color: '#888',
+            border: '1px solid #333',
+            cursor: 'pointer',
+          }}
+        >
+          CLOSE
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Live Price Chart — smooth canvas-based line chart
+// ---------------------------------------------------------------------------
+
+function LivePriceChart({ price, entryPrice, liqPrice, direction }: {
+  price: number; entryPrice?: number; liqPrice?: number; direction?: 'long' | 'short'
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const priceHistory = useRef<{ price: number; time: number }[]>([])
+  const animFrame = useRef<number>(0)
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const rect = canvas.getBoundingClientRect()
+    const dpr = window.devicePixelRatio || 1
+    canvas.width = rect.width * dpr
+    canvas.height = rect.height * dpr
+    ctx.scale(dpr, dpr)
+    const W = rect.width
+    const H = rect.height
+
+    const history = priceHistory.current
+    if (history.length < 2) {
+      // Show empty state
+      ctx.clearRect(0, 0, W, H)
+      ctx.fillStyle = '#111'
+      ctx.font = "14px 'Bebas Neue', sans-serif"
+      ctx.textAlign = 'center'
+      ctx.fillText('WAITING FOR PRICE DATA...', W / 2, H / 2)
+      return
+    }
+
+    const prices = history.map(h => h.price)
+    const allPrices = [...prices]
+    if (entryPrice) allPrices.push(entryPrice)
+    if (liqPrice) allPrices.push(liqPrice)
+    const min = Math.min(...allPrices) * 0.9995
+    const max = Math.max(...allPrices) * 1.0005
+    const range = max - min || 1
+
+    const PAD_TOP = 24
+    const PAD_BOTTOM = 24
+    const PAD_RIGHT = 80
+    const chartH = H - PAD_TOP - PAD_BOTTOM
+    const chartW = W - PAD_RIGHT
+
+    const toY = (p: number) => PAD_TOP + chartH - ((p - min) / range) * chartH
+    const toX = (i: number) => (i / (prices.length - 1)) * chartW
+
+    // Clear
+    ctx.clearRect(0, 0, W, H)
+
+    // Background grid
+    ctx.strokeStyle = '#0D0D0D'
+    ctx.lineWidth = 0.5
+    for (let i = 0; i <= 6; i++) {
+      const y = PAD_TOP + (chartH / 6) * i
+      ctx.beginPath()
+      ctx.moveTo(0, y)
+      ctx.lineTo(chartW, y)
+      ctx.stroke()
+    }
+    // Vertical grid
+    for (let i = 0; i <= 8; i++) {
+      const x = (chartW / 8) * i
+      ctx.beginPath()
+      ctx.moveTo(x, PAD_TOP)
+      ctx.lineTo(x, H - PAD_BOTTOM)
+      ctx.stroke()
+    }
+
+    // Price area fill
+    const isUp = prices[prices.length - 1] >= prices[0]
+    const lineColor = isUp ? '#00FF88' : '#FF3333'
+
+    const gradient = ctx.createLinearGradient(0, PAD_TOP, 0, H - PAD_BOTTOM)
+    gradient.addColorStop(0, isUp ? 'rgba(0,255,136,0.06)' : 'rgba(255,51,51,0.06)')
+    gradient.addColorStop(1, 'rgba(10,10,10,0)')
+
+    ctx.beginPath()
+    ctx.moveTo(toX(0), H - PAD_BOTTOM)
+    for (let i = 0; i < prices.length; i++) {
+      ctx.lineTo(toX(i), toY(prices[i]))
+    }
+    ctx.lineTo(toX(prices.length - 1), H - PAD_BOTTOM)
+    ctx.closePath()
+    ctx.fillStyle = gradient
+    ctx.fill()
+
+    // Price line with smooth curves
+    ctx.beginPath()
+    ctx.moveTo(toX(0), toY(prices[0]))
+    for (let i = 1; i < prices.length; i++) {
+      const prevX = toX(i - 1)
+      const prevY = toY(prices[i - 1])
+      const currX = toX(i)
+      const currY = toY(prices[i])
+      const midX = (prevX + currX) / 2
+      ctx.quadraticCurveTo(prevX, prevY, midX, (prevY + currY) / 2)
+    }
+    const lastIdx = prices.length - 1
+    ctx.lineTo(toX(lastIdx), toY(prices[lastIdx]))
+    ctx.strokeStyle = lineColor
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+
+    // Current price horizontal line (dashed, subtle)
+    const lastPrice = prices[prices.length - 1]
+    const lastY = toY(lastPrice)
+    ctx.setLineDash([2, 3])
+    ctx.strokeStyle = isUp ? 'rgba(0,255,136,0.3)' : 'rgba(255,51,51,0.3)'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(toX(lastIdx), lastY)
+    ctx.lineTo(W, lastY)
+    ctx.stroke()
+    ctx.setLineDash([])
+
+    // Current price dot (pulsing effect)
+    ctx.beginPath()
+    ctx.arc(toX(lastIdx), lastY, 4, 0, Math.PI * 2)
+    ctx.fillStyle = lineColor
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(toX(lastIdx), lastY, 7, 0, Math.PI * 2)
+    ctx.strokeStyle = lineColor
+    ctx.lineWidth = 1
+    ctx.globalAlpha = 0.3
+    ctx.stroke()
+    ctx.globalAlpha = 1
+
+    // Price label on right edge
+    const priceLabel = `$${lastPrice > 100 ? lastPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : lastPrice.toFixed(4)}`
+    ctx.fillStyle = isUp ? '#0A2A0A' : '#2A0A0A'
+    const labelW = ctx.measureText(priceLabel).width + 16
+    ctx.fillRect(chartW + 4, lastY - 10, labelW, 20)
+    ctx.strokeStyle = lineColor
+    ctx.lineWidth = 1
+    ctx.strokeRect(chartW + 4, lastY - 10, labelW, 20)
+    ctx.fillStyle = lineColor
+    ctx.font = "11px 'JetBrains Mono', monospace"
+    ctx.textAlign = 'left'
+    ctx.fillText(priceLabel, chartW + 12, lastY + 4)
+
+    // Entry price line
+    if (entryPrice && entryPrice >= min && entryPrice <= max) {
+      const ey = toY(entryPrice)
+      ctx.setLineDash([6, 4])
+      ctx.strokeStyle = '#F5A0D0'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(0, ey)
+      ctx.lineTo(chartW, ey)
+      ctx.stroke()
+      ctx.setLineDash([])
+
+      ctx.fillStyle = '#1A0A1A'
+      ctx.fillRect(chartW + 4, ey - 10, 72, 20)
+      ctx.strokeStyle = '#F5A0D0'
+      ctx.strokeRect(chartW + 4, ey - 10, 72, 20)
+      ctx.fillStyle = '#F5A0D0'
+      ctx.font = "9px 'JetBrains Mono', monospace"
+      ctx.textAlign = 'left'
+      ctx.fillText(`ENTRY $${fmtPriceShort(entryPrice)}`, chartW + 8, ey + 3)
+    }
+
+    // Liquidation price line
+    if (liqPrice && liqPrice >= min && liqPrice <= max) {
+      const ly = toY(liqPrice)
+      ctx.setLineDash([2, 4])
+      ctx.strokeStyle = '#FF3333'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(0, ly)
+      ctx.lineTo(chartW, ly)
+      ctx.stroke()
+      ctx.setLineDash([])
+
+      ctx.fillStyle = '#2A0A0A'
+      ctx.fillRect(chartW + 4, ly - 10, 72, 20)
+      ctx.strokeStyle = '#FF3333'
+      ctx.strokeRect(chartW + 4, ly - 10, 72, 20)
+      ctx.fillStyle = '#FF3333'
+      ctx.font = "9px 'JetBrains Mono', monospace"
+      ctx.textAlign = 'left'
+      ctx.fillText(`LIQ $${fmtPriceShort(liqPrice)}`, chartW + 8, ly + 3)
+    }
+
+    // Y-axis price scale
+    ctx.fillStyle = '#222'
+    ctx.font = "9px 'JetBrains Mono', monospace"
+    ctx.textAlign = 'left'
+    for (let i = 0; i <= 6; i++) {
+      const p = min + range * (i / 6)
+      const y = PAD_TOP + chartH - (chartH / 6) * i
+      ctx.fillText(`$${fmtPriceShort(p)}`, chartW + 8, y + 3)
+    }
+  }, [entryPrice, liqPrice, direction])
+
+  // Accumulate price ticks
+  useEffect(() => {
+    if (price <= 0) return
+    const history = priceHistory.current
+    history.push({ price, time: Date.now() })
+    // Keep last 180 ticks (~6 minutes at 2s intervals)
+    if (history.length > 180) history.shift()
+    animFrame.current = requestAnimationFrame(draw)
+    return () => cancelAnimationFrame(animFrame.current)
+  }, [price, draw])
+
+  // Redraw on resize
+  useEffect(() => {
+    const handleResize = () => { animFrame.current = requestAnimationFrame(draw) }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [draw])
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="w-full h-full"
+      style={{ display: 'block', backgroundColor: '#0A0A0A' }}
+    />
+  )
+}
+
+function fmtPriceShort(p: number): string {
+  return p > 100 ? p.toLocaleString(undefined, { maximumFractionDigits: 0 }) : p > 1 ? p.toFixed(2) : p.toFixed(4)
 }

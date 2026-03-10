@@ -1,16 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { MockProvider } from '@/lib/prediction-markets';
+import { checkAuth } from '@/app/api/lobby/[id]/admin/auth';
 
 export const dynamic = 'force-dynamic';
-
-function checkAuth(request: NextRequest): boolean {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader) return false;
-  const password = process.env.ADMIN_PASSWORD;
-  if (!password) return false;
-  return authHeader === password;
-}
 
 export async function POST(
   request: NextRequest,
@@ -46,15 +39,12 @@ export async function POST(
   await provider.resolveMarket(market.id, winner_team_id);
 
   // Broadcast resolution
-  const channel = supabase.channel(`lobby-${lobbyId}-markets`);
-  await channel.send({
-    type: 'broadcast',
-    event: 'market',
-    payload: {
-      type: 'market_resolved',
-      winner: winner_team_id,
-      market_id: market.id,
-    },
+  const ch = supabase.channel(`lobby-${lobbyId}-markets`);
+  ch.subscribe(async (status) => {
+    if (status === 'SUBSCRIBED') {
+      await ch.send({ type: 'broadcast', event: 'market', payload: { type: 'market_resolved', winner: winner_team_id, market_id: market.id } });
+      setTimeout(() => supabase.removeChannel(ch), 500);
+    }
   });
 
   return NextResponse.json({ success: true, market_id: market.id });
