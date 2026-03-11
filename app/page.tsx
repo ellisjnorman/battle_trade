@@ -247,7 +247,7 @@ export default function LandingPage() {
         <div className="hero-grid" style={{maxWidth:1200,width:'100%',margin:'0 auto',padding:'140px 32px 80px',display:'flex',alignItems:'center',gap:80}}>
           <div className="hero-left" style={{flex:1,maxWidth:560}}>
             <div className="anim-up" style={{animationDelay:'.1s',marginBottom:20}}>
-              <span style={{fontFamily:M,fontSize:12,color:'#F5A0D0',letterSpacing:'.08em',fontWeight:500}}>LEARN. COMPETE. WIN.</span>
+              <span style={{fontFamily:M,fontSize:12,color:'#F5A0D0',letterSpacing:'.08em',fontWeight:500}}>FREE TO PLAY. REAL MONEY TO WIN.</span>
             </div>
 
             <h1 className="anim-up h1-size" style={{
@@ -262,7 +262,7 @@ export default function LandingPage() {
             </h1>
 
             <p className="anim-up" style={{animationDelay:'.4s',fontFamily:S,fontSize:17,color:'#666',lineHeight:1.7,marginBottom:36,maxWidth:420}}>
-              Trade against real people with live market prices. Drop market event cards on opponents. Climb the ranks. Free to play.
+              Trade against real people with live market prices. Drop market event cards on opponents. Win USDC prizes daily. Free to play, real money to win.
             </p>
 
             <div className="anim-up cta-stack" style={{animationDelay:'.55s',display:'flex',gap:12,marginBottom:48}}>
@@ -412,12 +412,12 @@ export default function LandingPage() {
       <section className="section-pad" style={{padding:'100px 32px',background:'rgba(255,255,255,.01)',borderTop:'1px solid rgba(255,255,255,.04)',borderBottom:'1px solid rgba(255,255,255,.04)'}}>
         <div style={{maxWidth:1000,margin:'0 auto'}}>
           <Reveal>
-            <p style={{fontFamily:S,fontSize:14,fontWeight:500,color:'#FFD700',marginBottom:12}}>Prizes & rankings</p>
+            <p style={{fontFamily:S,fontSize:14,fontWeight:500,color:'#FFD700',marginBottom:12}}>Real money. Real payouts.</p>
             <h2 style={{fontFamily:B,fontSize:'clamp(32px,5vw,56px)',lineHeight:.92,letterSpacing:'-.01em',marginBottom:20}}>
-              CLIMB THE RANKS. GET PAID.
+              WIN USDC EVERY WEEK
             </h2>
             <p style={{fontFamily:S,fontSize:15,color:'#555',maxWidth:480,lineHeight:1.7,marginBottom:56}}>
-              Daily, weekly, and monthly leaderboards with real credit payouts. The best traders earn every single day.
+              Free battles to practice. Paid battles with real entry fees and USDC prize pools. Top traders get paid daily, weekly, and monthly.
             </p>
           </Reveal>
 
@@ -426,12 +426,12 @@ export default function LandingPage() {
             <Reveal delay={.05}>
               <div className="card" style={{padding:0}}>
                 <div style={{padding:'16px 24px',borderBottom:'1px solid rgba(255,255,255,.05)'}}>
-                  <span style={{fontFamily:M,fontSize:10,fontWeight:600,color:'#888',letterSpacing:'.06em'}}>PRIZE POOLS</span>
+                  <span style={{fontFamily:M,fontSize:10,fontWeight:600,color:'#00DC82',letterSpacing:'.06em'}}>USDC PRIZE POOLS</span>
                 </div>
                 {[
-                  { period: 'DAILY', prizes: ['100', '50', '25'], col: '#00DC82', sub: 'Resets midnight UTC' },
-                  { period: 'WEEKLY', prizes: ['500', '250', '100'], col: '#F5A0D0', sub: 'Resets Monday' },
-                  { period: 'MONTHLY', prizes: ['2,000', '1,000', '500'], col: '#FFD700', sub: 'Resets 1st of month' },
+                  { period: 'DAILY', prizes: ['$100', '$50', '$25'], col: '#00DC82', sub: 'Resets midnight UTC' },
+                  { period: 'WEEKLY', prizes: ['$500', '$250', '$100'], col: '#F5A0D0', sub: 'Resets Monday' },
+                  { period: 'MONTHLY', prizes: ['$2,000', '$1,000', '$500'], col: '#FFD700', sub: 'Resets 1st of month' },
                 ].map((tier, i) => (
                   <div key={tier.period} style={{padding:'16px 24px',borderBottom:i<2?'1px solid rgba(255,255,255,.03)':'none'}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
@@ -442,7 +442,7 @@ export default function LandingPage() {
                       {['1st','2nd','3rd'].map((place, j) => (
                         <div key={place} style={{flex:1,background:'rgba(255,255,255,.02)',borderRadius:8,padding:'10px 8px',textAlign:'center',border:'1px solid rgba(255,255,255,.04)'}}>
                           <div style={{fontFamily:M,fontSize:18,fontWeight:700,color:j===0?'#FFD700':j===1?'#C0C0C0':'#CD7F32'}}>{tier.prizes[j]}</div>
-                          <div style={{fontFamily:M,fontSize:8,color:'#444',letterSpacing:'.08em',marginTop:2}}>{place} CR</div>
+                          <div style={{fontFamily:M,fontSize:8,color:'#444',letterSpacing:'.08em',marginTop:2}}>{place} USDC</div>
                         </div>
                       ))}
                     </div>
@@ -598,12 +598,12 @@ export default function LandingPage() {
         </Reveal>
         <Reveal delay={.1}>
           <p style={{fontFamily:S,fontSize:17,color:'#555',marginBottom:36}}>
-            Free. No download. Sign in and go.
+            Free to play. Real USDC prizes. No download.
           </p>
         </Reveal>
         <Reveal delay={.2}>
           <button onClick={login} className="btn-primary" style={{fontSize:20,padding:'18px 56px'}}>
-            Enter the Arena
+            Start Trading
           </button>
           <div style={{fontFamily:S,fontSize:12,color:'#333',marginTop:20}}>Google · X · Email · WalletConnect</div>
         </Reveal>

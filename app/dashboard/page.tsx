@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { usePrivy } from '@privy-io/react-auth'
 import { getOrCreateProfile } from '@/lib/auth'
-import { font, c, tierColor, tierName, globalCSS } from '@/app/design'
+import { font, c, tierColor, tierName, globalCSS, radius } from '@/app/design'
 
 // ─── Types ──────────────────────────────────────────────────
 interface UserProfile {
@@ -21,28 +21,43 @@ interface Lobby {
   current_round?: { number: number; status: string }
   top_trader?: { name: string; return_pct: number }
 }
-interface TopTrader {
-  id: string; display_name: string; tr_score: number; rank_tier: string
-  total_wins: number; win_rate: number; best_return: number
-}
-interface PeriodLeaderboard {
-  period: string; traders: TopTrader[]; payouts: Record<string, number>; resets_at: string
+interface PastBattle {
+  id: string; lobby_id: string; lobby_name: string | null
+  final_rank: number | null; final_balance: number | null; starting_balance: number | null
+  created_at: string
 }
 
-type LeaderboardPeriod = 'daily' | 'weekly' | 'monthly' | 'all-time'
+type LobbyFilter = 'all' | 'live' | 'open' | 'mine'
+type DashTab = 'battles' | 'learn' | 'history'
 
-// Simulated live feed for energy when no real activity
-const FAKE_FEED = [
-  { user: 'wolfpack', text: '10x LONG BTC', col: '#00DC82' },
-  { user: 'vega', text: 'BLOCKED BLACKOUT', col: '#7B93DB' },
-  { user: 'degen_prime', text: '+47.3% this round', col: '#00DC82' },
-  { user: 'iron_hands', text: 'LIQUIDATED', col: '#FF4466' },
-  { user: 'moon_boy', text: 'dropped HEADLINE on vega', col: '#F5A0D0' },
-  { user: 'anon', text: 'SHORT SOL 5x', col: '#FF4466' },
-  { user: 'whale_hunter', text: 'used DARK POOL', col: '#7B93DB' },
-  { user: 'paper_hands', text: 'panic closed all', col: '#FF4466' },
-  { user: 'sigma', text: '+22.1% portfolio', col: '#00DC82' },
-  { user: 'based', text: 'FORCE TRADE on moon_boy', col: '#F5A0D0' },
+// ─── Streak logic ──────────────────────────────────────────
+function calcStreak(battles: PastBattle[]): number {
+  let streak = 0
+  const sorted = [...battles].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  for (const b of sorted) {
+    if (b.final_balance != null && b.starting_balance != null && b.final_balance > b.starting_balance) streak++
+    else break
+  }
+  return streak
+}
+
+// ─── Color from lobby name (deterministic gradient) ────────
+function lobbyGradient(name: string): string {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h)
+  const hue1 = Math.abs(h) % 360
+  const hue2 = (hue1 + 40) % 360
+  return `linear-gradient(135deg, hsl(${hue1},60%,15%) 0%, hsl(${hue2},50%,8%) 100%)`
+}
+
+// Strategy tips for the Learn section
+const LEARN_CARDS = [
+  { title: 'Leverage 101', desc: 'When to use 2x vs 20x — and why 100x kills.', tag: 'BEGINNER', col: c.green },
+  { title: 'Reading the Board', desc: 'How to use the leaderboard as a trading signal.', tag: 'STRATEGY', col: c.blue },
+  { title: 'Elimination Meta', desc: 'Preservation vs aggression in elimination rounds.', tag: 'ADVANCED', col: c.pink },
+  { title: 'Sabotage Timing', desc: 'When to deploy weapons for maximum impact.', tag: 'TACTICS', col: c.gold },
+  { title: 'Position Sizing', desc: 'Risk management when the clock is ticking.', tag: 'FUNDAMENTALS', col: c.green },
+  { title: 'Hedging in Battle', desc: 'Using opposing positions to survive elimination.', tag: 'ADVANCED', col: c.pink },
 ]
 
 export default function DashboardPage() {
@@ -50,28 +65,39 @@ export default function DashboardPage() {
   const { authenticated, user, ready, logout } = usePrivy()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [lobbies, setLobbies] = useState<Lobby[]>([])
-  const [traders, setTraders] = useState<TopTrader[]>([])
   const [authReady, setAuthReady] = useState(false)
-  const [lbPeriod, setLbPeriod] = useState<LeaderboardPeriod>('weekly')
-  const [periodLb, setPeriodLb] = useState<PeriodLeaderboard | null>(null)
-  const [quickPlaying, setQuickPlaying] = useState(false)
   const [profileLoading, setProfileLoading] = useState(true)
-  const [feed, setFeed] = useState<typeof FAKE_FEED>([])
-  const [deployHover, setDeployHover] = useState(false)
-  const [managingLobby, setManagingLobby] = useState<string | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editPublic, setEditPublic] = useState(true)
+  const [quickPlaying, setQuickPlaying] = useState(false)
+  const [pastBattles, setPastBattles] = useState<PastBattle[]>([])
+  const [filter, setFilter] = useState<LobbyFilter>('all')
+  const [dashTab, setDashTab] = useState<DashTab>('battles')
+  const [selectedLobby, setSelectedLobby] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const feedRef = useRef(0)
+  const [showProfileMenu, setShowProfileMenu] = useState(false)
+  const [displayPnl, setDisplayPnl] = useState(0)
+  const targetPnl = useRef(0)
+  const animFrame = useRef<number>(0)
 
-  // Live feed ticker
+  const streak = useMemo(() => calcStreak(pastBattles), [pastBattles])
+  const totalPnl = useMemo(() => pastBattles.reduce((sum, b) => {
+    if (b.final_balance != null && b.starting_balance != null) return sum + (b.final_balance - b.starting_balance)
+    return sum
+  }, 0), [pastBattles])
+
+  // Spring animation for P&L
   useEffect(() => {
-    const i = setInterval(() => {
-      feedRef.current = (feedRef.current + 1) % FAKE_FEED.length
-      setFeed(prev => [FAKE_FEED[feedRef.current], ...prev].slice(0, 8))
-    }, 1800)
-    return () => clearInterval(i)
-  }, [])
+    targetPnl.current = totalPnl
+    const spring = () => {
+      setDisplayPnl(prev => {
+        const diff = targetPnl.current - prev
+        if (Math.abs(diff) < 0.5) return targetPnl.current
+        return prev + diff * 0.08
+      })
+      animFrame.current = requestAnimationFrame(spring)
+    }
+    animFrame.current = requestAnimationFrame(spring)
+    return () => { if (animFrame.current) cancelAnimationFrame(animFrame.current) }
+  }, [totalPnl])
 
   useEffect(() => {
     if (!ready) return
@@ -96,6 +122,7 @@ export default function DashboardPage() {
         if (r?.ok) {
           const d = await r.json()
           if (!cancelled && d?.profile) setProfile(d.profile)
+          if (!cancelled && d?.matches) setPastBattles(d.matches)
         } else if (!cancelled) {
           localStorage.removeItem('bt_profile_id')
           try {
@@ -103,28 +130,20 @@ export default function DashboardPage() {
             if (p) {
               localStorage.setItem('bt_profile_id', p.id)
               const r2 = await fetch(`/api/profile/${p.id}`)
-              if (r2.ok) { const d2 = await r2.json(); if (d2?.profile) setProfile(d2.profile) }
+              if (r2.ok) { const d2 = await r2.json(); if (d2?.profile) setProfile(d2.profile); if (d2?.matches) setPastBattles(d2.matches) }
             }
           } catch {}
         }
       }
       if (!cancelled) setProfileLoading(false)
       fetch('/api/lobbies/active').then(r => r.ok ? r.json() : { lobbies: [] }).then(d => { if (!cancelled) setLobbies(d.lobbies ?? []) }).catch(() => {})
-      fetch('/api/leaderboard/global?limit=20').then(r => r.ok ? r.json() : { traders: [] }).then(d => { if (!cancelled) setTraders(d.traders ?? []) }).catch(() => {})
     }
     load()
     const i = setInterval(() => {
       fetch('/api/lobbies/active').then(r => r.ok ? r.json() : { lobbies: [] }).then(d => setLobbies(d.lobbies ?? [])).catch(() => {})
-    }, 5000)
+    }, 15000)
     return () => { cancelled = true; clearInterval(i) }
   }, [authReady, user])
-
-  useEffect(() => {
-    fetch(`/api/leaderboard/periods?period=${lbPeriod}&limit=20`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) setPeriodLb(d) })
-      .catch(() => {})
-  }, [lbPeriod])
 
   const handleDeploy = useCallback(async () => {
     setQuickPlaying(true)
@@ -142,553 +161,492 @@ export default function DashboardPage() {
     } catch {} finally { setQuickPlaying(false) }
   }, [router])
 
-  const getAuthHeader = () => localStorage.getItem('bt_profile_id') || ''
-
-  const handleEditLobby = useCallback(async (lobbyId: string) => {
-    if (!editName.trim()) return
-    setSaving(true)
+  const [practicing, setPracticing] = useState(false)
+  const handlePractice = useCallback(async () => {
+    setPracticing(true)
     try {
-      const res = await fetch(`/api/lobby/${lobbyId}/manage`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: getAuthHeader() },
-        body: JSON.stringify({ name: editName.trim(), is_public: editPublic }),
+      const pid = localStorage.getItem('bt_profile_id')
+      const name = profile?.display_name || 'Trader'
+      const res = await fetch('/api/lobbies/practice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: pid, display_name: name, bot_count: 3 }),
       })
       if (res.ok) {
-        setLobbies(prev => prev.map(l => l.id === lobbyId ? { ...l, name: editName.trim() } : l))
-        setManagingLobby(null)
+        const { lobby_id } = await res.json()
+        router.push(`/lobby/${lobby_id}/trade`)
       }
-    } catch {} finally { setSaving(false) }
-  }, [editName, editPublic])
+    } catch {} finally { setPracticing(false) }
+  }, [router, profile])
 
   const handleDeleteLobby = useCallback(async (lobbyId: string) => {
     setSaving(true)
     try {
       const res = await fetch(`/api/lobby/${lobbyId}/manage`, {
         method: 'DELETE',
-        headers: { Authorization: getAuthHeader() },
+        headers: { Authorization: localStorage.getItem('bt_profile_id') || '' },
       })
       if (res.ok) {
         setLobbies(prev => prev.filter(l => l.id !== lobbyId))
-        setManagingLobby(null)
+        setSelectedLobby(null)
       }
     } catch {} finally { setSaving(false) }
   }, [])
 
+  // Filtered lobbies
+  const filtered = useMemo(() => {
+    let list = lobbies
+    if (filter === 'live') list = list.filter(l => l.status === 'active')
+    if (filter === 'open') list = list.filter(l => l.status === 'waiting')
+    if (filter === 'mine') list = list.filter(l => profile?.id && l.created_by === profile.id)
+    return list.sort((a, b) => {
+      if (a.status === 'active' && b.status !== 'active') return -1
+      if (b.status === 'active' && a.status !== 'active') return 1
+      return (b.player_count + b.spectator_count) - (a.player_count + a.spectator_count)
+    })
+  }, [lobbies, filter, profile])
+
   const live = lobbies.filter(b => b.status === 'active')
   const totalOnline = lobbies.reduce((a, b) => a + b.player_count + b.spectator_count, 0)
-  const myLobbies = lobbies.filter(l => profile?.id && l.created_by === profile.id)
   const tCol = tierColor(profile?.rank_tier)
   const wr = profile ? profile.win_rate * 100 : 0
-  const myRank = profile ? traders.findIndex(t => t.id === profile.id) : -1
-  const lbTraders = lbPeriod === 'all-time' ? traders : (periodLb?.traders ?? [])
-  const xpPct = profile ? Math.min(100, profile.tr_score % 100) : 0
+  const pnlPositive = displayPnl >= 0
+  const pnlColor = pnlPositive ? c.green : c.red
 
   return (
-    <div style={{ height: '100vh', background: '#050505', color: '#FFF', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ minHeight: '100vh', background: c.bg, color: '#FFF' }}>
       <style>{globalCSS}{`
-        @keyframes scanline{0%{transform:translateY(-100%)}100%{transform:translateY(100vh)}}
-        @keyframes glowPulse{0%,100%{box-shadow:0 0 20px rgba(245,160,208,.1),0 0 60px rgba(245,160,208,.05),inset 0 1px 0 rgba(255,255,255,.06)}50%{box-shadow:0 0 40px rgba(245,160,208,.2),0 0 80px rgba(245,160,208,.08),inset 0 1px 0 rgba(255,255,255,.06)}}
-        @keyframes deployPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.01)}}
-        @keyframes feedSlide{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
-        @keyframes xpFill{from{width:0}to{width:${xpPct}%}}
-        @keyframes rankGlow{0%,100%{text-shadow:0 0 12px currentColor}50%{text-shadow:0 0 24px currentColor,0 0 48px currentColor}}
-        @keyframes borderSweep{0%{border-color:rgba(245,160,208,.15)}50%{border-color:rgba(245,160,208,.35)}100%{border-color:rgba(245,160,208,.15)}}
-        @keyframes gradient{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
-        @keyframes tickerScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-
-        .deploy-btn{
-          position:relative;overflow:hidden;cursor:pointer;border:2px solid rgba(245,160,208,.3);
-          width:100%;padding:20px;font-family:${font.display};font-size:28px;letter-spacing:.1em;
-          color:#FFF;background:linear-gradient(135deg,rgba(245,160,208,.15),rgba(245,160,208,.05));
-          animation:glowPulse 3s ease-in-out infinite;
-          display:flex;align-items:center;justify-content:center;gap:12px;
-          border-radius:14px;flex-shrink:0;transition:all .2s;
-          text-shadow:0 0 20px rgba(245,160,208,.5);
+        @keyframes glowPulse{0%,100%{box-shadow:0 0 20px rgba(245,160,208,.1)}50%{box-shadow:0 0 40px rgba(245,160,208,.2)}}
+        @keyframes streakFlame{0%,100%{transform:scale(1) rotate(-2deg)}33%{transform:scale(1.1) rotate(2deg)}66%{transform:scale(1.05) rotate(-1deg)}}
+        @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+        .lobby-card{
+          border:1px solid ${c.border};border-radius:${radius.lg}px;overflow:hidden;
+          cursor:pointer;transition:all .2s cubic-bezier(.25,.1,.25,1);position:relative;
         }
-        .deploy-btn:hover{
-          background:linear-gradient(135deg,rgba(245,160,208,.25),rgba(245,160,208,.1));
-          border-color:rgba(245,160,208,.5);transform:translateY(-2px);
-          box-shadow:0 0 60px rgba(245,160,208,.2),0 8px 32px rgba(0,0,0,.5);
+        .lobby-card:hover{border-color:${c.borderHover};transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.3)}
+        .lobby-card.selected{border-color:${c.pink};box-shadow:0 0 20px rgba(245,160,208,.1)}
+        .filter-pill{
+          font-family:${font.sans};font-size:13px;font-weight:500;padding:6px 16px;
+          border-radius:999px;border:1px solid ${c.border};background:transparent;
+          color:${c.text3};cursor:pointer;transition:all .15s;white-space:nowrap;
         }
-        .deploy-btn:active{transform:scale(.98);animation:none}
-        .deploy-btn::before{
-          content:'';position:absolute;top:0;left:-100%;width:40%;height:100%;
-          background:linear-gradient(90deg,transparent,rgba(245,160,208,.08),transparent);
-          animation:scanline 4s linear infinite;
+        .filter-pill:hover{color:${c.text2};border-color:${c.borderHover}}
+        .filter-pill.active{color:${c.text};background:${c.surface};border-color:${c.pink}}
+        .tab-btn{
+          font-family:${font.sans};font-size:14px;font-weight:500;padding:8px 0;
+          border:none;background:transparent;cursor:pointer;transition:all .15s;
+          border-bottom:2px solid transparent;color:${c.text3};
         }
-
-        .hud-card{
-          background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);
-          border-radius:12px;overflow:hidden;backdrop-filter:blur(8px);
+        .tab-btn:hover{color:${c.text2}}
+        .tab-btn.active{color:${c.text};border-bottom-color:${c.pink}}
+        .learn-card{
+          border:1px solid ${c.border};border-radius:${radius.md}px;padding:20px;
+          cursor:pointer;transition:all .2s;min-width:240px;flex-shrink:0;
         }
-        .hud-header{
-          display:flex;align-items:center;justify-content:space-between;
-          padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.04);
+        .learn-card:hover{border-color:${c.borderHover};background:${c.surface};transform:translateY(-1px)}
+        .profile-menu{
+          position:absolute;top:100%;right:0;margin-top:4px;background:${c.elevated};
+          border:1px solid ${c.border};border-radius:${radius.md}px;padding:4px;min-width:160px;
+          z-index:200;animation:fadeIn .15s ease;box-shadow:0 8px 32px rgba(0,0,0,.5);
         }
-        .hud-label{
-          font-family:${font.mono};font-size:9px;font-weight:700;
-          color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.12em;
+        .profile-menu button,.profile-menu a{
+          display:flex;align-items:center;gap:8px;width:100%;padding:10px 14px;
+          font-family:${font.sans};font-size:13px;border:none;background:transparent;
+          color:${c.text2};cursor:pointer;border-radius:${radius.sm}px;text-decoration:none;
+          transition:all .1s;text-align:left;
         }
-
-        .server-row{
-          display:flex;align-items:center;gap:12px;padding:10px 14px;
-          border-bottom:1px solid rgba(255,255,255,.03);
-          transition:all .12s;cursor:pointer;position:relative;
-        }
-        .server-row:hover{background:rgba(245,160,208,.04)}
-        .server-row:hover::before{
-          content:'';position:absolute;left:0;top:0;bottom:0;width:2px;
-          background:${c.pink};
-        }
-
-        .rank-badge{
-          font-family:${font.mono};font-size:8px;font-weight:700;
-          padding:2px 8px;border-radius:3px;letter-spacing:.08em;
-        }
-
-        .xp-bar{height:3px;background:rgba(255,255,255,.04);border-radius:99px;overflow:hidden}
-        .xp-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,${c.pink},#FF6B9D);animation:xpFill 1s ease-out both .3s}
-
-        .feed-item{animation:feedSlide .3s ease both;display:flex;align-items:center;gap:8px;padding:5px 14px}
-
-        .period-tab{
-          flex:1;padding:8px 0;font-family:${font.mono};font-size:9px;font-weight:700;
-          letter-spacing:.06em;border:none;cursor:pointer;transition:all .12s;
-          border-bottom:2px solid transparent;text-transform:uppercase;
-        }
-
-        .admin-link{
-          font-family:${font.mono};font-size:8px;font-weight:700;
-          color:${c.pink};background:rgba(245,160,208,.08);border:1px solid rgba(245,160,208,.15);
-          padding:4px 10px;border-radius:3px;letter-spacing:.08em;
-          text-decoration:none;transition:all .15s;animation:borderSweep 3s ease infinite;
-        }
-        .admin-link:hover{background:rgba(245,160,208,.15);border-color:rgba(245,160,208,.4)}
-
-        .lb-row{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid rgba(255,255,255,.03);transition:all .12s;text-decoration:none;color:inherit}
-        .lb-row:hover{background:rgba(255,255,255,.02)}
-
-        @media(min-width:900px){html,body{overflow:hidden;height:100vh}}
-        @media(max-width:899px){
-          html,body{overflow:auto;height:auto}
-          .d-grid{grid-template-columns:1fr!important;grid-template-rows:auto!important;height:auto!important;overflow:auto!important}
-          .d-grid>*{min-height:0!important;max-height:none!important;overflow:visible!important;border:none!important}
-          .col-l{order:1}.col-c{order:2;padding-bottom:80px!important}.col-r{order:3}
+        .profile-menu button:hover,.profile-menu a:hover{background:${c.hover};color:${c.text}}
+        @media(max-width:768px){
+          .dash-grid{grid-template-columns:1fr!important}
+          .stat-strip{flex-wrap:wrap}
         }
       `}</style>
 
-      {/* ══ TOP BAR — minimal HUD ══ */}
+      {/* ══ NAV BAR ══ */}
       <nav style={{
-        height: 48, minHeight: 48, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 16px', borderBottom: '1px solid rgba(255,255,255,.04)', background: '#050505', flexShrink: 0,
+        position: 'sticky', top: 0, zIndex: 100, height: 56, display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between', padding: '0 20px',
+        background: 'rgba(10,10,10,.92)', backdropFilter: 'blur(20px)',
+        borderBottom: `1px solid ${c.border}`,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
           <Link href="/" style={{ display: 'flex', alignItems: 'center' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/logo-main.png" alt="BT" style={{ height: 24, width: 'auto' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+            <img src="/brand/logo-main.png" alt="BT" style={{ height: 32, width: 'auto' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
           </Link>
-          <div style={{ display: 'flex', gap: 16 }}>
-            <Link href="/dashboard" className="nav-a" style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 600, color: c.pink, textDecoration: 'none', letterSpacing: '.04em' }}>HQ</Link>
-            <Link href="/learn" className="nav-a" style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 400, color: c.text4, textDecoration: 'none', letterSpacing: '.04em' }}>LEARN</Link>
+          <div style={{ display: 'flex', gap: 20 }}>
+            {(['battles', 'learn', 'history'] as DashTab[]).map(t => (
+              <button key={t} onClick={() => setDashTab(t)} className={`tab-btn ${dashTab === t ? 'active' : ''}`}>
+                {t === 'battles' ? 'Battles' : t === 'learn' ? 'Learn' : 'History'}
+              </button>
+            ))}
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {totalOnline > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <div className="live-dot" style={{ width: 4, height: 4 }} />
-              <span style={{ fontFamily: font.mono, fontSize: 9, color: c.green, letterSpacing: '.06em' }}>{totalOnline} ONLINE</span>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {streak > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 999, background: 'rgba(255,200,0,.06)', border: '1px solid rgba(255,200,0,.12)' }}>
+              <span style={{ fontSize: 14, animation: streak >= 5 ? 'streakFlame 1.5s ease infinite' : 'none', display: 'inline-block' }}>🔥</span>
+              <span style={{ fontFamily: font.mono, fontSize: 13, fontWeight: 700, color: c.gold }}>{streak}</span>
             </div>
           )}
-          {profile && (
-            <Link href="/profile" style={{ display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none', background: 'rgba(245,160,208,.06)', border: '1px solid rgba(245,160,208,.1)', borderRadius: 6, padding: '4px 10px 4px 4px' }}>
-              <div style={{ width: 20, height: 20, borderRadius: 4, background: `${tCol}15`, border: `1.5px solid ${tCol}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontFamily: font.mono, color: tCol, fontWeight: 700 }}>{profile.display_name?.[0]?.toUpperCase()}</div>
-              <span style={{ fontFamily: font.mono, fontSize: 10, fontWeight: 700, color: c.pink }}>{profile.credits}</span>
-              <span style={{ fontFamily: font.mono, fontSize: 8, color: c.text4 }}>CR</span>
-            </Link>
+          {totalOnline > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <div className="live-dot" style={{ width: 5, height: 5 }} />
+              <span style={{ fontFamily: font.sans, fontSize: 12, color: c.green, fontWeight: 500 }}>{totalOnline} online</span>
+            </div>
           )}
-          <Link href="/create" style={{ fontFamily: font.mono, fontSize: 10, fontWeight: 700, color: c.bg, background: c.pink, padding: '6px 14px', borderRadius: 6, textDecoration: 'none', letterSpacing: '.04em' }}>+ CREATE</Link>
+          <Link href="/create" className="btn-p" style={{
+            fontFamily: font.sans, fontSize: 13, fontWeight: 600, color: c.bg,
+            background: c.pink, padding: '8px 16px', borderRadius: radius.md, textDecoration: 'none',
+          }}>+ Create</Link>
+
+          {/* Profile avatar / menu */}
+          {profile && (
+            <div style={{ position: 'relative' }}>
+              <button onClick={() => setShowProfileMenu(!showProfileMenu)} style={{
+                display: 'flex', alignItems: 'center', gap: 8, background: c.surface,
+                border: `1px solid ${c.border}`, borderRadius: radius.md, padding: '5px 12px 5px 5px',
+                cursor: 'pointer', transition: 'all .15s',
+              }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: radius.sm, background: `${tCol}15`,
+                  border: `1.5px solid ${tCol}`, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 12, fontFamily: font.sans, color: tCol, fontWeight: 700,
+                }}>{profile.display_name?.[0]?.toUpperCase()}</div>
+                <span style={{ fontFamily: font.sans, fontSize: 13, fontWeight: 600, color: c.text2 }}>{profile.display_name}</span>
+              </button>
+              {showProfileMenu && (
+                <>
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 199 }} onClick={() => setShowProfileMenu(false)} />
+                  <div className="profile-menu">
+                    <Link href="/profile" onClick={() => setShowProfileMenu(false)}>Profile</Link>
+                    <Link href="/leaderboard" onClick={() => setShowProfileMenu(false)}>Rankings</Link>
+                    <div style={{ height: 1, background: c.border, margin: '4px 0' }} />
+                    <button onClick={() => { localStorage.removeItem('bt_profile_id'); logout().then(() => router.push('/')) }} style={{ color: c.red }}>
+                      Sign out
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </nav>
 
-      {/* ══ LIVE TICKER ══ */}
-      <div style={{ height: 28, minHeight: 28, borderBottom: '1px solid rgba(255,255,255,.03)', overflow: 'hidden', display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,.01)', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24, animation: 'tickerScroll 30s linear infinite', whiteSpace: 'nowrap' }}>
-          {[...feed, ...feed, ...FAKE_FEED, ...FAKE_FEED].map((f, i) => (
-            <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10 }}>
-              <span style={{ fontFamily: font.mono, color: c.text4 }}>@{f.user}</span>
-              <span style={{ fontFamily: font.mono, color: f.col, fontWeight: 600 }}>{f.text}</span>
-            </span>
-          ))}
-        </div>
-      </div>
-
       {!authReady ? (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 'calc(100vh - 56px)' }}>
           <div className="skeleton" style={{ width: 300, height: 200 }} />
         </div>
       ) : (
-        <div className="d-grid" style={{ flex: 1, display: 'grid', gridTemplateColumns: '260px 1fr 300px', overflow: 'hidden', minHeight: 0 }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '20px 20px 80px' }}>
 
-          {/* ──── LEFT: Player Card ──── */}
-          <div className="col-l" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10, overflow: 'auto', borderRight: '1px solid rgba(255,255,255,.04)' }}>
-
-            {/* Rank Card */}
-            {profileLoading ? (
-              <div className="hud-card" style={{ padding: 20 }}>
-                <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-                  <div className="skeleton" style={{ width: 52, height: 52, borderRadius: 8 }} />
-                  <div style={{ flex: 1 }}>
-                    <div className="skeleton" style={{ width: '60%', height: 14, marginBottom: 6 }} />
-                    <div className="skeleton" style={{ width: '40%', height: 10 }} />
-                  </div>
+          {/* ══ STAT STRIP ══ */}
+          <div className="stat-strip" style={{
+            display: 'flex', gap: 16, marginBottom: 24, alignItems: 'stretch',
+          }}>
+            {/* P&L Card */}
+            <div style={{
+              flex: 1, padding: '16px 20px', borderRadius: radius.lg,
+              background: pnlPositive ? 'rgba(0,220,130,.03)' : 'rgba(255,68,102,.03)',
+              border: `1px solid ${pnlPositive ? 'rgba(0,220,130,.1)' : 'rgba(255,68,102,.1)'}`,
+              display: 'flex', alignItems: 'center', gap: 16,
+            }}>
+              <div>
+                <div style={{ fontFamily: font.sans, fontSize: 11, color: c.text3, fontWeight: 500, marginBottom: 4 }}>Total P&L</div>
+                <div style={{ fontFamily: font.mono, fontSize: 32, fontWeight: 700, color: pnlColor, lineHeight: 1 }}>
+                  {pnlPositive ? '+' : ''}{displayPnl >= 1000 || displayPnl <= -1000 ? `$${(displayPnl / 1000).toFixed(1)}K` : `$${Math.round(displayPnl)}`}
                 </div>
-                <div className="skeleton" style={{ width: '45%', height: 40, marginBottom: 8 }} />
-                <div className="skeleton" style={{ width: '100%', height: 3 }} />
               </div>
-            ) : profile ? (
-              <div className="hud-card">
-                {/* Player identity */}
-                <div style={{ padding: '16px 14px 12px' }}>
-                  <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
-                    <Link href="/profile" style={{ textDecoration: 'none' }}>
-                      <div style={{ width: 52, height: 52, borderRadius: 8, background: `linear-gradient(135deg, ${tCol}20, ${tCol}05)`, border: `2px solid ${tCol}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontFamily: font.display, color: tCol, transition: 'all .2s' }}>
-                        {profile.display_name[0]?.toUpperCase()}
-                      </div>
-                    </Link>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <Link href="/profile" style={{ fontFamily: font.sans, fontSize: 16, fontWeight: 700, color: '#FFF', textDecoration: 'none', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.display_name}</Link>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                        <span className="rank-badge" style={{ color: tCol, background: `${tCol}15`, border: `1px solid ${tCol}30` }}>{tierName(profile.rank_tier).toUpperCase()}</span>
-                        {myRank >= 0 && <span style={{ fontFamily: font.mono, fontSize: 9, color: c.text4 }}>#{myRank + 1}</span>}
-                      </div>
-                    </div>
-                  </div>
+              <div style={{ display: 'flex', alignItems: 'end', gap: 2, height: 32, marginLeft: 'auto' }}>
+                {pastBattles.slice(0, 10).reverse().map((b, i) => {
+                  const ret = b.final_balance && b.starting_balance ? (b.final_balance - b.starting_balance) / b.starting_balance : 0
+                  const h = Math.max(3, Math.min(32, Math.abs(ret) * 200 + 4))
+                  return <div key={i} style={{ width: 5, height: h, borderRadius: 2, background: ret >= 0 ? c.green : c.red, opacity: 0.3 + (i / 10) * 0.7 }} />
+                })}
+              </div>
+            </div>
 
-                  {/* TR Score — the hero number */}
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
-                    <span style={{ fontFamily: font.mono, fontSize: 48, fontWeight: 700, color: '#FFF', lineHeight: 1, animation: 'rankGlow 4s ease infinite', textShadow: `0 0 20px ${tCol}40` }}>{profile.tr_score}</span>
-                    <span style={{ fontFamily: font.mono, fontSize: 10, color: c.text4, letterSpacing: '.08em' }}>XP</span>
-                  </div>
-                  <div className="xp-bar"><div className="xp-fill" style={{ width: `${xpPct}%` }} /></div>
+            {/* Quick stats */}
+            <div style={{
+              display: 'flex', gap: 0, border: `1px solid ${c.border}`, borderRadius: radius.lg, overflow: 'hidden',
+            }}>
+              {[
+                { label: 'Battles', value: String(pastBattles.length), col: c.text },
+                { label: 'Win Rate', value: `${wr.toFixed(0)}%`, col: wr >= 50 ? c.green : c.text3 },
+                { label: 'Best', value: `${(profile?.best_return ?? 0) >= 0 ? '+' : ''}${(profile?.best_return ?? 0).toFixed(0)}%`, col: (profile?.best_return ?? 0) >= 0 ? c.green : c.red },
+                { label: 'Credits', value: String(profile?.credits ?? 0), col: c.pink },
+              ].map((s, i) => (
+                <div key={s.label} style={{
+                  padding: '12px 20px', textAlign: 'center',
+                  borderRight: i < 3 ? `1px solid ${c.border}` : 'none',
+                  background: c.surface,
+                }}>
+                  <div style={{ fontFamily: font.mono, fontSize: 20, fontWeight: 700, color: s.col, lineHeight: 1 }}>{s.value}</div>
+                  <div style={{ fontFamily: font.sans, fontSize: 10, color: c.text4, marginTop: 4, fontWeight: 500 }}>{s.label}</div>
                 </div>
+              ))}
+            </div>
+          </div>
 
-                {/* Combat stats */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderTop: '1px solid rgba(255,255,255,.04)' }}>
-                  {[
-                    { v: profile.total_wins, l: 'WINS', col: c.green },
-                    { v: `${wr.toFixed(0)}%`, l: 'WIN RATE', col: wr >= 50 ? c.green : c.red },
-                    { v: `${profile.best_return >= 0 ? '+' : ''}${profile.best_return.toFixed(0)}%`, l: 'BEST TRADE', col: profile.best_return >= 0 ? c.green : c.red },
-                    { v: profile.total_lobbies_played, l: 'DEPLOYED', col: c.text2 },
-                  ].map((s, i) => (
-                    <div key={s.l} style={{ padding: '10px 14px', borderRight: i % 2 === 0 ? '1px solid rgba(255,255,255,.04)' : 'none', borderBottom: i < 2 ? '1px solid rgba(255,255,255,.04)' : 'none' }}>
-                      <div style={{ fontFamily: font.mono, fontSize: 18, fontWeight: 700, color: s.col, lineHeight: 1 }}>{s.v}</div>
-                      <div style={{ fontFamily: font.mono, fontSize: 7, color: c.text4, letterSpacing: '.1em', marginTop: 4 }}>{s.l}</div>
-                    </div>
+          {/* ══ BATTLES TAB ══ */}
+          {dashTab === 'battles' && (
+            <>
+              {/* Quick play + filter row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+                <button onClick={handlePractice} disabled={practicing} className="btn-p" style={{
+                  fontFamily: font.sans, fontSize: 15, fontWeight: 700, color: c.bg, background: c.green,
+                  border: 'none', padding: '12px 28px', borderRadius: radius.md, cursor: 'pointer',
+                  ...(practicing ? { opacity: 0.7 } : {}),
+                }}>
+                  {practicing ? 'Creating...' : 'Practice'}
+                </button>
+                <button onClick={handleDeploy} disabled={quickPlaying} className="btn-p" style={{
+                  fontFamily: font.sans, fontSize: 15, fontWeight: 700, color: c.bg, background: c.pink,
+                  border: 'none', padding: '12px 28px', borderRadius: radius.md, cursor: 'pointer',
+                  animation: 'glowPulse 3s ease-in-out infinite',
+                  ...(quickPlaying ? { opacity: 0.7, animation: 'none' } : {}),
+                }}>
+                  {quickPlaying ? 'Finding match...' : 'Quick Play'}
+                </button>
+                <div style={{ display: 'flex', gap: 6, flex: 1, overflow: 'auto' }}>
+                  {([
+                    { key: 'all', label: `All (${lobbies.length})` },
+                    { key: 'live', label: `Live (${live.length})` },
+                    { key: 'open', label: 'Open' },
+                    { key: 'mine', label: 'My Battles' },
+                  ] as { key: LobbyFilter; label: string }[]).map(f => (
+                    <button key={f.key} onClick={() => setFilter(f.key)} className={`filter-pill ${filter === f.key ? 'active' : ''}`}>
+                      {f.key === 'live' && live.length > 0 && <span className="live-dot" style={{ width: 5, height: 5, display: 'inline-block', marginRight: 4, verticalAlign: 'middle' }} />}
+                      {f.label}
+                    </button>
                   ))}
                 </div>
               </div>
-            ) : (
-              <div className="hud-card" style={{ padding: 20, textAlign: 'center' }}>
-                <div style={{ width: 52, height: 52, borderRadius: 8, background: 'rgba(255,255,255,.03)', border: '2px solid rgba(255,255,255,.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontFamily: font.display, color: c.text4, margin: '0 auto 12px' }}>?</div>
-                <div style={{ fontFamily: font.sans, fontSize: 15, fontWeight: 600, color: c.text3, marginBottom: 4 }}>RECRUIT</div>
-                <div style={{ fontFamily: font.mono, fontSize: 10, color: c.text4, marginBottom: 12 }}>Deploy to earn your rank</div>
-                <div style={{ fontFamily: font.mono, fontSize: 40, fontWeight: 700, color: c.text4, lineHeight: 1 }}>0</div>
-                <div style={{ fontFamily: font.mono, fontSize: 8, color: c.text4, letterSpacing: '.1em', marginTop: 4 }}>XP</div>
-              </div>
-            )}
 
-            {/* Credits / Ammo */}
-            {profile && (
-              <div className="hud-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px' }}>
-                <div>
-                  <div style={{ fontFamily: font.mono, fontSize: 7, color: c.text4, letterSpacing: '.1em' }}>CREDITS</div>
-                  <div style={{ fontFamily: font.mono, fontSize: 24, fontWeight: 700, color: c.pink, textShadow: '0 0 12px rgba(245,160,208,.3)' }}>{profile.credits}</div>
-                </div>
-                <Link href="/profile" style={{ fontFamily: font.mono, fontSize: 9, fontWeight: 700, color: c.pink, background: 'rgba(245,160,208,.08)', border: '1px solid rgba(245,160,208,.15)', padding: '6px 14px', borderRadius: 4, textDecoration: 'none', letterSpacing: '.06em' }}>RESUPPLY</Link>
-              </div>
-            )}
+              {/* Lobby cards grid */}
+              {filtered.length > 0 ? (
+                <div className="dash-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
+                  {filtered.map(l => {
+                    const isLive = l.status === 'active'
+                    const fee = (l.config?.entry_fee as number) ?? 0
+                    const prize = (l.config?.prize_pool as number) ?? (fee > 0 ? fee * 8 * 0.9 : 0)
+                    const isOwner = !!(profile?.id && l.created_by === profile.id)
+                    const isSelected = selectedLobby === l.id
+                    const viewers = l.player_count + l.spectator_count
 
-            {/* Your Battles / Command Center */}
-            <div className="hud-card">
-              <div className="hud-header">
-                <span className="hud-label">COMMAND CENTER</span>
-                <Link href="/create" style={{ fontFamily: font.mono, fontSize: 9, color: c.pink, textDecoration: 'none', letterSpacing: '.04em' }}>+ NEW</Link>
-              </div>
-              {myLobbies.length > 0 ? myLobbies.slice(0, 6).map((l, i) => {
-                const isManaging = managingLobby === l.id
-                const isWaiting = l.status === 'waiting'
-                return (
-                  <div key={l.id} style={{ borderBottom: i < Math.min(myLobbies.length, 6) - 1 ? '1px solid rgba(255,255,255,.03)' : 'none' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', cursor: 'pointer', transition: 'background .12s' }}
-                      onClick={() => {
-                        if (isManaging) { setManagingLobby(null) } else { setManagingLobby(l.id); setEditName(l.name); }
-                      }}>
-                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: l.status === 'active' ? c.green : isWaiting ? c.gold : c.text4, boxShadow: l.status === 'active' ? `0 0 6px ${c.green}` : 'none', flexShrink: 0 }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontFamily: font.sans, fontSize: 11, fontWeight: 600, color: c.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</div>
-                        <div style={{ fontFamily: font.mono, fontSize: 9, color: c.text4 }}>{l.player_count}p · {l.status}</div>
-                      </div>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <Link href={`/lobby/${l.id}/admin`} onClick={e => e.stopPropagation()} className="admin-link">ADMIN</Link>
-                        <button onClick={e => { e.stopPropagation(); setManagingLobby(isManaging ? null : l.id); setEditName(l.name) }} style={{ fontFamily: font.mono, fontSize: 8, fontWeight: 700, color: c.text4, background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.06)', padding: '3px 8px', borderRadius: 3, cursor: 'pointer', letterSpacing: '.04em' }}>
-                          {isManaging ? '✕' : '···'}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Expanded manage panel */}
-                    {isManaging && (
-                      <div style={{ padding: '8px 14px 12px', background: 'rgba(255,255,255,.015)', borderTop: '1px solid rgba(255,255,255,.03)' }}>
-                        {/* Edit name */}
-                        <div style={{ marginBottom: 8 }}>
-                          <label style={{ fontFamily: font.mono, fontSize: 8, color: c.text4, letterSpacing: '.08em', display: 'block', marginBottom: 4 }}>NAME</label>
-                          <input
-                            value={editName}
-                            onChange={e => setEditName(e.target.value)}
-                            maxLength={64}
-                            style={{ width: '100%', fontFamily: font.sans, fontSize: 12, fontWeight: 600, color: '#FFF', background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 4, padding: '6px 10px', outline: 'none' }}
-                          />
+                    return (
+                      <div key={l.id} className={`lobby-card ${isSelected ? 'selected' : ''}`} onClick={() => setSelectedLobby(isSelected ? null : l.id)}>
+                        {/* Thumbnail header */}
+                        <div style={{
+                          height: 80, background: lobbyGradient(l.name), padding: '12px 16px',
+                          display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+                          position: 'relative', overflow: 'hidden',
+                        }}>
+                          {/* Status badges */}
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            {isLive ? (
+                              <span style={{
+                                display: 'flex', alignItems: 'center', gap: 4, fontFamily: font.sans, fontSize: 11,
+                                fontWeight: 700, color: '#FFF', background: 'rgba(0,220,130,.9)', padding: '2px 8px',
+                                borderRadius: 4,
+                              }}>
+                                <span className="live-dot" style={{ width: 4, height: 4, background: '#FFF' }} />LIVE
+                              </span>
+                            ) : (
+                              <span style={{
+                                fontFamily: font.sans, fontSize: 11, fontWeight: 600, color: c.gold,
+                                background: 'rgba(255,215,0,.1)', padding: '2px 8px', borderRadius: 4,
+                              }}>OPEN</span>
+                            )}
+                            {isOwner && (
+                              <span style={{
+                                fontFamily: font.sans, fontSize: 10, fontWeight: 600, color: c.pink,
+                                background: 'rgba(245,160,208,.15)', padding: '2px 6px', borderRadius: 4,
+                              }}>HOST</span>
+                            )}
+                          </div>
+                          {/* Prize badge */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontFamily: font.sans, fontSize: 11, color: 'rgba(255,255,255,.5)' }}>
+                              {l.format.toUpperCase()}
+                            </span>
+                            <span style={{
+                              fontFamily: font.mono, fontSize: 14, fontWeight: 700,
+                              color: prize > 0 ? c.green : 'rgba(255,255,255,.6)',
+                            }}>
+                              {prize > 0 ? `$${prize}` : 'FREE'}
+                            </span>
+                          </div>
                         </div>
 
-                        {/* Actions row */}
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                          <button
-                            onClick={() => handleEditLobby(l.id)}
-                            disabled={saving || editName.trim() === l.name}
-                            style={{ fontFamily: font.mono, fontSize: 9, fontWeight: 700, color: saving ? c.text4 : c.bg, background: saving ? c.text4 : c.pink, border: 'none', padding: '5px 12px', borderRadius: 4, cursor: saving ? 'wait' : 'pointer', letterSpacing: '.04em' }}>
-                            {saving ? 'SAVING...' : 'SAVE'}
-                          </button>
-                          <Link href={`/lobby/${l.id}`} onClick={e => e.stopPropagation()} style={{ fontFamily: font.mono, fontSize: 9, fontWeight: 600, color: c.text3, background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.06)', padding: '5px 12px', borderRadius: 4, textDecoration: 'none', letterSpacing: '.04em' }}>VIEW</Link>
-                          <div style={{ flex: 1 }} />
-                          {isWaiting && (
-                            <button
-                              onClick={() => { if (confirm(`Delete "${l.name}"? This cannot be undone.`)) handleDeleteLobby(l.id) }}
-                              disabled={saving}
-                              style={{ fontFamily: font.mono, fontSize: 9, fontWeight: 700, color: c.red, background: 'rgba(255,68,102,.06)', border: '1px solid rgba(255,68,102,.15)', padding: '5px 12px', borderRadius: 4, cursor: 'pointer', letterSpacing: '.04em' }}>
-                              DELETE
-                            </button>
+                        {/* Card body */}
+                        <div style={{ padding: '12px 16px' }}>
+                          <div style={{ fontFamily: font.sans, fontSize: 16, fontWeight: 600, color: '#FFF', marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {l.name}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <span style={{ fontFamily: font.sans, fontSize: 12, color: c.text3 }}>
+                              {l.player_count} player{l.player_count !== 1 ? 's' : ''}
+                            </span>
+                            {viewers > 0 && (
+                              <span style={{ fontFamily: font.sans, fontSize: 12, color: c.text4 }}>
+                                {viewers} watching
+                              </span>
+                            )}
+                            {l.top_trader && (
+                              <span style={{ fontFamily: font.mono, fontSize: 11, color: l.top_trader.return_pct >= 0 ? c.green : c.red, marginLeft: 'auto' }}>
+                                {l.top_trader.return_pct >= 0 ? '+' : ''}{l.top_trader.return_pct.toFixed(1)}%
+                              </span>
+                            )}
+                          </div>
+                          {fee > 0 && (
+                            <div style={{ fontFamily: font.sans, fontSize: 11, color: c.text4, marginTop: 4 }}>
+                              {fee} CR entry
+                            </div>
                           )}
                         </div>
-                      </div>
-                    )}
-                  </div>
-                )
-              }) : (
-                <div style={{ padding: '16px 14px', textAlign: 'center' }}>
-                  <div style={{ fontFamily: font.mono, fontSize: 10, color: c.text4 }}>No active operations</div>
-                </div>
-              )}
-            </div>
 
-            {/* Nav links */}
-            <div className="hud-card">
-              {[
-                { l: 'PROFILE', href: '/profile', col: c.pink },
-                { l: 'TRAINING', href: '/learn', col: c.green },
-                { l: 'RANKINGS', href: '/leaderboard', col: c.gold },
-              ].map((n, i) => (
-                <Link key={n.l} href={n.href} className="row-h" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', textDecoration: 'none', color: c.text3, fontFamily: font.mono, fontSize: 10, fontWeight: 600, letterSpacing: '.06em', borderBottom: i < 2 ? '1px solid rgba(255,255,255,.03)' : 'none' }}>
-                  <div style={{ width: 4, height: 4, borderRadius: '50%', background: n.col, flexShrink: 0 }} />
-                  {n.l}
-                </Link>
-              ))}
-            </div>
-
-            <button onClick={() => { localStorage.removeItem('bt_profile_id'); logout().then(() => router.push('/')) }} style={{ fontFamily: font.mono, fontSize: 9, color: c.text4, background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', marginTop: 'auto', letterSpacing: '.06em' }}>SIGN OUT</button>
-          </div>
-
-          {/* ──── CENTER: Deploy + Server Browser ──── */}
-          <div className="col-c" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, overflow: 'hidden' }}>
-            {/* DEPLOY button */}
-            <button
-              onClick={handleDeploy}
-              disabled={quickPlaying}
-              onMouseEnter={() => setDeployHover(true)}
-              onMouseLeave={() => setDeployHover(false)}
-              className="deploy-btn"
-              style={quickPlaying ? { opacity: .7, animation: 'none' } : {}}
-            >
-              {quickPlaying ? (
-                <span style={{ fontFamily: font.mono, fontSize: 14, letterSpacing: '.1em', color: c.pink }}>MATCHMAKING...</span>
-              ) : (
-                <>
-                  <span>{deployHover ? 'FIND MATCH' : 'DEPLOY'}</span>
-                  {live.length > 0 && (
-                    <span style={{ fontFamily: font.mono, fontSize: 11, background: 'rgba(0,220,130,.15)', color: c.green, padding: '4px 10px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 5, border: '1px solid rgba(0,220,130,.2)' }}>
-                      <span className="live-dot" style={{ width: 4, height: 4 }} />{live.length} LIVE
-                    </span>
-                  )}
-                </>
-              )}
-            </button>
-
-            {/* Server Browser */}
-            <div className="hud-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-              <div className="hud-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span className="hud-label">SERVER BROWSER</span>
-                  <span style={{ fontFamily: font.mono, fontSize: 9, color: c.text4 }}>{lobbies.length} servers</span>
-                  {live.length > 0 && (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: font.mono, fontSize: 9, color: c.green }}>
-                      <span className="live-dot" style={{ width: 3, height: 3 }} />{live.length} active
-                    </span>
-                  )}
-                </div>
-                <Link href="/create" style={{ fontFamily: font.mono, fontSize: 9, color: c.pink, textDecoration: 'none', letterSpacing: '.04em' }}>+ HOST</Link>
-              </div>
-
-              {/* Column headers */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 14px', borderBottom: '1px solid rgba(255,255,255,.04)', flexShrink: 0 }}>
-                <span style={{ flex: 1, fontFamily: font.mono, fontSize: 8, color: c.text4, letterSpacing: '.1em' }}>SERVER</span>
-                <span style={{ width: 60, fontFamily: font.mono, fontSize: 8, color: c.text4, letterSpacing: '.1em', textAlign: 'center' }}>PLAYERS</span>
-                <span style={{ width: 50, fontFamily: font.mono, fontSize: 8, color: c.text4, letterSpacing: '.1em', textAlign: 'center' }}>STATUS</span>
-                <span style={{ width: 50, fontFamily: font.mono, fontSize: 8, color: c.text4, letterSpacing: '.1em', textAlign: 'center' }}>FEE</span>
-              </div>
-
-              {/* Server rows */}
-              <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-                {lobbies.length > 0 ? lobbies.map(l => {
-                  const isLive = l.status === 'active'
-                  const fee = (l.config?.entry_fee as number) ?? 0
-                  const isOwner = profile?.id && l.created_by === profile.id
-                  return (
-                    <div key={l.id} className="server-row" onClick={() => router.push(`/lobby/${l.id}`)}>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: isLive ? c.green : 'rgba(255,255,255,.1)', boxShadow: isLive ? `0 0 6px ${c.green}` : 'none', flexShrink: 0 }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontFamily: font.sans, fontSize: 13, fontWeight: 600, color: isLive ? '#FFF' : c.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</span>
-                          {isOwner && <span style={{ fontFamily: font.mono, fontSize: 7, fontWeight: 700, color: c.pink, background: 'rgba(245,160,208,.08)', padding: '1px 5px', borderRadius: 2, letterSpacing: '.06em' }}>HOST</span>}
-                        </div>
-                        {l.top_trader && (
-                          <div style={{ fontFamily: font.mono, fontSize: 9, color: c.text4, marginTop: 1 }}>
-                            <span style={{ color: l.top_trader.return_pct >= 0 ? c.green : c.red }}>{l.top_trader.return_pct >= 0 ? '+' : ''}{l.top_trader.return_pct.toFixed(1)}%</span>
-                            <span style={{ marginLeft: 4 }}>{l.top_trader.name}</span>
+                        {/* Action row (expanded) */}
+                        {isSelected && (
+                          <div style={{
+                            display: 'flex', gap: 8, padding: '0 16px 14px',
+                            animation: 'fadeIn .15s ease',
+                          }}>
+                            <button onClick={e => { e.stopPropagation(); router.push(`/lobby/${l.id}`) }} className="btn-p" style={{
+                              flex: 1, fontFamily: font.sans, fontSize: 13, fontWeight: 600, color: c.bg,
+                              background: c.green, border: 'none', padding: '10px 0', borderRadius: radius.sm, cursor: 'pointer',
+                            }}>Join</button>
+                            {isOwner && (
+                              <Link href={`/lobby/${l.id}/admin`} onClick={e => e.stopPropagation()} className="btn-s" style={{
+                                fontFamily: font.sans, fontSize: 13, fontWeight: 600, color: c.pink,
+                                background: 'rgba(245,160,208,.06)', border: `1px solid rgba(245,160,208,.15)`,
+                                padding: '10px 16px', borderRadius: radius.sm, textDecoration: 'none',
+                                display: 'flex', alignItems: 'center',
+                              }}>Admin</Link>
+                            )}
+                            {isOwner && l.status === 'waiting' && (
+                              <button onClick={e => { e.stopPropagation(); if (confirm(`Delete "${l.name}"?`)) handleDeleteLobby(l.id) }} disabled={saving} style={{
+                                fontFamily: font.sans, fontSize: 13, fontWeight: 600, color: c.red,
+                                background: c.redDim, border: `1px solid rgba(255,68,102,.15)`,
+                                padding: '10px 14px', borderRadius: radius.sm, cursor: 'pointer',
+                              }}>Delete</button>
+                            )}
                           </div>
                         )}
                       </div>
-                      <div style={{ width: 60, textAlign: 'center' }}>
-                        <span style={{ fontFamily: font.mono, fontSize: 12, fontWeight: 600, color: l.player_count > 0 ? c.text2 : c.text4 }}>{l.player_count}</span>
-                        <span style={{ fontFamily: font.mono, fontSize: 9, color: c.text4 }}>/8</span>
-                      </div>
-                      <div style={{ width: 50, textAlign: 'center' }}>
-                        {isLive ? (
-                          <span style={{ fontFamily: font.mono, fontSize: 9, fontWeight: 700, color: c.green, background: 'rgba(0,220,130,.1)', padding: '2px 6px', borderRadius: 3 }}>LIVE</span>
-                        ) : (
-                          <span style={{ fontFamily: font.mono, fontSize: 9, color: c.gold }}>OPEN</span>
-                        )}
-                      </div>
-                      <div style={{ width: 50, textAlign: 'center' }}>
-                        <span style={{ fontFamily: font.mono, fontSize: 10, fontWeight: 600, color: fee > 0 ? c.pink : c.green }}>{fee > 0 ? `$${fee}` : 'FREE'}</span>
-                      </div>
-                      {isOwner && (
-                        <Link href={`/lobby/${l.id}/admin`} onClick={e => e.stopPropagation()} className="admin-link" style={{ flexShrink: 0 }}>ADMIN</Link>
-                      )}
-                    </div>
-                  )
-                }) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 40, textAlign: 'center' }}>
-                    <div style={{ fontFamily: font.display, fontSize: 28, color: c.text4, marginBottom: 8, letterSpacing: '.04em' }}>NO ACTIVE SERVERS</div>
-                    <div style={{ fontFamily: font.mono, fontSize: 11, color: c.text4, marginBottom: 20, letterSpacing: '.02em' }}>Be the first to host a match</div>
-                    <Link href="/create" style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 700, color: c.bg, background: c.pink, padding: '10px 28px', borderRadius: 6, textDecoration: 'none', letterSpacing: '.06em' }}>HOST MATCH</Link>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* ──── RIGHT: Live Feed + Leaderboard ──── */}
-          <div className="col-r" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden', borderLeft: '1px solid rgba(255,255,255,.04)' }}>
-
-            {/* Kill Feed */}
-            <div className="hud-card" style={{ flexShrink: 0 }}>
-              <div className="hud-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div className="live-dot" style={{ width: 4, height: 4 }} />
-                  <span className="hud-label">LIVE FEED</span>
+                    )
+                  })}
                 </div>
-              </div>
-              <div style={{ maxHeight: 140, overflow: 'hidden' }}>
-                {feed.length > 0 ? feed.slice(0, 5).map((f, i) => (
-                  <div key={i} className="feed-item" style={{ borderBottom: '1px solid rgba(255,255,255,.02)' }}>
-                    <span style={{ fontFamily: font.mono, fontSize: 10, color: c.text4 }}>@{f.user}</span>
-                    <span style={{ fontFamily: font.mono, fontSize: 10, color: f.col, fontWeight: 600 }}>{f.text}</span>
+              ) : (
+                <div style={{
+                  textAlign: 'center', padding: '80px 20px',
+                  border: `1px solid ${c.border}`, borderRadius: radius.lg, background: c.surface,
+                }}>
+                  <div style={{ fontFamily: font.sans, fontSize: 20, fontWeight: 600, color: c.text3, marginBottom: 8 }}>
+                    {filter === 'mine' ? 'No battles created yet' : 'No active battles'}
                   </div>
-                )) : (
-                  <div style={{ padding: '16px 14px', textAlign: 'center' }}>
-                    <span style={{ fontFamily: font.mono, fontSize: 10, color: c.text4 }}>Waiting for activity...</span>
+                  <div style={{ fontFamily: font.sans, fontSize: 14, color: c.text4, marginBottom: 24 }}>
+                    {filter === 'mine' ? 'Create your first battle and invite friends' : 'Be the first to host or try Quick Play'}
                   </div>
-                )}
-              </div>
-            </div>
-
-            {/* Leaderboard */}
-            <div className="hud-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-              <div className="hud-header">
-                <span className="hud-label">RANKINGS</span>
-                <Link href="/leaderboard" style={{ fontFamily: font.mono, fontSize: 9, color: c.pink, textDecoration: 'none' }}>ALL →</Link>
-              </div>
-
-              {/* Period tabs */}
-              <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,.04)', flexShrink: 0 }}>
-                {(['daily', 'weekly', 'monthly', 'all-time'] as LeaderboardPeriod[]).map(p => (
-                  <button key={p} onClick={() => setLbPeriod(p)} className="period-tab" style={{
-                    color: lbPeriod === p ? c.pink : c.text4,
-                    background: lbPeriod === p ? 'rgba(245,160,208,.04)' : 'transparent',
-                    borderBottomColor: lbPeriod === p ? c.pink : 'transparent',
-                  }}>{p === 'all-time' ? 'ALL' : p.slice(0, 3).toUpperCase()}</button>
-                ))}
-              </div>
-
-              {/* Payout banner */}
-              {periodLb?.payouts && lbPeriod !== 'all-time' && (
-                <div style={{ display: 'flex', padding: '8px 14px', borderBottom: '1px solid rgba(255,255,255,.04)', flexShrink: 0, background: 'rgba(245,160,208,.02)' }}>
-                  {Object.entries(periodLb.payouts).map(([place, amount]) => (
-                    <div key={place} style={{ flex: 1, textAlign: 'center' }}>
-                      <div style={{ fontFamily: font.mono, fontSize: 12, fontWeight: 700, color: place === '1st' ? c.gold : place === '2nd' ? '#C0C0C0' : '#CD7F32' }}>{amount}</div>
-                      <div style={{ fontFamily: font.mono, fontSize: 7, color: c.text4, letterSpacing: '.08em' }}>{place} CR</div>
-                    </div>
-                  ))}
-                  {periodLb.resets_at && (
-                    <div style={{ flex: 1, textAlign: 'center' }}>
-                      <div style={{ fontFamily: font.mono, fontSize: 9, color: c.text4 }}>RESET</div>
-                      <div style={{ fontFamily: font.mono, fontSize: 8, color: c.text4 }}>{new Date(periodLb.resets_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
-                    </div>
-                  )}
+                  <Link href="/create" className="btn-p" style={{
+                    fontFamily: font.sans, fontSize: 14, fontWeight: 600, color: c.bg,
+                    background: c.pink, padding: '12px 28px', borderRadius: radius.md, textDecoration: 'none',
+                  }}>Create Battle</Link>
                 </div>
               )}
+            </>
+          )}
 
-              {/* Rankings list */}
-              <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-                {lbTraders.length > 0 ? lbTraders.map((t, i) => {
-                  const isMe = profile?.id === t.id
-                  const medalCol = i === 0 ? c.gold : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : c.text4
-                  return (
-                    <Link key={t.id} href={`/profile/${t.id}`} className="lb-row" style={{
-                      background: isMe ? 'rgba(245,160,208,.04)' : 'transparent',
-                      borderLeft: isMe ? `2px solid ${c.pink}` : '2px solid transparent',
-                    }}>
-                      <span style={{ fontFamily: font.mono, fontSize: 10, fontWeight: 700, color: medalCol, width: 18, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
-                      <div style={{ width: 24, height: 24, borderRadius: 4, background: `${tierColor(t.rank_tier)}10`, border: `1px solid ${tierColor(t.rank_tier)}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: font.mono, fontSize: 9, fontWeight: 700, color: tierColor(t.rank_tier), flexShrink: 0 }}>{t.display_name[0]?.toUpperCase()}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontFamily: font.sans, fontSize: 12, fontWeight: isMe || i < 3 ? 600 : 400, color: isMe ? c.pink : i < 3 ? '#FFF' : c.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {t.display_name}{isMe ? ' ←' : ''}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ fontFamily: font.mono, fontSize: 12, fontWeight: 700, color: medalCol }}>{t.tr_score}</div>
-                        <div style={{ fontFamily: font.mono, fontSize: 7, color: c.text4, letterSpacing: '.06em' }}>{tierName(t.rank_tier).toUpperCase()}</div>
-                      </div>
-                    </Link>
-                  )
-                }) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 24, textAlign: 'center' }}>
-                    <div style={{ fontFamily: font.display, fontSize: 18, color: c.text4, marginBottom: 4 }}>NO RANKS YET</div>
-                    <div style={{ fontFamily: font.mono, fontSize: 10, color: c.text4 }}>Deploy to earn your place</div>
-                  </div>
-                )}
+          {/* ══ LEARN TAB ══ */}
+          {dashTab === 'learn' && (
+            <div>
+              <div style={{ fontFamily: font.sans, fontSize: 20, fontWeight: 600, color: c.text, marginBottom: 4 }}>
+                Learn to Trade
+              </div>
+              <div style={{ fontFamily: font.sans, fontSize: 14, color: c.text3, marginBottom: 24 }}>
+                Master the strategies that win battles. From basics to advanced elimination meta.
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+                {LEARN_CARDS.map(card => (
+                  <Link href="/learn" key={card.title} className="learn-card" style={{ textDecoration: 'none', color: 'inherit' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <span style={{
+                        fontFamily: font.sans, fontSize: 10, fontWeight: 600, color: card.col,
+                        background: `${card.col}12`, padding: '2px 8px', borderRadius: 4,
+                      }}>{card.tag}</span>
+                    </div>
+                    <div style={{ fontFamily: font.sans, fontSize: 16, fontWeight: 600, color: c.text, marginBottom: 6 }}>
+                      {card.title}
+                    </div>
+                    <div style={{ fontFamily: font.sans, fontSize: 13, color: c.text3, lineHeight: 1.4 }}>
+                      {card.desc}
+                    </div>
+                  </Link>
+                ))}
               </div>
             </div>
-          </div>
+          )}
+
+          {/* ══ HISTORY TAB ══ */}
+          {dashTab === 'history' && (
+            <div>
+              <div style={{ fontFamily: font.sans, fontSize: 20, fontWeight: 600, color: c.text, marginBottom: 20 }}>
+                Match History
+              </div>
+              {pastBattles.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {pastBattles.map(b => {
+                    const startBal = b.starting_balance ?? 10000
+                    const returnPct = b.final_balance != null ? ((b.final_balance - startBal) / startBal * 100) : null
+                    const pnlDollars = b.final_balance != null ? b.final_balance - startBal : null
+                    const won = b.final_rank === 1
+                    const positive = returnPct != null && returnPct >= 0
+                    const daysAgo = Math.floor((Date.now() - new Date(b.created_at).getTime()) / 86400000)
+                    const timeLabel = daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo}d ago`
+                    return (
+                      <Link key={b.id} href={`/lobby/${b.lobby_id}`} className="row-h" style={{
+                        display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px',
+                        borderRadius: radius.sm, textDecoration: 'none', color: 'inherit',
+                      }}>
+                        <div style={{
+                          width: 40, height: 40, borderRadius: radius.sm, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          background: won ? 'rgba(0,220,130,.1)' : 'rgba(255,255,255,.02)',
+                          border: `1.5px solid ${won ? 'rgba(0,220,130,.3)' : c.border}`,
+                          flexShrink: 0,
+                        }}>
+                          {won ? <span style={{ fontSize: 18 }}>👑</span> : (
+                            <span style={{ fontFamily: font.mono, fontSize: 16, fontWeight: 700, color: c.text3 }}>{b.final_rank ?? '—'}</span>
+                          )}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontFamily: font.sans, fontSize: 14, fontWeight: 500, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {b.lobby_name ?? 'Unknown'}
+                          </div>
+                          <div style={{ fontFamily: font.sans, fontSize: 12, color: c.text4 }}>{timeLabel}</div>
+                        </div>
+                        {pnlDollars != null && (
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            <div style={{ fontFamily: font.mono, fontSize: 16, fontWeight: 700, color: positive ? c.green : c.red }}>
+                              {positive ? '+' : ''}{Math.abs(pnlDollars) >= 1000 ? `$${(pnlDollars / 1000).toFixed(1)}K` : `$${pnlDollars.toFixed(0)}`}
+                            </div>
+                            <div style={{ fontFamily: font.sans, fontSize: 11, color: positive ? 'rgba(0,220,130,.5)' : 'rgba(255,68,102,.4)' }}>
+                              {positive ? '+' : ''}{returnPct?.toFixed(1)}%
+                            </div>
+                          </div>
+                        )}
+                      </Link>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '60px 20px', border: `1px solid ${c.border}`, borderRadius: radius.lg }}>
+                  <div style={{ fontFamily: font.sans, fontSize: 16, color: c.text3, marginBottom: 8 }}>No matches yet</div>
+                  <div style={{ fontFamily: font.sans, fontSize: 13, color: c.text4 }}>Join a battle to start building your record</div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

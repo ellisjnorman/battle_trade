@@ -54,10 +54,35 @@ export default function LobbyChat({ lobbyId, userId, userName, userRole, collaps
   const [collapsed, setCollapsed] = useState(initialCollapsed ?? true);
   const [sending, setSending] = useState(false);
   const [unread, setUnread] = useState(0);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Subscribe to realtime chat
+  // Fetch message history on mount
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadHistory() {
+      try {
+        const res = await fetch(`/api/lobby/${lobbyId}/chat?limit=50`);
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (cancelled) return;
+        // API returns newest-first; reverse to chronological order for display
+        const history: ChatMessage[] = (data.messages ?? []).reverse();
+        setMessages(history);
+      } catch {
+        // Silently fail — chat will still work via realtime
+      } finally {
+        if (!cancelled) setLoadingHistory(false);
+      }
+    }
+
+    loadHistory();
+    return () => { cancelled = true; };
+  }, [lobbyId]);
+
+  // Subscribe to realtime chat for new messages
   useEffect(() => {
     const channel = supabase.channel(chatChannel(lobbyId));
 
@@ -65,7 +90,7 @@ export default function LobbyChat({ lobbyId, userId, userName, userRole, collaps
       .on('broadcast', { event: 'chat' }, ({ payload }: { payload: ChatMessage }) => {
         if (!payload?.id) return;
         setMessages((prev) => {
-          // Dedupe
+          // Dedupe (handles race between POST response and broadcast)
           if (prev.some((m) => m.id === payload.id)) return prev;
           const next = [...prev, payload];
           if (next.length > MAX_MESSAGES) next.splice(0, next.length - MAX_MESSAGES);
@@ -103,13 +128,18 @@ export default function LobbyChat({ lobbyId, userId, userName, userRole, collaps
       await fetch(`/api/lobby/${lobbyId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trader_id: userId, text: text.trim() }),
+        body: JSON.stringify({
+          sender_id: userId,
+          sender_name: userName,
+          sender_role: userRole,
+          content: text.trim(),
+        }),
       });
     } catch {
-      // Silently fail — ephemeral chat
+      // Silently fail — message won't persist but chat stays functional
     }
     setSending(false);
-  }, [lobbyId, userId, sending]);
+  }, [lobbyId, userId, userName, userRole, sending]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -254,7 +284,20 @@ export default function LobbyChat({ lobbyId, userId, userName, userRole, collaps
           gap: 2,
         }}
       >
-        {messages.length === 0 && (
+        {loadingHistory && messages.length === 0 && (
+          <div style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 32,
+          }}>
+            <span style={{ fontFamily: font.sans, fontSize: 12, color: c.text4 }}>
+              Loading messages...
+            </span>
+          </div>
+        )}
+        {!loadingHistory && messages.length === 0 && (
           <div style={{
             flex: 1,
             display: 'flex',
@@ -378,7 +421,7 @@ export default function LobbyChat({ lobbyId, userId, userName, userRole, collaps
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Send a message..."
-          maxLength={280}
+          maxLength={500}
           style={{
             flex: 1,
             height: 36,

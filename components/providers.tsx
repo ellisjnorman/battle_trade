@@ -3,10 +3,14 @@
 import { useState, useEffect } from 'react';
 import { PrivyProvider } from '@privy-io/react-auth';
 import { ErrorBoundary } from './error-boundary';
+import { registerServiceWorker } from '@/lib/register-sw';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setMounted(true);
+    registerServiceWorker();
+  }, []);
 
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 

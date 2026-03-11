@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { usePrivy } from '@privy-io/react-auth';
-import QRCode from 'qrcode';
 
 // ---------------------------------------------------------------------------
 // Fonts
@@ -17,7 +16,7 @@ const sans = "var(--font-dm-sans, 'DM Sans'), sans-serif";
 // Types
 // ---------------------------------------------------------------------------
 
-type Screen = 'welcome' | 'register' | 'profile' | 'success';
+type Screen = 'welcome' | 'success';
 
 interface RegistrationResult {
   trader_id: string;
@@ -33,9 +32,6 @@ interface RegistrationResult {
   spectate_url: string;
 }
 
-const TRADE_ASSETS = ['BTC', 'ETH', 'SOL', 'MEMES', 'ALTS', 'PERPS', 'OPTIONS', 'EVERYTHING'];
-const VOLUME_TIERS = ['JUST WATCHING', 'UNDER $10K/MO', '$10K-$100K/MO', '$100K-$1M/MO', '$1M+/MO', 'DEGEN LEVELS'];
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -46,16 +42,6 @@ export default function RegisterPage() {
 
   const [screen, setScreen] = useState<Screen>('welcome');
   const [isCompetitor, setIsCompetitor] = useState(true);
-  const [hasExistingProfile, setHasExistingProfile] = useState(false);
-
-  // Form fields — step 1
-  const [teamName, setTeamName] = useState('');
-  const [handle, setHandle] = useState('');
-
-  // Form fields — step 2 (profile)
-  const [selectedAssets, setSelectedAssets] = useState<string[]>([]);
-  const [volume, setVolume] = useState('');
-  const [wantsWhitelist, setWantsWhitelist] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,17 +51,6 @@ export default function RegisterPage() {
   const [entryFee, setEntryFee] = useState(0);
   const [prizePool, setPrizePool] = useState(0);
   const [totalEntries, setTotalEntries] = useState(0);
-
-  // Auto-populate from Privy + check if profile already exists
-  useEffect(() => {
-    if (!privyReady || !user) return;
-    const profileId = localStorage.getItem('bt_profile_id');
-    if (profileId) setHasExistingProfile(true);
-    // Pre-fill handle from Privy social accounts
-    const name = user.google?.name ?? user.twitter?.username ?? user.email?.address?.split('@')[0];
-    if (name && !handle) setHandle(name);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [privyReady, user]);
 
   // Get wallet address from Privy automatically
   const walletAddress = user?.wallet?.address ?? '';
@@ -99,55 +74,37 @@ export default function RegisterPage() {
 
   // Result
   const [result, setResult] = useState<RegistrationResult | null>(null);
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
-  // Generate QR code when result is available
+  // Auto-redirect to terminal after success
   useEffect(() => {
     if (!result) return;
-    const url = result.is_competitor ? result.trade_url : result.spectate_url;
-    QRCode.toDataURL(url, {
-      width: 240,
-      margin: 1,
-      color: { dark: '#FFFFFF', light: '#0A0A0A' },
-    }).then(setQrDataUrl).catch(() => setQrDataUrl(null));
+    const path = result.is_competitor
+      ? `/lobby/${result.lobby_id}/trade?code=${result.code}`
+      : `/lobby/${result.lobby_id}/spectate?code=${result.code}`;
+    const timer = setTimeout(() => {
+      window.location.href = path;
+    }, 1000);
+    return () => clearTimeout(timer);
   }, [result]);
 
-  const toggleAsset = (asset: string) => {
-    setSelectedAssets(prev =>
-      prev.includes(asset) ? prev.filter(a => a !== asset) : [...prev, asset]
-    );
-  };
-
-  const handleNext = () => {
-    const name = isCompetitor ? teamName.trim() : (handle.trim() || 'SPECTATOR');
-    if (isCompetitor && !name) { setError('Enter a team name'); return; }
-    setError(null);
-    // Skip enrichment screen if user already has a profile
-    if (hasExistingProfile) {
-      handleSubmit();
-    } else {
-      setScreen('profile');
-    }
-  };
-
-  const handleSubmit = useCallback(async () => {
+  const handleSubmit = useCallback(async (competitor: boolean) => {
     setSubmitting(true);
     setError(null);
-    const name = isCompetitor ? teamName.trim() : (handle.trim() || 'SPECTATOR');
+
+    const displayName =
+      user?.google?.name ??
+      user?.twitter?.username ??
+      user?.email?.address?.split('@')[0] ??
+      'ANON';
 
     try {
       const res = await fetch(`/api/lobby/${lobbyId}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          display_name: name,
-          handle: handle.trim() || null,
-          is_competitor: isCompetitor,
+          display_name: displayName,
+          is_competitor: competitor,
           wallet_address: walletAddress || null,
-          team_name: isCompetitor ? teamName.trim() || null : null,
-          trading_assets: selectedAssets.length > 0 ? selectedAssets : null,
-          monthly_volume: volume || null,
-          wants_whitelist: wantsWhitelist,
         }),
       });
       const data = await res.json();
@@ -166,20 +123,7 @@ export default function RegisterPage() {
       setError('Network error — try again');
     }
     setSubmitting(false);
-  }, [lobbyId, isCompetitor, teamName, handle, walletAddress, selectedAssets, volume, wantsWhitelist]);
-
-  const handleReset = () => {
-    setScreen('welcome');
-    setTeamName('');
-    setHandle('');
-    setSelectedAssets([]);
-    setVolume('');
-    setWantsWhitelist(false);
-    setResult(null);
-    setQrDataUrl(null);
-    setError(null);
-    setIsCompetitor(true);
-  };
+  }, [lobbyId, user, walletAddress]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -278,28 +222,39 @@ export default function RegisterPage() {
               </div>
             )}
 
+            {/* Error */}
+            {error && (
+              <div style={{ fontFamily: mono, fontSize: 12, color: '#FF3333', textShadow: '0 0 10px rgba(255,51,51,0.4)' }}>
+                {error}
+              </div>
+            )}
+
             {/* CTAs */}
             <div className="fade-up-3" style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
               <button
-                onClick={() => { setIsCompetitor(true); setScreen('register'); }}
+                onClick={() => { setIsCompetitor(true); handleSubmit(true); }}
+                disabled={submitting}
                 style={{
                   width: '100%', height: 72,
-                  background: '#F5A0D0', color: '#0A0A0A',
+                  background: submitting ? '#1A1A1A' : '#F5A0D0',
+                  color: submitting ? '#444444' : '#0A0A0A',
                   border: 'none', fontFamily: bebas,
                   fontSize: 32, letterSpacing: '0.08em',
-                  cursor: 'pointer',
+                  cursor: submitting ? 'not-allowed' : 'pointer',
                 }}
               >
-                {entryFee > 0 ? `ENTER THE ARENA · ${entryFee.toLocaleString()} CR` : 'ENTER THE ARENA'}
+                {submitting ? 'LOCKING IN...' : (entryFee > 0 ? `ENTER THE ARENA · ${entryFee.toLocaleString()} CR` : 'ENTER THE ARENA')}
               </button>
               <button
-                onClick={() => { setIsCompetitor(false); setScreen('register'); }}
+                onClick={() => { setIsCompetitor(false); handleSubmit(false); }}
+                disabled={submitting}
                 style={{
                   width: '100%', height: 56,
-                  background: 'transparent', color: '#999999',
+                  background: 'transparent',
+                  color: submitting ? '#444444' : '#999999',
                   border: '1px solid #1A1A1A', fontFamily: bebas,
                   fontSize: 24, letterSpacing: '0.08em',
-                  cursor: 'pointer',
+                  cursor: submitting ? 'not-allowed' : 'pointer',
                 }}
               >
                 SPECTATE + SABOTAGE
@@ -314,250 +269,7 @@ export default function RegisterPage() {
         )}
 
         {/* ============================================================= */}
-        {/* SCREEN 2 — REGISTRATION FORM                                  */}
-        {/* ============================================================= */}
-        {screen === 'register' && (
-          <div className="fade-up" style={{ width: '100%', maxWidth: 480, display: 'flex', flexDirection: 'column', gap: 24 }}>
-            {/* Header */}
-            <div>
-              <div style={{ fontFamily: bebas, fontSize: 40, color: '#FFF', letterSpacing: '0.05em', lineHeight: 1 }}>
-                {isCompetitor ? 'LOCK IN' : 'JOIN THE CROWD'}
-              </div>
-              <div style={{ fontFamily: sans, fontSize: 12, color: '#999999', marginTop: 8 }}>
-                {isCompetitor
-                  ? 'Register your team. Trade live. Last one standing wins.'
-                  : 'Watch the chaos. Launch sabotages. Bet on winners.'}
-              </div>
-            </div>
-
-            {/* Fields */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {isCompetitor && (
-                <div className="slide-in">
-                  <div style={{ fontFamily: sans, fontSize: 9, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
-                    TEAM NAME
-                  </div>
-                  <input
-                    value={teamName}
-                    onChange={(e) => setTeamName(e.target.value.toUpperCase())}
-                    onKeyDown={(e) => e.key === 'Enter' && handleNext()}
-                    placeholder="WOLFPACK"
-                    style={{
-                      width: '100%', height: 56,
-                      background: '#111111', border: '2px solid #1A1A1A',
-                      color: '#FFF', fontFamily: bebas,
-                      fontSize: 24, letterSpacing: '0.05em',
-                      padding: '0 16px', outline: 'none',
-                    }}
-                    autoFocus
-                  />
-                </div>
-              )}
-
-              <div className="slide-in" style={{ animationDelay: '50ms' }}>
-                <div style={{ fontFamily: sans, fontSize: 9, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
-                  HANDLE
-                </div>
-                <input
-                  value={handle}
-                  onChange={(e) => setHandle(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleNext()}
-                  placeholder="@yourhandle"
-                  style={{
-                    width: '100%', height: 48,
-                    background: '#111111', border: '1px solid #1A1A1A',
-                    color: '#FFF', fontFamily: sans,
-                    fontSize: 16, padding: '0 16px', outline: 'none',
-                  }}
-                  autoFocus={!isCompetitor}
-                />
-              </div>
-
-              {walletAddress && (
-                <div className="slide-in" style={{ animationDelay: '100ms' }}>
-                  <div style={{ fontFamily: sans, fontSize: 9, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
-                    WALLET CONNECTED
-                  </div>
-                  <div style={{
-                    width: '100%', height: 48,
-                    background: '#111111', border: '1px solid #1A1A1A',
-                    color: '#555', fontFamily: mono,
-                    fontSize: 13, letterSpacing: '-0.02em',
-                    padding: '0 16px', display: 'flex', alignItems: 'center',
-                  }}>
-                    {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {error && (
-              <div style={{ fontFamily: mono, fontSize: 12, color: '#FF3333', textShadow: '0 0 10px rgba(255,51,51,0.4)' }}>
-                {error}
-              </div>
-            )}
-
-            <button
-              onClick={handleNext}
-              style={{
-                width: '100%', height: 56,
-                background: '#F5A0D0', color: '#0A0A0A',
-                border: 'none', fontFamily: bebas,
-                fontSize: 28, letterSpacing: '0.08em',
-                cursor: 'pointer',
-              }}
-            >
-              NEXT
-            </button>
-
-            <button
-              onClick={handleReset}
-              style={{ background: 'transparent', border: 'none', fontFamily: sans, fontSize: 12, color: '#888888', cursor: 'pointer', alignSelf: 'center' }}
-            >
-              BACK
-            </button>
-          </div>
-        )}
-
-        {/* ============================================================= */}
-        {/* SCREEN 3 — PROFILE / TRADING INFO                             */}
-        {/* ============================================================= */}
-        {screen === 'profile' && (
-          <div className="fade-up" style={{ width: '100%', maxWidth: 480, display: 'flex', flexDirection: 'column', gap: 24 }}>
-            {/* Header */}
-            <div>
-              <div style={{ fontFamily: bebas, fontSize: 40, color: '#FFF', letterSpacing: '0.05em', lineHeight: 1 }}>
-                TELL US MORE
-              </div>
-              <div style={{ fontFamily: sans, fontSize: 12, color: '#999999', marginTop: 8 }}>
-                Help us match you with the right opponents and rewards.
-              </div>
-            </div>
-
-            {/* What do you trade */}
-            <div>
-              <div style={{ fontFamily: sans, fontSize: 9, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
-                WHAT DO YOU TRADE?
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {TRADE_ASSETS.map(asset => {
-                  const active = selectedAssets.includes(asset);
-                  return (
-                    <button
-                      key={asset}
-                      onClick={() => toggleAsset(asset)}
-                      style={{
-                        padding: '8px 16px',
-                        background: active ? 'rgba(245,160,208,0.06)' : 'transparent',
-                        border: active ? '2px solid #F5A0D0' : '1px solid #222222',
-                        color: active ? '#F5A0D0' : '#555555',
-                        fontFamily: bebas, fontSize: 16,
-                        letterSpacing: '0.05em',
-                        cursor: 'pointer',
-                        transition: 'all 150ms ease',
-                      }}
-                    >
-                      {asset}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Volume */}
-            <div>
-              <div style={{ fontFamily: sans, fontSize: 9, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
-                MONTHLY VOLUME
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {VOLUME_TIERS.map(tier => {
-                  const active = volume === tier;
-                  return (
-                    <button
-                      key={tier}
-                      onClick={() => setVolume(tier)}
-                      style={{
-                        width: '100%', height: 40,
-                        textAlign: 'left', padding: '0 16px',
-                        background: active ? 'rgba(245,160,208,0.06)' : '#111111',
-                        border: active ? '2px solid #F5A0D0' : '1px solid #1A1A1A',
-                        color: active ? '#F5A0D0' : '#555555',
-                        fontFamily: bebas, fontSize: 16,
-                        letterSpacing: '0.05em',
-                        cursor: 'pointer',
-                        transition: 'all 150ms ease',
-                      }}
-                    >
-                      {tier}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Whitelist toggle */}
-            <button
-              onClick={() => setWantsWhitelist(!wantsWhitelist)}
-              style={{
-                width: '100%', padding: '16px',
-                background: wantsWhitelist ? 'rgba(245,160,208,0.06)' : '#111111',
-                border: wantsWhitelist ? '2px solid #F5A0D0' : '1px solid #1A1A1A',
-                cursor: 'pointer',
-                textAlign: 'left',
-                display: 'flex', alignItems: 'center', gap: 12,
-              }}
-            >
-              <div style={{
-                width: 24, height: 24,
-                border: wantsWhitelist ? '2px solid #F5A0D0' : '2px solid #333333',
-                background: wantsWhitelist ? '#F5A0D0' : 'transparent',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0,
-              }}>
-                {wantsWhitelist && <span style={{ color: '#0A0A0A', fontFamily: mono, fontSize: 14, fontWeight: 700 }}>✓</span>}
-              </div>
-              <div>
-                <div style={{ fontFamily: bebas, fontSize: 18, color: wantsWhitelist ? '#F5A0D0' : '#888888', letterSpacing: '0.05em' }}>
-                  WHITELIST + REWARD OPPORTUNITIES
-                </div>
-                <div style={{ fontFamily: sans, fontSize: 11, color: '#999999', marginTop: 2 }}>
-                  Get early access to drops, token rewards, and exclusive lobbies
-                </div>
-              </div>
-            </button>
-
-            {error && (
-              <div style={{ fontFamily: mono, fontSize: 12, color: '#FF3333', textShadow: '0 0 10px rgba(255,51,51,0.4)' }}>
-                {error}
-              </div>
-            )}
-
-            <button
-              onClick={handleSubmit}
-              disabled={submitting}
-              style={{
-                width: '100%', height: 72,
-                background: submitting ? '#1A1A1A' : '#F5A0D0',
-                color: submitting ? '#444444' : '#0A0A0A',
-                border: 'none', fontFamily: bebas,
-                fontSize: 32, letterSpacing: '0.08em',
-                cursor: submitting ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {submitting ? 'LOCKING IN...' : (entryFee > 0 && isCompetitor ? `JOIN THE BATTLE · ${entryFee.toLocaleString()} CR` : 'JOIN THE BATTLE')}
-            </button>
-
-            <button
-              onClick={() => setScreen('register')}
-              style={{ background: 'transparent', border: 'none', fontFamily: sans, fontSize: 12, color: '#888888', cursor: 'pointer', alignSelf: 'center' }}
-            >
-              BACK
-            </button>
-          </div>
-        )}
-
-        {/* ============================================================= */}
-        {/* SCREEN 4 — SUCCESS — YOU'RE IN                                */}
+        {/* SCREEN 2 — SUCCESS — YOU'RE IN                                */}
         {/* ============================================================= */}
         {screen === 'success' && result && (
           <div style={{ width: '100%', maxWidth: 480, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
@@ -581,7 +293,7 @@ export default function RegisterPage() {
               YOU&apos;RE IN
             </div>
 
-            {/* Team name */}
+            {/* Display name */}
             <div className="fade-up-2" style={{ textAlign: 'center' }}>
               <div style={{
                 fontFamily: bebas, fontSize: 48, color: '#F5A0D0',
@@ -590,32 +302,7 @@ export default function RegisterPage() {
               }}>
                 {result.display_name}
               </div>
-              {result.handle && (
-                <div style={{ fontFamily: sans, fontSize: 14, color: '#999999', marginTop: 4 }}>
-                  {result.handle}
-                </div>
-              )}
             </div>
-
-            {/* QR Code */}
-            {qrDataUrl && (
-              <div className="fade-up-2" style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
-                border: '1px solid #1A1A1A', padding: 24,
-              }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={qrDataUrl}
-                  alt="QR Code"
-                  width={200}
-                  height={200}
-                  style={{ imageRendering: 'pixelated' }}
-                />
-                <div style={{ fontFamily: sans, fontSize: 11, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'center' }}>
-                  SCAN TO OPEN YOUR {result.is_competitor ? 'COCKPIT' : 'VIEW'}
-                </div>
-              </div>
-            )}
 
             {/* Stats row */}
             <div className="fade-up-3" style={{
@@ -655,41 +342,10 @@ export default function RegisterPage() {
               )}
             </div>
 
-            {/* Enter terminal button */}
-            <button
-              onClick={() => {
-                const path = result.is_competitor
-                  ? `/lobby/${result.lobby_id}/trade?code=${result.code}`
-                  : `/lobby/${result.lobby_id}/spectate?code=${result.code}`;
-                window.location.href = path;
-              }}
-              style={{
-                width: '100%', height: 72,
-                background: '#F5A0D0', color: '#0A0A0A',
-                border: 'none', fontFamily: bebas,
-                fontSize: 32, letterSpacing: '0.08em',
-                cursor: 'pointer',
-              }}
-            >
-              {result.is_competitor ? 'ENTER TRADING TERMINAL' : 'ENTER SPECTATOR VIEW'}
-            </button>
-
-            {/* Register another */}
-            <button
-              onClick={handleReset}
-              style={{
-                background: 'transparent',
-                border: '1px solid #1A1A1A',
-                color: '#777',
-                fontFamily: bebas,
-                fontSize: 18,
-                letterSpacing: '0.08em',
-                padding: '12px 32px',
-                cursor: 'pointer',
-              }}
-            >
-              REGISTER ANOTHER
-            </button>
+            {/* Redirecting indicator */}
+            <div style={{ fontFamily: sans, fontSize: 12, color: '#999999', letterSpacing: '0.05em' }}>
+              Redirecting to {result.is_competitor ? 'trading terminal' : 'spectator view'}...
+            </div>
           </div>
         )}
       </div>

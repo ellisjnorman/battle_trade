@@ -248,3 +248,32 @@ export interface LobbyStream {
   status: 'idle' | 'active' | 'disconnected';
   created_at: string;
 }
+
+// ---------------------------------------------------------------------------
+// Bracket Tournaments
+// ---------------------------------------------------------------------------
+
+export interface BracketTournament {
+  id: string;
+  lobby_id: string;
+  name: string;
+  total_rounds: number;
+  current_round: number;
+  round_duration_minutes: number;
+  status: 'registration' | 'active' | 'completed';
+  entry_fee: number;
+  prize_pool: number;
+  sponsor: string | null;
+  created_at: string;
+}
+
+export interface BracketSlot {
+  id: string;
+  tournament_id: string;
+  round_number: number;
+  position: number;
+  profile_id: string | null;
+  trader_id: string | null;
+  return_pct: number | null;
+  advanced: boolean;
+}

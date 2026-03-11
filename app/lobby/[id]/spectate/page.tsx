@@ -247,7 +247,26 @@ export default function SpectatePage() {
         } catch { /* ignore */ }
       }
 
-      // 3. No spectator found — show quick join
+      // 3. No spectator found — auto-join silently
+      try {
+        const res = await fetch(`/api/lobby/${lobbyId}/spectate-join`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ display_name: undefined }),
+        });
+        const data = await res.json();
+        if (res.ok && data.trader_id) {
+          setSpectatorId(data.trader_id);
+          setSpectatorName(data.name || 'Spectator');
+          setCredits(data.credits ?? 500);
+          localStorage.setItem(`bt-spectator-${lobbyId}`, JSON.stringify({ id: data.trader_id, code: data.code }));
+          if (!localStorage.getItem('bt-onboarding-seen')) {
+            setShowOnboarding(true);
+            localStorage.setItem('bt-onboarding-seen', '1');
+          }
+          return;
+        }
+      } catch { /* fall through to needsJoin */ }
       setNeedsJoin(true);
     };
     initSpectator();

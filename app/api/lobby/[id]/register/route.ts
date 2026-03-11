@@ -21,7 +21,7 @@ export async function POST(
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   const { display_name: trimmedName, handle: safeHandle, team_name: safeTeamName, wallet_address: safeWallet, wants_whitelist } = parsed.data;
-  const { is_competitor, trading_assets, monthly_volume } = body;
+  const { is_competitor, trading_assets, monthly_volume, profile_id: bodyProfileId } = body;
 
   // Capture geo from Vercel/Cloudflare headers (works in production)
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
@@ -122,6 +122,36 @@ export async function POST(
     if (newProfile) profileId = newProfile.id;
   }
 
+  // Use profile_id from body or from profile we just found/created
+  const finalProfileId = bodyProfileId || profileId;
+
+  // Check if already registered
+  if (finalProfileId) {
+    const { data: existing } = await supabase
+      .from('traders')
+      .select('id, code, is_competitor, name')
+      .eq('profile_id', finalProfileId)
+      .eq('lobby_id', realLobbyId)
+      .maybeSingle();
+    if (existing) {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://battle.fyi';
+      return NextResponse.json({
+        trader_id: existing.id,
+        code: existing.code,
+        lobby_id: realLobbyId,
+        lobby_name: lobby.name,
+        display_name: existing.name,
+        handle: null,
+        is_competitor: existing.is_competitor,
+        credits: 0,
+        entry_fee: 0,
+        trade_url: `${baseUrl}/lobby/${realLobbyId}/trade?code=${existing.code}`,
+        spectate_url: `${baseUrl}/lobby/${realLobbyId}/spectate?code=${existing.code}`,
+        already_registered: true,
+      }, { status: 200 });
+    }
+  }
+
   // Get or create event_id from latest round
   const { data: latestRound } = await supabase
     .from('rounds')
@@ -170,6 +200,7 @@ export async function POST(
       wallet_address: safeWallet,
       avatar_url: null,
       team_id: teamId,
+      profile_id: finalProfileId || null,
     })
     .select()
     .single();

@@ -749,23 +749,17 @@ export default function TradingTerminal() {
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
         {DEFENSES.map(d => {
           const ok = credits.balance >= d.cost && defenseCooldown === 0;
           const canAfford = credits.balance >= d.cost;
           const isLoading = actionLoading === d.id;
           return (
             <button key={d.id} className="weapon-card" onClick={() => ok && !isLoading && activateDefense(d.id)} disabled={!ok || isLoading}
-              style={{ display: 'flex', alignItems: 'center', padding: '7px 8px', background: isLoading ? 'rgba(0,191,255,0.1)' : '#0A0A0A', border: '1px solid #1A1A1A', borderLeft: `3px solid ${canAfford ? '#00BFFF' : '#111'}`, opacity: canAfford ? 1 : 0.3, cursor: ok ? 'pointer' : 'not-allowed', transition: 'all 150ms', gap: 6 }}>
-              <span style={{ fontSize: 14, flexShrink: 0 }}>{d.icon}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ ...B, fontSize: 11, color: '#FFF' }}>{isLoading ? 'ACTIVATING...' : d.name}</span>
-                  {d.duration > 0 && <span style={{ ...M, fontSize: 8, color: '#00BFFF80' }}>{d.duration}s</span>}
-                </div>
-                <span style={{ ...S, fontSize: 8, color: '#999' }}>{d.desc}</span>
-              </div>
-              <span style={{ ...M, fontSize: 10, color: canAfford ? '#00BFFF' : '#333', flexShrink: 0 }}>{d.cost}</span>
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '6px 4px', background: isLoading ? 'rgba(0,191,255,0.1)' : '#0A0A0A', border: '1px solid #1A1A1A', borderTop: `2px solid ${canAfford ? '#00BFFF' : '#111'}`, opacity: canAfford ? 1 : 0.3, cursor: ok ? 'pointer' : 'not-allowed', transition: 'all 150ms', gap: 2, textAlign: 'center' }}>
+              <span style={{ fontSize: 14 }}>{d.icon}</span>
+              <span style={{ ...B, fontSize: 9, color: '#FFF', lineHeight: 1.1 }}>{isLoading ? '...' : d.name}</span>
+              <span style={{ ...M, fontSize: 9, color: canAfford ? '#00BFFF' : '#333' }}>{d.cost}</span>
             </button>
           );
         })}
@@ -806,23 +800,17 @@ export default function TradingTerminal() {
       )}
 
       {/* Attack grid */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
         {ATTACKS.map(a => {
           const canAfford = credits.balance >= a.cost;
           const ok = canAfford && !!selectedTarget && cooldownRemaining === 0;
           const isLoading = actionLoading === a.id;
           return (
             <button key={a.id} className="weapon-card" onClick={() => selectedTarget && ok && !isLoading && launchAttack(a.id, selectedTarget)} disabled={!ok || isLoading}
-              style={{ display: 'flex', alignItems: 'center', padding: '7px 8px', background: isLoading ? 'rgba(245,160,208,0.1)' : '#0A0A0A', border: '1px solid #1A1A1A', borderLeft: `3px solid ${canAfford ? '#F5A0D0' : '#111'}`, opacity: canAfford ? 1 : 0.3, cursor: ok ? 'pointer' : 'not-allowed', transition: 'all 150ms', gap: 6 }}>
-              <span style={{ fontSize: 14, flexShrink: 0 }}>{a.icon}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ ...B, fontSize: 11, color: '#FFF' }}>{isLoading ? 'LAUNCHING...' : a.name}</span>
-                  {a.duration > 0 && <span style={{ ...M, fontSize: 8, color: '#F5A0D080' }}>{a.duration}s</span>}
-                </div>
-                <span style={{ ...S, fontSize: 8, color: '#999' }}>{a.desc}</span>
-              </div>
-              <span style={{ ...M, fontSize: 10, color: canAfford ? '#F5A0D0' : '#333', flexShrink: 0 }}>{a.cost}</span>
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '6px 4px', background: isLoading ? 'rgba(245,160,208,0.1)' : '#0A0A0A', border: '1px solid #1A1A1A', borderTop: `2px solid ${canAfford ? '#F5A0D0' : '#111'}`, opacity: canAfford ? 1 : 0.3, cursor: ok ? 'pointer' : 'not-allowed', transition: 'all 150ms', gap: 2, textAlign: 'center' }}>
+              <span style={{ fontSize: 14 }}>{a.icon}</span>
+              <span style={{ ...B, fontSize: 9, color: '#FFF', lineHeight: 1.1 }}>{isLoading ? '...' : a.name}</span>
+              <span style={{ ...M, fontSize: 9, color: canAfford ? '#F5A0D0' : '#333' }}>{a.cost}</span>
             </button>
           );
         })}
@@ -1256,8 +1244,7 @@ export default function TradingTerminal() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ ...M, fontSize: 14, color: rp >= 0 ? '#00FF88' : '#FF3333', textShadow: `0 0 8px ${rp >= 0 ? 'rgba(0,255,136,0.3)' : 'rgba(255,51,51,0.3)'}` }}>{rp >= 0 ? '+' : ''}{rp.toFixed(1)}%</span>
-            <span style={{ ...M, fontSize: 11, color: '#F5A0D0', padding: '3px 8px', background: 'rgba(245,160,208,0.08)', border: '1px solid rgba(245,160,208,0.2)', textShadow: '0 0 8px rgba(245,160,208,0.3)' }}>{credits.balance}CR</span>
-            <button onClick={() => setShowPurchaseModal(true)} style={{ ...B, fontSize: 14, color: '#0A0A0A', background: '#F5A0D0', border: 'none', padding: '5px 14px', cursor: 'pointer', letterSpacing: '0.08em', boxShadow: '0 0 12px rgba(245,160,208,0.3)' }}>BUY</button>
+            <button onClick={() => setShowPurchaseModal(true)} style={{ ...M, fontSize: 11, color: '#F5A0D0', padding: '3px 8px', background: 'rgba(245,160,208,0.08)', border: '1px solid rgba(245,160,208,0.2)', textShadow: '0 0 8px rgba(245,160,208,0.3)', cursor: 'pointer', transition: 'all 150ms' }}>{credits.balance}CR</button>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 8, height: 8, background: '#F5A0D0', display: 'block', animation: 'liveDot 2s ease-in-out infinite' }} />
               <span style={{ ...B, fontSize: 13, color: '#FFF' }}>{trader?.name}</span>
