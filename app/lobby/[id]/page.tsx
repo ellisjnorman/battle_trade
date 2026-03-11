@@ -27,16 +27,23 @@ export default function LobbyAutoJoin() {
   const autoJoinAuthenticated = useCallback(async () => {
     if (!lobbyId || !user) return
 
-    // 1. Ensure we have a profile
+    // 1. Ensure we have a profile — retry up to 2 times
     let profileId = localStorage.getItem('bt_profile_id')
     if (!profileId) {
-      try {
-        const p = await getOrCreateProfile(user)
-        if (p) { profileId = p.id; localStorage.setItem('bt_profile_id', p.id) }
-      } catch {}
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const p = await getOrCreateProfile(user)
+          if (p) { profileId = p.id; localStorage.setItem('bt_profile_id', p.id); break }
+        } catch (err) {
+          console.error('Profile creation attempt failed:', err)
+        }
+        if (attempt === 0) await new Promise(r => setTimeout(r, 500))
+      }
     }
     if (!profileId) {
-      setError('Could not create profile. Try refreshing.')
+      // Fallback: try guest mode instead of hard failing
+      setStatus('Falling back to guest mode...')
+      autoJoinGuest()
       return
     }
 
