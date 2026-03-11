@@ -17,15 +17,23 @@ interface LiveBattle {
 }
 
 const WORDS = ['YOUR FRIENDS', 'STRANGERS', 'DEGENS', 'YOUR EX', 'ANYONE', 'THE MARKET']
-const FEED = [
-  { user: 'wolfpack', action: 'dropped BLACKOUT on vega', pnl: '-12.4%', side: 'atk' },
-  { user: 'degen_prime', action: '10x long BTC', pnl: '+31.2%', side: 'pos' },
-  { user: 'iron_hands', action: 'liquidated', pnl: '-100%', side: 'neg' },
-  { user: 'anonymous', action: 'went DARK POOL', pnl: '+8.1%', side: 'def' },
-  { user: 'whale_hunter', action: '+47% this round', pnl: '+47.3%', side: 'pos' },
-  { user: 'paper_hands', action: 'panic sold everything', pnl: '-22.6%', side: 'neg' },
-  { user: 'vega', action: 'blocked TRADING HALT', pnl: '+5.3%', side: 'def' },
-  { user: 'moon_boy', action: 'forced trade on wolfpack', pnl: '-8.9%', side: 'atk' },
+
+// Battle simulation data
+const BATTLE_PLAYERS = [
+  { name: 'wolfpack', tier: '#F5A0D0' },
+  { name: 'vega', tier: '#00DC82' },
+  { name: 'iron_hands', tier: '#FFD700' },
+  { name: 'degen_prime', tier: '#7B93DB' },
+]
+const BATTLE_EVENTS = [
+  { text: 'wolfpack dropped BLACKOUT on vega', col: '#F5A0D0', icon: '🔒' },
+  { text: 'vega activated HEDGE', col: '#7B93DB', icon: '🛡' },
+  { text: 'iron_hands 10x LONG BTC', col: '#00DC82', icon: '⚡' },
+  { text: 'degen_prime LIQUIDATED', col: '#FF4466', icon: '💀' },
+  { text: 'wolfpack +47.3% this round', col: '#00DC82', icon: '📈' },
+  { text: 'vega used DARK POOL', col: '#7B93DB', icon: '👻' },
+  { text: 'HEADLINE EVENT: "SEC approves..."', col: '#F5A0D0', icon: '📰' },
+  { text: 'iron_hands FORCE TRADE on degen', col: '#FF4466', icon: '⚡' },
 ]
 
 const WEAPONS = [
@@ -68,8 +76,11 @@ export default function LandingPage() {
   const [loaded, setLoaded] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [wordIdx, setWordIdx] = useState(0)
-  const [feedItems, setFeedItems] = useState<typeof FEED>([])
   const [scrollY, setScrollY] = useState(0)
+  const [battlePnls, setBattlePnls] = useState([0, 0, 0, 0])
+  const [battleEvents, setBattleEvents] = useState<typeof BATTLE_EVENTS>([])
+  const [battleTimer, setBattleTimer] = useState(127)
+  const battleEvtRef = useRef(0)
 
   useEffect(() => {
     if (!ready) return
@@ -79,7 +90,6 @@ export default function LandingPage() {
         router.replace('/dashboard')
       }).catch(err => {
         console.error('[auth] getOrCreateProfile failed:', err)
-        // Still redirect — dashboard will retry profile creation
         router.replace('/dashboard')
       })
     }
@@ -90,12 +100,32 @@ export default function LandingPage() {
     const i = setInterval(() => setWordIdx(p => (p + 1) % WORDS.length), 2400)
     return () => clearInterval(i)
   }, [])
+
+  // Animate battle PnLs
   useEffect(() => {
-    let idx = 0
     const i = setInterval(() => {
-      idx = (idx + 1) % FEED.length
-      setFeedItems(prev => [FEED[idx], ...prev].slice(0, 6))
-    }, 2200)
+      setBattlePnls(prev => prev.map(p => {
+        const delta = (Math.random() - 0.45) * 8
+        return Math.max(-50, Math.min(80, +(p + delta).toFixed(1)))
+      }))
+    }, 1200)
+    return () => clearInterval(i)
+  }, [])
+
+  // Battle event feed
+  useEffect(() => {
+    const i = setInterval(() => {
+      battleEvtRef.current = (battleEvtRef.current + 1) % BATTLE_EVENTS.length
+      setBattleEvents(prev => [BATTLE_EVENTS[battleEvtRef.current], ...prev].slice(0, 4))
+    }, 2500)
+    return () => clearInterval(i)
+  }, [])
+
+  // Round countdown
+  useEffect(() => {
+    const i = setInterval(() => {
+      setBattleTimer(prev => prev <= 0 ? 180 : prev - 1)
+    }, 1000)
     return () => clearInterval(i)
   }, [])
   useEffect(() => {
@@ -109,7 +139,9 @@ export default function LandingPage() {
   }, [])
 
   const total = battles.reduce((a, b) => a + b.player_count, 0)
-  const feedColor = (side: string) => side === 'pos' ? '#00DC82' : side === 'neg' ? '#FF4466' : side === 'atk' ? '#F5A0D0' : '#7B93DB'
+  const sorted = [...BATTLE_PLAYERS].map((p, i) => ({ ...p, pnl: battlePnls[i] })).sort((a, b) => b.pnl - a.pnl)
+  const timerMin = Math.floor(battleTimer / 60)
+  const timerSec = battleTimer % 60
 
   return (
     <div style={{background:'#0A0A0A',color:'#FFF',overflowX:'hidden'}}>
@@ -125,6 +157,10 @@ export default function LandingPage() {
         @keyframes feedIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
         @keyframes marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
         @keyframes glow{0%,100%{opacity:.4}50%{opacity:.8}}
+        @keyframes barPulse{0%,100%{opacity:.8}50%{opacity:1}}
+        @keyframes eventSlide{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
+        @keyframes timerGlow{0%,100%{text-shadow:0 0 8px rgba(255,68,102,.3)}50%{text-shadow:0 0 16px rgba(255,68,102,.5)}}
+        @keyframes scanline{0%{top:-2px}100%{top:100%}}
 
         .anim-up{opacity:0;animation:slideUp .8s cubic-bezier(.22,1,.36,1) forwards}
         .live-dot{width:6px;height:6px;background:#00DC82;border-radius:50%;animation:pulse 1.6s infinite}
@@ -240,7 +276,7 @@ export default function LandingPage() {
             <div className="anim-up" style={{animationDelay:'.7s',display:'flex',gap:36,flexWrap:'wrap'}}>
               {[
                 { v: '60+', l: 'assets' },
-                { v: '7', l: 'weapons' },
+                { v: '12', l: 'player cards' },
                 { v: '$0', l: 'to start' },
               ].map(s => (
                 <div key={s.l}>
@@ -251,40 +287,66 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Live feed — looks like part of the product */}
-          <div className="anim-up hero-right" style={{animationDelay:'.4s',flex:0,minWidth:340,maxWidth:400}}>
-            <div className="card" style={{overflow:'hidden'}}>
-              <div style={{padding:'14px 20px',borderBottom:'1px solid rgba(255,255,255,.05)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          {/* Live Battle Preview — animated 1v1 widget */}
+          <div className="anim-up hero-right" style={{animationDelay:'.4s',flex:0,minWidth:340,maxWidth:420}}>
+            <div className="card" style={{overflow:'hidden',position:'relative'}}>
+              {/* Scanline effect */}
+              <div style={{position:'absolute',left:0,right:0,height:1,background:'linear-gradient(90deg,transparent,rgba(245,160,208,.06),transparent)',animation:'scanline 4s linear infinite',pointerEvents:'none',zIndex:1}} />
+
+              {/* Header: Round + Timer */}
+              <div style={{padding:'12px 20px',borderBottom:'1px solid rgba(255,255,255,.05)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
                   <div className="live-dot" style={{width:5,height:5}} />
-                  <span style={{fontFamily:S,fontSize:12,fontWeight:600,color:'#888'}}>Live Activity</span>
+                  <span style={{fontFamily:M,fontSize:10,fontWeight:600,color:'#888',letterSpacing:'.06em'}}>ROUND 3 · ELIMINATION</span>
                 </div>
-                <span style={{fontFamily:M,fontSize:10,color:'#333'}}>REAL-TIME</span>
+                <span style={{fontFamily:M,fontSize:14,fontWeight:700,color:battleTimer < 30 ? '#FF4466' : '#FFF',animation:battleTimer < 30 ? 'timerGlow 1s ease infinite' : 'none',letterSpacing:'.04em'}}>{timerMin}:{timerSec.toString().padStart(2, '0')}</span>
               </div>
-              <div style={{minHeight:280}}>
-                {feedItems.map((item, i) => (
-                  <div key={`${item.user}-${i}`} style={{
-                    display:'flex',alignItems:'center',justifyContent:'space-between',
-                    padding:'10px 20px',borderBottom:'1px solid rgba(255,255,255,.03)',
-                    animation:'feedIn .3s ease both',
-                  }}>
-                    <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0,flex:1}}>
-                      <div style={{width:6,height:6,borderRadius:'50%',background:feedColor(item.side),flexShrink:0}} />
-                      <div style={{minWidth:0}}>
-                        <span style={{fontFamily:M,fontSize:11,color:'#888'}}>@{item.user}</span>
-                        <span style={{fontFamily:S,fontSize:12,color:'#555',marginLeft:6}}>{item.action}</span>
+
+              {/* Leaderboard bars */}
+              <div style={{padding:'14px 20px 10px'}}>
+                {sorted.map((p, i) => {
+                  const barW = Math.max(5, Math.min(95, 50 + p.pnl))
+                  const isPositive = p.pnl >= 0
+                  return (
+                    <div key={p.name} style={{marginBottom:i < 3 ? 10 : 0}}>
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                        <div style={{display:'flex',alignItems:'center',gap:6}}>
+                          <span style={{fontFamily:M,fontSize:9,fontWeight:700,color:i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : '#555',width:14}}>{i+1}.</span>
+                          <div style={{width:18,height:18,borderRadius:4,background:`${p.tier}15`,border:`1px solid ${p.tier}30`,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:M,fontSize:8,fontWeight:700,color:p.tier}}>{p.name[0].toUpperCase()}</div>
+                          <span style={{fontFamily:S,fontSize:12,fontWeight:i===0?700:500,color:i===0?'#FFF':'#999'}}>{p.name}</span>
+                        </div>
+                        <span style={{fontFamily:M,fontSize:13,fontWeight:700,color:isPositive?'#00DC82':'#FF4466',transition:'all .3s'}}>
+                          {isPositive?'+':''}{p.pnl.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div style={{height:3,background:'rgba(255,255,255,.04)',borderRadius:99,overflow:'hidden'}}>
+                        <div style={{height:'100%',borderRadius:99,background:isPositive?`linear-gradient(90deg,rgba(0,220,130,.3),rgba(0,220,130,.6))`:`linear-gradient(90deg,rgba(255,68,102,.3),rgba(255,68,102,.6))`,width:`${barW}%`,transition:'width .8s cubic-bezier(.4,0,.2,1)',animation:'barPulse 2s ease infinite'}} />
                       </div>
                     </div>
-                    <span style={{fontFamily:M,fontSize:11,color:feedColor(item.side),flexShrink:0,marginLeft:12}}>
-                      {item.pnl}
-                    </span>
+                  )
+                })}
+              </div>
+
+              {/* Kill feed */}
+              <div style={{borderTop:'1px solid rgba(255,255,255,.04)',padding:'8px 0',maxHeight:120,overflow:'hidden'}}>
+                {battleEvents.length > 0 ? battleEvents.map((e, i) => (
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 20px',animation:'eventSlide .3s ease both'}}>
+                    <span style={{fontSize:11,flexShrink:0}}>{e.icon}</span>
+                    <span style={{fontFamily:M,fontSize:10,color:e.col,fontWeight:500,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.text}</span>
                   </div>
-                ))}
-                {feedItems.length === 0 && (
-                  <div style={{padding:'60px 20px',textAlign:'center'}}>
-                    <span style={{fontFamily:S,fontSize:13,color:'#222'}}>Waiting for activity...</span>
+                )) : (
+                  <div style={{padding:'8px 20px'}}>
+                    <span style={{fontFamily:M,fontSize:10,color:'#222'}}>Round starting...</span>
                   </div>
                 )}
+              </div>
+
+              {/* Footer: spectator count */}
+              <div style={{padding:'8px 20px',borderTop:'1px solid rgba(255,255,255,.04)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{fontFamily:M,fontSize:9,color:'#444'}}>👁 247 watching</span>
+                </div>
+                <button onClick={login} style={{fontFamily:S,fontSize:11,fontWeight:600,color:'#0A0A0A',background:'#F5A0D0',border:'none',padding:'6px 16px',borderRadius:6,cursor:'pointer',transition:'all .15s'}}>Join Battle</button>
               </div>
             </div>
           </div>
