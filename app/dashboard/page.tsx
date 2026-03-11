@@ -58,6 +58,10 @@ export default function DashboardPage() {
   const [profileLoading, setProfileLoading] = useState(true)
   const [feed, setFeed] = useState<typeof FAKE_FEED>([])
   const [deployHover, setDeployHover] = useState(false)
+  const [managingLobby, setManagingLobby] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editPublic, setEditPublic] = useState(true)
+  const [saving, setSaving] = useState(false)
   const feedRef = useRef(0)
 
   // Live feed ticker
@@ -137,6 +141,38 @@ export default function DashboardPage() {
       }
     } catch {} finally { setQuickPlaying(false) }
   }, [router])
+
+  const getAuthHeader = () => localStorage.getItem('bt_profile_id') || ''
+
+  const handleEditLobby = useCallback(async (lobbyId: string) => {
+    if (!editName.trim()) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/lobby/${lobbyId}/manage`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: getAuthHeader() },
+        body: JSON.stringify({ name: editName.trim(), is_public: editPublic }),
+      })
+      if (res.ok) {
+        setLobbies(prev => prev.map(l => l.id === lobbyId ? { ...l, name: editName.trim() } : l))
+        setManagingLobby(null)
+      }
+    } catch {} finally { setSaving(false) }
+  }, [editName, editPublic])
+
+  const handleDeleteLobby = useCallback(async (lobbyId: string) => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/lobby/${lobbyId}/manage`, {
+        method: 'DELETE',
+        headers: { Authorization: getAuthHeader() },
+      })
+      if (res.ok) {
+        setLobbies(prev => prev.filter(l => l.id !== lobbyId))
+        setManagingLobby(null)
+      }
+    } catch {} finally { setSaving(false) }
+  }, [])
 
   const live = lobbies.filter(b => b.status === 'active')
   const totalOnline = lobbies.reduce((a, b) => a + b.player_count + b.spectator_count, 0)
@@ -378,16 +414,66 @@ export default function DashboardPage() {
                 <span className="hud-label">COMMAND CENTER</span>
                 <Link href="/create" style={{ fontFamily: font.mono, fontSize: 9, color: c.pink, textDecoration: 'none', letterSpacing: '.04em' }}>+ NEW</Link>
               </div>
-              {myLobbies.length > 0 ? myLobbies.slice(0, 4).map((l, i) => (
-                <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderBottom: i < Math.min(myLobbies.length, 4) - 1 ? '1px solid rgba(255,255,255,.03)' : 'none' }}>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: l.status === 'active' ? c.green : l.status === 'waiting' ? c.gold : c.text4, boxShadow: l.status === 'active' ? `0 0 6px ${c.green}` : 'none', flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: font.sans, fontSize: 11, fontWeight: 600, color: c.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</div>
-                    <div style={{ fontFamily: font.mono, fontSize: 9, color: c.text4 }}>{l.player_count}p · {l.status}</div>
+              {myLobbies.length > 0 ? myLobbies.slice(0, 6).map((l, i) => {
+                const isManaging = managingLobby === l.id
+                const isWaiting = l.status === 'waiting'
+                return (
+                  <div key={l.id} style={{ borderBottom: i < Math.min(myLobbies.length, 6) - 1 ? '1px solid rgba(255,255,255,.03)' : 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', cursor: 'pointer', transition: 'background .12s' }}
+                      onClick={() => {
+                        if (isManaging) { setManagingLobby(null) } else { setManagingLobby(l.id); setEditName(l.name); }
+                      }}>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: l.status === 'active' ? c.green : isWaiting ? c.gold : c.text4, boxShadow: l.status === 'active' ? `0 0 6px ${c.green}` : 'none', flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: font.sans, fontSize: 11, fontWeight: 600, color: c.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</div>
+                        <div style={{ fontFamily: font.mono, fontSize: 9, color: c.text4 }}>{l.player_count}p · {l.status}</div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <Link href={`/lobby/${l.id}/admin`} onClick={e => e.stopPropagation()} className="admin-link">ADMIN</Link>
+                        <button onClick={e => { e.stopPropagation(); setManagingLobby(isManaging ? null : l.id); setEditName(l.name) }} style={{ fontFamily: font.mono, fontSize: 8, fontWeight: 700, color: c.text4, background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.06)', padding: '3px 8px', borderRadius: 3, cursor: 'pointer', letterSpacing: '.04em' }}>
+                          {isManaging ? '✕' : '···'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Expanded manage panel */}
+                    {isManaging && (
+                      <div style={{ padding: '8px 14px 12px', background: 'rgba(255,255,255,.015)', borderTop: '1px solid rgba(255,255,255,.03)' }}>
+                        {/* Edit name */}
+                        <div style={{ marginBottom: 8 }}>
+                          <label style={{ fontFamily: font.mono, fontSize: 8, color: c.text4, letterSpacing: '.08em', display: 'block', marginBottom: 4 }}>NAME</label>
+                          <input
+                            value={editName}
+                            onChange={e => setEditName(e.target.value)}
+                            maxLength={64}
+                            style={{ width: '100%', fontFamily: font.sans, fontSize: 12, fontWeight: 600, color: '#FFF', background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 4, padding: '6px 10px', outline: 'none' }}
+                          />
+                        </div>
+
+                        {/* Actions row */}
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <button
+                            onClick={() => handleEditLobby(l.id)}
+                            disabled={saving || editName.trim() === l.name}
+                            style={{ fontFamily: font.mono, fontSize: 9, fontWeight: 700, color: saving ? c.text4 : c.bg, background: saving ? c.text4 : c.pink, border: 'none', padding: '5px 12px', borderRadius: 4, cursor: saving ? 'wait' : 'pointer', letterSpacing: '.04em' }}>
+                            {saving ? 'SAVING...' : 'SAVE'}
+                          </button>
+                          <Link href={`/lobby/${l.id}`} onClick={e => e.stopPropagation()} style={{ fontFamily: font.mono, fontSize: 9, fontWeight: 600, color: c.text3, background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.06)', padding: '5px 12px', borderRadius: 4, textDecoration: 'none', letterSpacing: '.04em' }}>VIEW</Link>
+                          <div style={{ flex: 1 }} />
+                          {isWaiting && (
+                            <button
+                              onClick={() => { if (confirm(`Delete "${l.name}"? This cannot be undone.`)) handleDeleteLobby(l.id) }}
+                              disabled={saving}
+                              style={{ fontFamily: font.mono, fontSize: 9, fontWeight: 700, color: c.red, background: 'rgba(255,68,102,.06)', border: '1px solid rgba(255,68,102,.15)', padding: '5px 12px', borderRadius: 4, cursor: 'pointer', letterSpacing: '.04em' }}>
+                              DELETE
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <Link href={`/lobby/${l.id}/admin`} className="admin-link">ADMIN</Link>
-                </div>
-              )) : (
+                )
+              }) : (
                 <div style={{ padding: '16px 14px', textAlign: 'center' }}>
                   <div style={{ fontFamily: font.mono, fontSize: 10, color: c.text4 }}>No active operations</div>
                 </div>
