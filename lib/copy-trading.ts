@@ -126,25 +126,35 @@ export async function checkTop20Eligibility(profileId: string): Promise<{
   // best_return is stored as a percentage; check if worst drawdown exceeds threshold
   // For drawdown we check if best_return (which tracks worst too via sessions) is below threshold.
   // In practice, we look at the profile's session history for max drawdown.
-  const { data: sessions } = await sb
-    .from('sessions')
-    .select('starting_balance, final_balance')
-    .eq('trader_id', profileId)
-    .not('final_balance', 'is', null);
+  // Find trader IDs for this profile, then query sessions
+  const { data: traderRows } = await sb
+    .from('traders')
+    .select('id')
+    .eq('profile_id', profileId);
 
-  if (sessions && sessions.length > 0) {
-    const worstReturn = sessions.reduce((worst, s) => {
-      if (s.final_balance == null || s.starting_balance === 0) return worst;
-      const ret = ((s.final_balance - s.starting_balance) / s.starting_balance) * 100;
-      return Math.min(worst, ret);
-    }, 0);
+  const traderIds = (traderRows ?? []).map((t) => t.id);
 
-    if (worstReturn < MAX_DRAWDOWN_THRESHOLD) {
-      return {
-        eligible: false,
-        rank,
-        reason: `Max drawdown ${worstReturn.toFixed(1)}% exceeds ${MAX_DRAWDOWN_THRESHOLD}% threshold`,
-      };
+  if (traderIds.length > 0) {
+    const { data: sessions } = await sb
+      .from('sessions')
+      .select('starting_balance, final_balance')
+      .in('trader_id', traderIds)
+      .not('final_balance', 'is', null);
+
+    if (sessions && sessions.length > 0) {
+      const worstReturn = sessions.reduce((worst, s) => {
+        if (s.final_balance == null || s.starting_balance === 0) return worst;
+        const ret = ((s.final_balance - s.starting_balance) / s.starting_balance) * 100;
+        return Math.min(worst, ret);
+      }, 0);
+
+      if (worstReturn < MAX_DRAWDOWN_THRESHOLD) {
+        return {
+          eligible: false,
+          rank,
+          reason: `Max drawdown ${worstReturn.toFixed(1)}% exceeds ${MAX_DRAWDOWN_THRESHOLD}% threshold`,
+        };
+      }
     }
   }
 
@@ -174,21 +184,30 @@ export async function getTop20Leaders(): Promise<CopyLeader[]> {
   for (const profile of profiles) {
     rank++;
 
-    // Check drawdown
-    const { data: sessions } = await sb
-      .from('sessions')
-      .select('starting_balance, final_balance')
-      .eq('trader_id', profile.id)
-      .not('final_balance', 'is', null);
+    // Check drawdown — find trader IDs for this profile first
+    const { data: profileTraders } = await sb
+      .from('traders')
+      .select('id')
+      .eq('profile_id', profile.id);
 
-    if (sessions && sessions.length > 0) {
-      const worstReturn = sessions.reduce((worst, s) => {
-        if (s.final_balance == null || s.starting_balance === 0) return worst;
-        const ret = ((s.final_balance - s.starting_balance) / s.starting_balance) * 100;
-        return Math.min(worst, ret);
-      }, 0);
+    const profileTraderIds = (profileTraders ?? []).map((t) => t.id);
 
-      if (worstReturn < MAX_DRAWDOWN_THRESHOLD) continue;
+    if (profileTraderIds.length > 0) {
+      const { data: sessions } = await sb
+        .from('sessions')
+        .select('starting_balance, final_balance')
+        .in('trader_id', profileTraderIds)
+        .not('final_balance', 'is', null);
+
+      if (sessions && sessions.length > 0) {
+        const worstReturn = sessions.reduce((worst, s) => {
+          if (s.final_balance == null || s.starting_balance === 0) return worst;
+          const ret = ((s.final_balance - s.starting_balance) / s.starting_balance) * 100;
+          return Math.min(worst, ret);
+        }, 0);
+
+        if (worstReturn < MAX_DRAWDOWN_THRESHOLD) continue;
+      }
     }
 
     const stats = await getLeaderStats(profile.id);
@@ -672,19 +691,22 @@ export async function getLeaderStats(leaderId: string): Promise<CopyStats> {
   const totalAumUsd = subs?.reduce((sum, s) => sum + Number(s.budget_usd), 0) ?? 0;
 
   // All-time PnL and fees from closed copied trades
-  const { data: allTrades } = await sb
-    .from('copied_trades')
-    .select('pnl_usd, fee_usd, created_at, subscription_id')
-    .eq('status', 'closed')
-    .in(
-      'subscription_id',
-      // Get all subscription IDs for this leader
-      (await sb
-        .from('copy_subscriptions')
-        .select('id')
-        .eq('leader_id', leaderId)
-      ).data?.map((s) => s.id) ?? [],
-    );
+  const { data: allSubIds } = await sb
+    .from('copy_subscriptions')
+    .select('id')
+    .eq('leader_id', leaderId);
+
+  const subIdList = (allSubIds ?? []).map((s) => s.id);
+
+  let allTrades: Array<{ pnl_usd: number | null; fee_usd: number | null; created_at: string; subscription_id: string }> | null = null;
+  if (subIdList.length > 0) {
+    const { data } = await sb
+      .from('copied_trades')
+      .select('pnl_usd, fee_usd, created_at, subscription_id')
+      .eq('status', 'closed')
+      .in('subscription_id', subIdList);
+    allTrades = data;
+  }
 
   const totalPnl = allTrades?.reduce((sum, t) => sum + Number(t.pnl_usd ?? 0), 0) ?? 0;
 

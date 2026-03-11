@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { supabase } from '@/lib/supabase';
+import { getServerSupabase } from '@/lib/supabase-server';
 import { getAdapter } from '@/lib/exchanges/adapter';
 import type { ExchangeCredentials } from '@/lib/exchanges/types';
 
@@ -129,6 +129,7 @@ export async function POST(request: NextRequest) {
   const encryptedCredentials = encrypt(credentialsPayload);
 
   // Upsert into exchange_connections
+  const supabase = getServerSupabase();
   const { error: dbError } = await supabase
     .from('exchange_connections')
     .upsert(

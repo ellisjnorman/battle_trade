@@ -21,19 +21,20 @@ export async function GET() {
 
     const lobbyIds = lobbies.map((l) => l.id);
 
-    // 2. Get trader (is_competitor=true) and spectator (is_competitor=false) counts per lobby
-    const { data: sessions } = await supabase
-      .from('sessions')
+    // 2. Get trader (is_competitor=true) and spectator counts per lobby
+    // sessions table does not have is_competitor; use traders table instead
+    const { data: traders } = await supabase
+      .from('traders')
       .select('lobby_id, is_competitor')
       .in('lobby_id', lobbyIds);
 
     const playerCounts: Record<string, number> = {};
     const spectatorCounts: Record<string, number> = {};
-    for (const s of sessions ?? []) {
-      if (s.is_competitor) {
-        playerCounts[s.lobby_id] = (playerCounts[s.lobby_id] ?? 0) + 1;
+    for (const t of traders ?? []) {
+      if (t.is_competitor) {
+        playerCounts[t.lobby_id] = (playerCounts[t.lobby_id] ?? 0) + 1;
       } else {
-        spectatorCounts[s.lobby_id] = (spectatorCounts[s.lobby_id] ?? 0) + 1;
+        spectatorCounts[t.lobby_id] = (spectatorCounts[t.lobby_id] ?? 0) + 1;
       }
     }
 

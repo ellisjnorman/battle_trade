@@ -27,8 +27,8 @@ export async function GET(
     try {
       const { data: sessions } = await supabase
         .from('sessions')
-        .select('id, lobby_id, final_rank, final_balance, starting_balance, created_at, lobbies(name)')
-        .eq('trader_id', id)
+        .select('id, lobby_id, trader_id, final_rank, final_balance, starting_balance, created_at, traders!inner(profile_id), lobbies(name)')
+        .eq('traders.profile_id', id)
         .order('created_at', { ascending: false })
         .limit(10);
       matches = (sessions ?? []).map((s) => ({

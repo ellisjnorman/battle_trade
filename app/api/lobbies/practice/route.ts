@@ -86,7 +86,6 @@ export async function POST(request: NextRequest) {
         trader_id: humanTrader.id,
         lobby_id: lobbyId,
         starting_balance: 10000,
-        is_competitor: true,
       });
       await sb.from('credit_allocations').insert({
         lobby_id: lobbyId,
@@ -122,7 +121,6 @@ export async function POST(request: NextRequest) {
           trader_id: bot.id,
           lobby_id: lobbyId,
           starting_balance: 10000,
-          is_competitor: true,
         });
         await sb.from('credit_allocations').insert({
           lobby_id: lobbyId,

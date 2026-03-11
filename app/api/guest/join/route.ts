@@ -94,13 +94,6 @@ export async function POST(request: NextRequest) {
     }
   } else {
     // Create guest profile
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-      ?? request.headers.get('x-real-ip')
-      ?? null;
-    const country = request.headers.get('x-vercel-ip-country')
-      ?? request.headers.get('cf-ipcountry')
-      ?? null;
-
     const { data: newProfile, error: profileError } = await supabase
       .from('profiles')
       .insert({
@@ -108,9 +101,6 @@ export async function POST(request: NextRequest) {
         display_name: displayName,
         is_guest: true,
         credits: 0,
-        is_active_trader: isCompetitor,
-        ip_address: ip,
-        country,
       })
       .select('id')
       .single();
@@ -132,7 +122,7 @@ export async function POST(request: NextRequest) {
     .eq('lobby_id', realLobbyId)
     .order('round_number', { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   const eventId = latestRound?.event_id ?? realLobbyId;
   const code = generateCode();

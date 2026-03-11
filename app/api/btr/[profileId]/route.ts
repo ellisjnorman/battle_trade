@@ -135,7 +135,7 @@ export async function GET(
   const { data: traders, error: traderErr } = await supabase
     .from('traders')
     .select('id, lobby_id')
-    .eq('name', profileId); // traders reference profiles via name or a join field
+    .eq('profile_id', profileId);
 
   // Also try direct profile → sessions link
   const { data: sessions, error: sessionErr } = await supabase
@@ -247,6 +247,12 @@ export async function GET(
     const lastBattleDate = new Date(battles[battles.length - 1].created_at);
     btr = applyDecay(btr, lastBattleDate);
   }
+
+  // Write computed BTR back to the profile for ranking consistency
+  await supabase
+    .from('profiles')
+    .update({ elo_rating: btr, tr_score: btr })
+    .eq('id', profileId);
 
   // 5. Determine global rank — count profiles with higher BTR
   //    We store BTR on profiles table as elo_rating for ranking purposes

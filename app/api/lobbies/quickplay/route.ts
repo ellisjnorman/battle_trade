@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       if (fee > 0) continue;
 
       const { count } = await sb
-        .from('sessions')
+        .from('traders')
         .select('id', { count: 'exact', head: true })
         .eq('lobby_id', lobby.id)
         .eq('is_competitor', true);
