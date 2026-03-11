@@ -25,10 +25,6 @@ function LoginInner() {
     }
   }, [ready, authenticated, user, router, redirect])
 
-  useEffect(() => {
-    if (ready && !authenticated) login()
-  }, [ready, authenticated, login])
-
   return (
     <div style={{background:c.bg,minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:28}}>
       {/* eslint-disable-next-line @next/next/no-img-element */}

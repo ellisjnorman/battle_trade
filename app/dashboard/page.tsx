@@ -71,7 +71,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!ready) return
-    if (!authenticated || !user) { router.push('/login?redirect=/dashboard'); return }
+    if (!authenticated || !user) { router.push('/'); return }
     setAuthReady(true)
   }, [ready, authenticated, user, router])
 
@@ -408,7 +408,7 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            <button onClick={() => { localStorage.removeItem('bt_profile_id'); logout() }} style={{ fontFamily: font.mono, fontSize: 9, color: c.text4, background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', marginTop: 'auto', letterSpacing: '.06em' }}>SIGN OUT</button>
+            <button onClick={() => { localStorage.removeItem('bt_profile_id'); logout().then(() => router.push('/')) }} style={{ fontFamily: font.mono, fontSize: 9, color: c.text4, background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', marginTop: 'auto', letterSpacing: '.06em' }}>SIGN OUT</button>
           </div>
 
           {/* ──── CENTER: Deploy + Server Browser ──── */}
