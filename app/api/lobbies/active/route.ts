@@ -8,7 +8,7 @@ export async function GET() {
     // 1. Get all waiting + active lobbies
     const { data: lobbies, error: lobbyErr } = await supabase
       .from('lobbies')
-      .select('id, name, format, status, invite_code, config, created_at')
+      .select('id, name, format, status, invite_code, config, created_at, created_by')
       .in('status', ['waiting', 'active']);
 
     if (lobbyErr) {
@@ -173,6 +173,7 @@ export async function GET() {
         status: l.status,
         invite_code: l.invite_code,
         config: l.config,
+        created_by: l.created_by ?? null,
         player_count: playerCounts[l.id] ?? 0,
         spectator_count: spectatorCounts[l.id] ?? 0,
         current_round: roundMap[l.id] ?? undefined,
