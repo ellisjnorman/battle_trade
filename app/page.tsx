@@ -199,6 +199,7 @@ export default function LandingPage() {
           .section-pad{padding:64px 20px!important}
           .steps-grid{grid-template-columns:1fr 1fr!important}
           .weap-grid{grid-template-columns:1fr!important}
+          .prize-grid{grid-template-columns:1fr!important}
           .spec-layout{flex-direction:column!important}
           .cta-stack{flex-direction:column!important;width:100%!important}
           .cta-stack>button{width:100%!important}
@@ -403,6 +404,78 @@ export default function LandingPage() {
                 </div>
               </Reveal>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* RANKINGS & PRIZES */}
+      <section className="section-pad" style={{padding:'100px 32px',background:'rgba(255,255,255,.01)',borderTop:'1px solid rgba(255,255,255,.04)',borderBottom:'1px solid rgba(255,255,255,.04)'}}>
+        <div style={{maxWidth:1000,margin:'0 auto'}}>
+          <Reveal>
+            <p style={{fontFamily:S,fontSize:14,fontWeight:500,color:'#FFD700',marginBottom:12}}>Prizes & rankings</p>
+            <h2 style={{fontFamily:B,fontSize:'clamp(32px,5vw,56px)',lineHeight:.92,letterSpacing:'-.01em',marginBottom:20}}>
+              CLIMB THE RANKS. GET PAID.
+            </h2>
+            <p style={{fontFamily:S,fontSize:15,color:'#555',maxWidth:480,lineHeight:1.7,marginBottom:56}}>
+              Daily, weekly, and monthly leaderboards with real credit payouts. The best traders earn every single day.
+            </p>
+          </Reveal>
+
+          <div className="prize-grid" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:24}}>
+            {/* Payout tiers */}
+            <Reveal delay={.05}>
+              <div className="card" style={{padding:0}}>
+                <div style={{padding:'16px 24px',borderBottom:'1px solid rgba(255,255,255,.05)'}}>
+                  <span style={{fontFamily:M,fontSize:10,fontWeight:600,color:'#888',letterSpacing:'.06em'}}>PRIZE POOLS</span>
+                </div>
+                {[
+                  { period: 'DAILY', prizes: ['100', '50', '25'], col: '#00DC82', sub: 'Resets midnight UTC' },
+                  { period: 'WEEKLY', prizes: ['500', '250', '100'], col: '#F5A0D0', sub: 'Resets Monday' },
+                  { period: 'MONTHLY', prizes: ['2,000', '1,000', '500'], col: '#FFD700', sub: 'Resets 1st of month' },
+                ].map((tier, i) => (
+                  <div key={tier.period} style={{padding:'16px 24px',borderBottom:i<2?'1px solid rgba(255,255,255,.03)':'none'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                      <span style={{fontFamily:M,fontSize:11,fontWeight:700,color:tier.col,letterSpacing:'.06em'}}>{tier.period}</span>
+                      <span style={{fontFamily:S,fontSize:10,color:'#333'}}>{tier.sub}</span>
+                    </div>
+                    <div style={{display:'flex',gap:12}}>
+                      {['1st','2nd','3rd'].map((place, j) => (
+                        <div key={place} style={{flex:1,background:'rgba(255,255,255,.02)',borderRadius:8,padding:'10px 8px',textAlign:'center',border:'1px solid rgba(255,255,255,.04)'}}>
+                          <div style={{fontFamily:M,fontSize:18,fontWeight:700,color:j===0?'#FFD700':j===1?'#C0C0C0':'#CD7F32'}}>{tier.prizes[j]}</div>
+                          <div style={{fontFamily:M,fontSize:8,color:'#444',letterSpacing:'.08em',marginTop:2}}>{place} CR</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Reveal>
+
+            {/* Rank tiers */}
+            <Reveal delay={.15}>
+              <div className="card" style={{padding:0}}>
+                <div style={{padding:'16px 24px',borderBottom:'1px solid rgba(255,255,255,.05)'}}>
+                  <span style={{fontFamily:M,fontSize:10,fontWeight:600,color:'#888',letterSpacing:'.06em'}}>RANK TIERS</span>
+                </div>
+                {[
+                  { name: 'PAPER HANDS', xp: '0-99', col: '#555555', icon: '📄' },
+                  { name: 'RETAIL', xp: '100-299', col: '#CD7F32', icon: '🏪' },
+                  { name: 'SWING TRADER', xp: '300-599', col: '#C0C0C0', icon: '📊' },
+                  { name: 'MARKET MAKER', xp: '600-999', col: '#F5A0D0', icon: '🏦' },
+                  { name: 'WHALE', xp: '1000-1999', col: '#00DC82', icon: '🐋' },
+                  { name: 'DEGEN KING', xp: '2000-4999', col: '#F5A0D0', icon: '👑' },
+                  { name: 'LEGENDARY', xp: '5000+', col: '#FFFFFF', icon: '⚡' },
+                ].map((rank, i) => (
+                  <div key={rank.name} className="card-row" style={{display:'flex',alignItems:'center',gap:12,padding:'10px 24px',borderBottom:i<6?'1px solid rgba(255,255,255,.03)':'none'}}>
+                    <span style={{fontSize:16,width:24,textAlign:'center'}}>{rank.icon}</span>
+                    <div style={{flex:1}}>
+                      <span style={{fontFamily:S,fontSize:13,fontWeight:600,color:rank.col}}>{rank.name}</span>
+                    </div>
+                    <span style={{fontFamily:M,fontSize:10,color:'#444'}}>{rank.xp} XP</span>
+                  </div>
+                ))}
+              </div>
+            </Reveal>
           </div>
         </div>
       </section>
