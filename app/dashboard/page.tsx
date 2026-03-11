@@ -26,8 +26,16 @@ interface TopTrader {
   total_wins: number; win_rate: number; best_return: number
 }
 
+interface MyLobby {
+  id: string; name: string; status: string; player_count: number; spectator_count: number
+  created_at: string
+}
+interface PeriodLeaderboard {
+  period: string; traders: TopTrader[]; payouts: Record<string, number>; resets_at: string
+}
 type LobbyFilter = 'all' | 'live' | 'open' | 'free' | 'paid'
 type RightTab = 'leaderboard' | 'cards'
+type LeaderboardPeriod = 'daily' | 'weekly' | 'monthly' | 'all-time'
 
 const ALL_CARDS = [...ATTACKS, ...DEFENSES]
 
@@ -39,7 +47,11 @@ export default function DashboardPage() {
   const [traders, setTraders] = useState<TopTrader[]>([])
   const [authReady, setAuthReady] = useState(false)
   const [lobbyFilter, setLobbyFilter] = useState<LobbyFilter>('all')
-  const [rightTab, setRightTab] = useState<RightTab>('cards')
+  const [rightTab, setRightTab] = useState<RightTab>('leaderboard')
+  const [myLobbies, setMyLobbies] = useState<MyLobby[]>([])
+  const [lbPeriod, setLbPeriod] = useState<LeaderboardPeriod>('weekly')
+  const [periodLb, setPeriodLb] = useState<PeriodLeaderboard | null>(null)
+  const [quickPlaying, setQuickPlaying] = useState(false)
 
   useEffect(() => {
     if (!ready) return
@@ -66,6 +78,9 @@ export default function DashboardPage() {
       }
       fetch('/api/lobbies/active').then(r => r.ok ? r.json() : { lobbies: [] }).then(d => { if (!cancelled) setLobbies(d.lobbies ?? []) }).catch(() => {})
       fetch('/api/leaderboard/global?limit=20').then(r => r.ok ? r.json() : { traders: [] }).then(d => { if (!cancelled) setTraders(d.traders ?? []) }).catch(() => {})
+      if (pid) {
+        fetch(`/api/lobbies/mine?profile_id=${pid}`).then(r => r.ok ? r.json() : { lobbies: [] }).then(d => { if (!cancelled) setMyLobbies(d.lobbies ?? []) }).catch(() => {})
+      }
     }
     load()
     const i = setInterval(() => {
@@ -73,6 +88,31 @@ export default function DashboardPage() {
     }, 5000)
     return () => { cancelled = true; clearInterval(i) }
   }, [authReady, user])
+
+  // Fetch period leaderboard when tab/period changes
+  useEffect(() => {
+    if (rightTab !== 'leaderboard') return
+    fetch(`/api/leaderboard/periods?period=${lbPeriod}&limit=20`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setPeriodLb(d) })
+      .catch(() => {})
+  }, [rightTab, lbPeriod])
+
+  const handleQuickPlay = async () => {
+    setQuickPlaying(true)
+    try {
+      const pid = localStorage.getItem('bt_profile_id')
+      const res = await fetch('/api/lobbies/quickplay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: pid }),
+      })
+      if (res.ok) {
+        const { lobby_id } = await res.json()
+        router.push(`/lobby/${lobby_id}`)
+      }
+    } catch {} finally { setQuickPlaying(false) }
+  }
 
   const live = lobbies.filter(b => b.status === 'active')
   const totalOnline = lobbies.reduce((a, b) => a + b.player_count + b.spectator_count, 0)
@@ -285,11 +325,11 @@ export default function DashboardPage() {
 
           {/* ──── CENTER: Play + Lobbies ──── */}
           <div className="center-col" style={{ flex: 1, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, overflow: 'hidden' }}>
-            <Link href={playHref} className="play-btn" style={{ textDecoration: 'none' }}>
-              {live.length > 0 ? (
+            <button onClick={handleQuickPlay} disabled={quickPlaying} className="play-btn">
+              {quickPlaying ? 'FINDING MATCH...' : live.length > 0 ? (
                 <>PLAY NOW <span style={{ fontFamily: font.mono, fontSize: 12, background: 'rgba(0,0,0,.15)', padding: '3px 8px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 4 }}><span className="dot" style={{ width: 5, height: 5, background: '#0A0A0A', animation: 'pulse 1.4s infinite' }} />{live.length} LIVE</span></>
-              ) : lobbies.length > 0 ? 'JOIN A LOBBY' : 'CREATE A LOBBY'}
-            </Link>
+              ) : 'PLAY NOW'}
+            </button>
 
             <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               <div className="card-hd">
@@ -348,6 +388,31 @@ export default function DashboardPage() {
                 )}
               </div>
             </div>
+
+            {/* My Lobbies — admin quick access */}
+            {myLobbies.length > 0 && (
+              <div className="card" style={{ flexShrink: 0 }}>
+                <div className="card-hd">
+                  <span className="sec-t">MY LOBBIES</span>
+                  <Link href="/create" className="sec-a">+ New</Link>
+                </div>
+                {myLobbies.slice(0, 5).map(l => {
+                  const isLive = l.status === 'active'
+                  const isWaiting = l.status === 'waiting'
+                  return (
+                    <div key={l.id} className="row-h" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid #1A1A1A' }}>
+                      <div className="dot" style={{ width: 8, height: 8, background: isLive ? c.green : isWaiting ? c.gold : '#555' }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: font.sans, fontSize: 12, fontWeight: 600, color: '#DDD', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</div>
+                        <div style={{ fontFamily: font.mono, fontSize: 10, color: '#888' }}>{l.player_count}p · {l.status}</div>
+                      </div>
+                      <Link href={`/lobby/${l.id}/admin`} style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 600, color: c.pink, background: `${c.pink}15`, padding: '4px 10px', borderRadius: 4, textDecoration: 'none' }}>Admin</Link>
+                      <Link href={`/lobby/${l.id}`} style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 500, color: '#999', background: '#1A1A1A', padding: '4px 10px', borderRadius: 4, textDecoration: 'none' }}>View</Link>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           {/* ──── RIGHT: Tabbed — Leaderboard / Playbook ──── */}
@@ -416,42 +481,74 @@ export default function DashboardPage() {
                 </div>
               </div>
             ) : (
-              /* ── Leaderboard ── */
+              /* ── Leaderboard with periods ── */
               <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                 <div className="card-hd">
-                  <span className="sec-t">GLOBAL RANKINGS</span>
+                  <span className="sec-t">LEADERBOARD</span>
                   <Link href="/leaderboard" className="sec-a">Full →</Link>
                 </div>
+                {/* Period tabs */}
+                <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #1A1A1A', flexShrink: 0 }}>
+                  {(['daily', 'weekly', 'monthly', 'all-time'] as LeaderboardPeriod[]).map(p => (
+                    <button key={p} onClick={() => setLbPeriod(p)} style={{
+                      flex: 1, padding: '8px 0', fontFamily: font.sans, fontSize: 10, fontWeight: 600,
+                      color: lbPeriod === p ? c.pink : '#888', background: lbPeriod === p ? `${c.pink}08` : 'transparent',
+                      border: 'none', borderBottom: lbPeriod === p ? `2px solid ${c.pink}` : '2px solid transparent',
+                      cursor: 'pointer', textTransform: 'capitalize',
+                    }}>{p === 'all-time' ? 'All Time' : p.charAt(0).toUpperCase() + p.slice(1)}</button>
+                  ))}
+                </div>
+                {/* Payout banner */}
+                {periodLb?.payouts && lbPeriod !== 'all-time' && (
+                  <div style={{ display: 'flex', gap: 0, padding: '6px 14px', background: 'rgba(245,160,208,.03)', borderBottom: '1px solid #1A1A1A', flexShrink: 0 }}>
+                    {Object.entries(periodLb.payouts).map(([place, amount]) => (
+                      <div key={place} style={{ flex: 1, textAlign: 'center' }}>
+                        <div style={{ fontFamily: font.mono, fontSize: 12, fontWeight: 700, color: place === '1st' ? c.gold : place === '2nd' ? '#C0C0C0' : '#CD7F32' }}>{amount}</div>
+                        <div style={{ fontFamily: font.sans, fontSize: 8, color: '#888' }}>{place} CR</div>
+                      </div>
+                    ))}
+                    {periodLb.resets_at && (
+                      <div style={{ flex: 1, textAlign: 'center' }}>
+                        <div style={{ fontFamily: font.mono, fontSize: 10, color: '#888' }}>resets</div>
+                        <div style={{ fontFamily: font.sans, fontSize: 8, color: '#666' }}>{new Date(periodLb.resets_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* Rankings list */}
                 <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-                  {traders.length > 0 ? traders.map((t, i) => {
-                    const isMe = profile?.id === t.id
-                    const rc = i === 0 ? c.gold : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : '#888'
-                    return (
-                      <Link key={t.id} href={`/profile/${t.id}`} className="row-h" style={{
-                        display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',
-                        borderBottom: '1px solid #1A1A1A', textDecoration: 'none', color: 'inherit',
-                        background: isMe ? 'rgba(245,160,208,.04)' : 'transparent',
-                        borderLeft: isMe ? `3px solid ${c.pink}` : '3px solid transparent',
-                      }}>
-                        <span style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 700, color: rc, width: 18, textAlign: 'right' }}>{i + 1}</span>
-                        <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#1A1A1A', border: `1.5px solid ${tierColor(t.rank_tier)}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: font.sans, fontSize: 9, color: '#BBB', flexShrink: 0 }}>{t.display_name[0]?.toUpperCase()}</div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontFamily: font.sans, fontSize: 12, fontWeight: isMe || i < 3 ? 600 : 400, color: isMe ? c.pink : i < 3 ? '#FFF' : '#CCC', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {t.display_name}{isMe ? ' (you)' : ''}
+                  {(() => {
+                    const lbTraders = lbPeriod === 'all-time' ? traders : (periodLb?.traders ?? [])
+                    return lbTraders.length > 0 ? lbTraders.map((t, i) => {
+                      const isMe = profile?.id === t.id
+                      const rc = i === 0 ? c.gold : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : '#888'
+                      return (
+                        <Link key={t.id} href={`/profile/${t.id}`} className="row-h" style={{
+                          display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',
+                          borderBottom: '1px solid #1A1A1A', textDecoration: 'none', color: 'inherit',
+                          background: isMe ? 'rgba(245,160,208,.04)' : 'transparent',
+                          borderLeft: isMe ? `3px solid ${c.pink}` : '3px solid transparent',
+                        }}>
+                          <span style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 700, color: rc, width: 18, textAlign: 'right' }}>{i + 1}</span>
+                          <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#1A1A1A', border: `1.5px solid ${tierColor(t.rank_tier)}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: font.sans, fontSize: 9, color: '#BBB', flexShrink: 0 }}>{t.display_name[0]?.toUpperCase()}</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: font.sans, fontSize: 12, fontWeight: isMe || i < 3 ? 600 : 400, color: isMe ? c.pink : i < 3 ? '#FFF' : '#CCC', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {t.display_name}{isMe ? ' (you)' : ''}
+                            </div>
                           </div>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontFamily: font.mono, fontSize: 12, fontWeight: 600, color: rc }}>{t.tr_score}</div>
-                          <div style={{ fontFamily: font.sans, fontSize: 8, color: '#888' }}>{tierName(t.rank_tier).toUpperCase()}</div>
-                        </div>
-                      </Link>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontFamily: font.mono, fontSize: 12, fontWeight: 600, color: rc }}>{t.tr_score}</div>
+                            <div style={{ fontFamily: font.sans, fontSize: 8, color: '#888' }}>{tierName(t.rank_tier).toUpperCase()}</div>
+                          </div>
+                        </Link>
+                      )
+                    }) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 24, textAlign: 'center' }}>
+                        <div style={{ fontFamily: font.sans, fontSize: 14, color: '#999', marginBottom: 8 }}>No rankings yet</div>
+                        <div style={{ fontFamily: font.sans, fontSize: 12, color: '#777' }}>Play a lobby to get on the board</div>
+                      </div>
                     )
-                  }) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 24, textAlign: 'center' }}>
-                      <div style={{ fontFamily: font.sans, fontSize: 14, color: '#999', marginBottom: 8 }}>No rankings yet</div>
-                      <div style={{ fontFamily: font.sans, fontSize: 12, color: '#777' }}>Play a lobby to get on the board</div>
-                    </div>
-                  )}
+                  })()}
                 </div>
               </div>
             )}
