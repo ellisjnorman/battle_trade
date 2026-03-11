@@ -67,17 +67,8 @@ function timeAgo(date: string): string {
   return `${Math.floor(hrs / 24)}d`
 }
 
-// Fake live activity for social proof (replaced by real data when available)
-const LIVE_EVENTS = [
-  'NeonWhale just won +42% in Quick Battle',
-  'CryptoSamurai landed a 3-win streak',
-  'ShadowTrader hit Diamond rank',
-  'IronBull got sabotaged — flash crash!',
-  'GoldenFox won a 1v1 Duel (+$2.4K)',
-  'DiamondApe reached #1 on leaderboard',
-  'TurboViper used leverage 20x and survived',
-  'PhantomBear predicted BTC pump correctly',
-]
+// Fallback events shown only while real data loads
+const FALLBACK_EVENTS = ['Loading activity...']
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -91,6 +82,7 @@ export default function DashboardPage() {
   const [saving, setSaving] = useState(false)
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [playLoading, setPlayLoading] = useState<string | null>(null)
+  const [liveEvents, setLiveEvents] = useState<string[]>(FALLBACK_EVENTS)
   const [liveEventIdx, setLiveEventIdx] = useState(0)
   const [displayPnl, setDisplayPnl] = useState(0)
   const targetPnl = useRef(0)
@@ -117,11 +109,14 @@ export default function DashboardPage() {
     return () => { if (animFrame.current) cancelAnimationFrame(animFrame.current) }
   }, [totalPnl])
 
-  // Rotating live event ticker
+  // Fetch real activity + rotate ticker
   useEffect(() => {
-    const t = setInterval(() => setLiveEventIdx(i => (i + 1) % LIVE_EVENTS.length), 3500)
+    fetch('/api/activity').then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.events?.length > 0) setLiveEvents(d.events)
+    }).catch(() => {})
+    const t = setInterval(() => setLiveEventIdx(i => (i + 1) % Math.max(liveEvents.length, 1)), 3500)
     return () => clearInterval(t)
-  }, [])
+  }, [liveEvents.length])
 
   // Auth check
   useEffect(() => {
@@ -286,7 +281,7 @@ export default function DashboardPage() {
           }}>
             <span key={liveEventIdx} style={{ animation: 'tickerSlide .3s ease', display: 'inline-block' }}>
               <span style={{ color: c.green, marginRight: 6 }}>LIVE</span>
-              {LIVE_EVENTS[liveEventIdx]}
+              {liveEvents[liveEventIdx % liveEvents.length]}
             </span>
           </div>
         </div>

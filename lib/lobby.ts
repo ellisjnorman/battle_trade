@@ -74,54 +74,84 @@ export async function joinLobby(
   return { success: true };
 }
 
+/**
+ * Optimized standings: fetches round, traders, positions, and prices in
+ * parallel (2 parallel batches instead of 4 sequential queries), then
+ * computes portfolio values in-memory.
+ */
 export async function getLobbyStandings(
   lobby_id: string,
   round_id: string,
 ): Promise<TraderStanding[]> {
-  const { data: round } = await supabase
-    .from('rounds')
-    .select('*')
-    .eq('id', round_id)
-    .eq('lobby_id', lobby_id)
-    .single();
+  // Batch 1: round + traders fetched in parallel with positions + prices
+  const [roundRes, tradersRes, positionsRes, pricesRes] = await Promise.all([
+    supabase
+      .from('rounds')
+      .select('id, lobby_id, starting_balance')
+      .eq('id', round_id)
+      .eq('lobby_id', lobby_id)
+      .single(),
+    supabase
+      .from('traders')
+      .select('id, name, team_id, wallet_address, avatar_url, is_eliminated, eliminated_at, event_id, lobby_id, created_at')
+      .eq('lobby_id', lobby_id),
+    supabase
+      .from('positions')
+      .select('id, trader_id, round_id, symbol, direction, size, leverage, entry_price, exit_price, realized_pnl, opened_at, closed_at, order_type, limit_price, stop_price, trail_pct, trail_peak, status')
+      .eq('round_id', round_id),
+    supabase
+      .from('prices')
+      .select('symbol, price'),
+  ]);
 
+  const round = roundRes.data;
   if (!round) return [];
 
-  const { data: traders } = await supabase
-    .from('traders')
-    .select('*')
-    .eq('lobby_id', lobby_id);
-
+  const traders = tradersRes.data as Trader[] | null;
   if (!traders || traders.length === 0) return [];
 
-  const { data: positions } = await supabase
-    .from('positions')
-    .select('*')
-    .eq('round_id', round_id);
-
-  const { data: prices } = await supabase.from('prices').select('*');
-
+  // Build price map
   const currentPrices: Record<string, number> = {};
-  for (const p of prices ?? []) {
+  for (const p of pricesRes.data ?? []) {
     currentPrices[p.symbol] = p.price;
   }
 
-  const allPositions = (positions ?? []) as Position[];
-  const portfolioValues: Record<string, number> = {};
+  // Index positions by trader_id for O(1) lookup instead of O(n) filter per trader
+  const allPositions = (positionsRes.data ?? []) as Position[];
+  const positionsByTrader = new Map<string, { open: Position[]; closed: Position[] }>();
 
-  for (const trader of traders as Trader[]) {
-    const traderPositions = allPositions.filter((p) => p.trader_id === trader.id);
-    const open = traderPositions.filter((p) => !p.closed_at);
-    const closed = traderPositions.filter((p) => p.closed_at);
-    portfolioValues[trader.id] = calcPortfolioValue(
-      round.starting_balance,
-      open,
-      closed,
-      currentPrices,
-    );
+  for (const pos of allPositions) {
+    let bucket = positionsByTrader.get(pos.trader_id);
+    if (!bucket) {
+      bucket = { open: [], closed: [] };
+      positionsByTrader.set(pos.trader_id, bucket);
+    }
+    if (pos.closed_at) {
+      bucket.closed.push(pos);
+    } else {
+      bucket.open.push(pos);
+    }
   }
 
-  return getRoundStandings(traders as Trader[], portfolioValues, round.starting_balance);
+  // Calculate portfolio values in a single pass
+  const portfolioValues: Record<string, number> = {};
+  const startingBalance = round.starting_balance;
+
+  for (const trader of traders) {
+    const bucket = positionsByTrader.get(trader.id);
+    if (bucket) {
+      portfolioValues[trader.id] = calcPortfolioValue(
+        startingBalance,
+        bucket.open,
+        bucket.closed,
+        currentPrices,
+      );
+    } else {
+      portfolioValues[trader.id] = startingBalance;
+    }
+  }
+
+  return getRoundStandings(traders, portfolioValues, startingBalance);
 }
 
 export async function getLobbyConfig(lobby_id: string): Promise<LobbyConfig | null> {

@@ -5,6 +5,10 @@ import type { Trader } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
+const CACHE_HEADERS = {
+  'Cache-Control': 'public, s-maxage=3, stale-while-revalidate=10',
+} as const;
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -25,33 +29,37 @@ export async function GET(
       .single();
 
     if (!latestRound) {
-      return NextResponse.json({ standings: [] }, {
-        headers: { 'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=10' },
-      });
+      return NextResponse.json({ standings: [] }, { headers: CACHE_HEADERS });
     }
     resolvedRoundId = latestRound.id;
   }
 
   if (!resolvedRoundId) {
-    return NextResponse.json({ standings: [] }, {
-      headers: { 'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=10' },
-    });
+    return NextResponse.json({ standings: [] }, { headers: CACHE_HEADERS });
   }
 
   const standings = await getLobbyStandings(lobbyId, resolvedRoundId);
 
-  // Enrich with team names
-  const traders = standings.map((s) => s.trader);
-  const teamIds = [...new Set(traders.map((t: Trader) => t.team_id).filter(Boolean))] as string[];
-  const teamMap: Record<string, string> = {};
+  // Collect unique team IDs for enrichment
+  const teamIds: string[] = [];
+  const seen = new Set<string>();
+  for (const s of standings) {
+    const tid = (s.trader as Trader).team_id;
+    if (tid && !seen.has(tid)) {
+      seen.add(tid);
+      teamIds.push(tid);
+    }
+  }
 
+  // Fetch team names in a single query (only if needed)
+  let teamMap: Record<string, string> = {};
   if (teamIds.length > 0) {
     const { data: teams } = await supabase
       .from('teams')
       .select('id, name')
       .in('id', teamIds);
-    for (const t of teams ?? []) {
-      teamMap[t.id] = t.name;
+    if (teams) {
+      teamMap = Object.fromEntries(teams.map((t) => [t.id, t.name]));
     }
   }
 
@@ -60,7 +68,5 @@ export async function GET(
     teamName: s.trader.team_id ? teamMap[s.trader.team_id] ?? null : null,
   }));
 
-  return NextResponse.json({ standings: enriched }, {
-    headers: { 'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=10' },
-  });
+  return NextResponse.json({ standings: enriched }, { headers: CACHE_HEADERS });
 }

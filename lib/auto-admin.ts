@@ -11,6 +11,7 @@
  */
 
 import { getServerSupabase } from './supabase-server';
+import { captureError } from './error';
 
 // Track active auto-admin loops per lobby
 const activeLoops = new Map<string, NodeJS.Timeout>();
@@ -361,10 +362,12 @@ async function finishGame(
     import('@/lib/reputation').then(({ recalcAndSave }) => {
       for (const t of allTraders) {
         if (t.profile_id) {
-          recalcAndSave(t.profile_id).catch(() => {});
+          recalcAndSave(t.profile_id).catch(err =>
+            captureError(err, { context: 'auto-admin', lobbyId, action: 'recalcAndSave', profileId: t.profile_id }),
+          );
         }
       }
-    }).catch(() => {});
+    }).catch(err => captureError(err, { context: 'auto-admin', lobbyId, action: 'import-reputation' }));
   }
 
   // Broadcast game over

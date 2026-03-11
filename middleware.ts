@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 /**
- * Centralized rate limiting middleware for all API routes.
- * Uses in-memory counters (single-instance — fine for Vercel / single server).
+ * Centralized middleware: rate limiting + Privy auth for mutations.
+ *
+ * Auth strategy:
+ * - POST/PUT/DELETE on /api/lobby/** require a valid Privy JWT
+ * - GET requests pass through (lobby data is public during games)
+ * - Public routes (/api/health, /api/market-data, /api/lobbies/active, /api/guest/) skip auth
+ * - Webhooks have their own auth and skip everything
+ * - Verified Privy user ID is attached as `x-privy-user-id` header
  */
+
+// ---------------------------------------------------------------------------
+// Rate limiting (unchanged)
+// ---------------------------------------------------------------------------
 
 const windowMs = 60_000;
 const hits: Map<string, { count: number; resetAt: number }> = new Map();
@@ -80,7 +91,77 @@ const rules: RateRule[] = [
   { pattern: /^\/api\/og/, limit: 30 },
 ];
 
-export function middleware(req: NextRequest) {
+// ---------------------------------------------------------------------------
+// Privy JWT verification
+// ---------------------------------------------------------------------------
+
+const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+
+// Cache the JWKS fetcher — jose handles key rotation/caching internally
+let _jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
+
+function getJWKS() {
+  if (_jwks) return _jwks;
+  if (!PRIVY_APP_ID) {
+    throw new Error('NEXT_PUBLIC_PRIVY_APP_ID is not set');
+  }
+  _jwks = createRemoteJWKSet(
+    new URL(`https://auth.privy.io/api/v1/apps/${PRIVY_APP_ID}/jwks.json`),
+  );
+  return _jwks;
+}
+
+/**
+ * Routes that never require authentication, even for mutations.
+ */
+const PUBLIC_ROUTE_PREFIXES = [
+  '/api/health',
+  '/api/market-data',
+  '/api/lobbies/active',
+  '/api/guest/',
+  '/api/webhooks/',
+  '/api/og/',
+];
+
+const MUTATION_METHODS = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
+
+function isPublicRoute(path: string): boolean {
+  return PUBLIC_ROUTE_PREFIXES.some(prefix => path.startsWith(prefix));
+}
+
+function requiresAuth(req: NextRequest): boolean {
+  // Only mutations under /api/lobby/ require auth
+  if (!MUTATION_METHODS.has(req.method)) return false;
+  if (isPublicRoute(req.nextUrl.pathname)) return false;
+  if (!req.nextUrl.pathname.startsWith('/api/lobby/')) return false;
+  return true;
+}
+
+async function verifyPrivyToken(
+  token: string,
+): Promise<{ userId: string } | null> {
+  try {
+    const jwks = getJWKS();
+    const { payload } = await jwtVerify(token, jwks, {
+      issuer: 'privy.io',
+      audience: PRIVY_APP_ID,
+    });
+
+    // Privy puts the user ID in the `sub` claim
+    const userId = payload.sub;
+    if (!userId) return null;
+
+    return { userId };
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Middleware entry point
+// ---------------------------------------------------------------------------
+
+export async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
 
   // Only apply to API routes (skip webhooks — they have their own auth)
@@ -88,6 +169,7 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // --- Rate limiting (runs first, before auth) ---
   const ip = getIp(req);
   const method = req.method;
 
@@ -103,6 +185,51 @@ export function middleware(req: NextRequest) {
       );
     }
     break; // first match wins
+  }
+
+  // --- Privy auth (only for mutations on /api/lobby/*) ---
+  if (requiresAuth(req)) {
+    const authHeader = req.headers.get('authorization');
+    const token = authHeader?.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : null;
+
+    if (!token) {
+      return NextResponse.json(
+        { error: 'Authorization header required' },
+        { status: 401 },
+      );
+    }
+
+    const result = await verifyPrivyToken(token);
+    if (!result) {
+      return NextResponse.json(
+        { error: 'Invalid or expired token' },
+        { status: 401 },
+      );
+    }
+
+    // Forward verified user ID to downstream route handlers
+    const headers = new Headers(req.headers);
+    headers.set('x-privy-user-id', result.userId);
+
+    return NextResponse.next({
+      request: { headers },
+    });
+  }
+
+  // --- Optional: attach user ID for GET requests if token is present ---
+  const authHeader = req.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    const result = await verifyPrivyToken(token);
+    if (result) {
+      const headers = new Headers(req.headers);
+      headers.set('x-privy-user-id', result.userId);
+      return NextResponse.next({
+        request: { headers },
+      });
+    }
   }
 
   return NextResponse.next();

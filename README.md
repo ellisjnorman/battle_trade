@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Battle Trade
 
-## Getting Started
+Trading arena platform — "Clash Royale for trading." Gamified competition driving real DEX order flow.
 
-First, run the development server:
+## Stack
+
+Next.js 16 (App Router) / TypeScript strict / Supabase / Privy Auth / Tailwind v4 / Framer Motion / Zustand / Jest
+
+## Quick Start
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local    # fill in Supabase + Privy keys
+npx supabase start && npx supabase db push
+npm run dev                    # http://localhost:3000
+npm test                       # 203 tests
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Architecture
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Everything is **lobby-scoped**. A lobby is a battle instance (IRL event or digital arena).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+app/api/lobby/[id]/    → positions, leaderboard, sabotage, chat, admin, bracket
+app/api/lobbies/       → list, create, quickplay, practice
+app/api/duels/         → 1v1 matchmaking
+app/api/copy-trading/  → leaders, subscribe, portfolio
+app/api/btr/           → Battle Trade Rating
+app/api/guest/         → no-auth guest play
+lib/                   → pnl, scoring, auto-admin, weapons, btr, duels, brackets,
+                         compliance, copy-trading, integrity, exchanges, offline
+```
 
-## Learn More
+## Game Modes
 
-To learn more about Next.js, take a look at the following resources:
+| Mode | Description |
+|---|---|
+| Practice | vs AI bots, auto-admin game loop |
+| Quick Play | Instant matchmaking |
+| 1v1 Duel | BTR-matched head-to-head |
+| Tournament | Bracket elimination |
+| Custom | Host with custom rules |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Key APIs
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/lobbies/active` | GET | List lobbies |
+| `/api/lobbies/practice` | POST | Create practice lobby with bots |
+| `/api/lobby/[id]/positions` | POST | Open position |
+| `/api/lobby/[id]/leaderboard` | GET | Live standings |
+| `/api/lobby/[id]/sabotage` | POST | Launch attack |
+| `/api/duels/queue` | POST | Enter matchmaking |
+| `/api/btr/[profileId]` | GET | BTR rating |
+| `/api/copy-trading/leaders` | GET | Top 20 leaders |
 
-## Deploy on Vercel
+## Environment
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+NEXT_PUBLIC_PRIVY_APP_ID=
+STRIPE_SECRET_KEY=             # optional
+COINBASE_COMMERCE_API_KEY=     # optional
+```
