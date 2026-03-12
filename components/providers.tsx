@@ -48,6 +48,12 @@ export default function Providers({ children }: { children: React.ReactNode }) {
             showWalletLoginFirst: false,
           },
           loginMethods: ['google', 'twitter', 'email', 'wallet'],
+          externalWallets: {
+            walletConnect: { enabled: true },
+            metamask: { enabled: true },
+            coinbaseWallet: { enabled: true },
+            phantom: { enabled: true },
+          },
           embeddedWallets: {
             ethereum: {
               createOnLogin: 'users-without-wallets',
