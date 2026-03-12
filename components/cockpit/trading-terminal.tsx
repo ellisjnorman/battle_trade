@@ -7,6 +7,8 @@ import { calcPortfolioValue, calcReturnPct } from '@/lib/pnl';
 import { PYTH_FEEDS, MARKET_TYPES, getFeedsByMarket, type MarketType } from '@/lib/pyth-feeds';
 import { ATTACKS, DEFENSES } from '@/lib/weapons';
 import { OverlayManager } from './overlays';
+import BattleEndOverlay from '@/components/battle-end-overlay';
+import StreakBadge from '@/components/streak-badge';
 import { CREDIT_PACKAGES, totalCredits, type CreditPackage, type PaymentMethod } from '@/lib/payments';
 import { getLiquidationPrice } from '@/lib/liquidation';
 import { useToastStore } from '@/lib/toast-store';
@@ -24,7 +26,7 @@ const S: React.CSSProperties = { fontFamily: "var(--font-dm-sans, 'DM Sans'), sa
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-interface TraderData { id: string; name: string; code: string; lobby_id: string; is_eliminated: boolean; avatar_url: string | null }
+interface TraderData { id: string; name: string; code: string; lobby_id: string; is_eliminated: boolean; avatar_url: string | null; profile_id: string | null }
 interface RoundData { id: string; round_number: number; status: string; started_at: string | null; duration_seconds: number; starting_balance: number }
 interface StandingEntry { trader: { id: string; name: string }; portfolioValue: number; returnPct: number; rank: number; teamName: string | null }
 interface CreditData { balance: number; total_earned: number; total_spent: number }
@@ -94,6 +96,7 @@ export default function TradingTerminal() {
   const [purchaseLoading, setPurchaseLoading] = useState<string | null>(null);
   const [lastMilestone, setLastMilestone] = useState(0);
   const [winStreak, setWinStreak] = useState(0);
+  const [battleEndData, setBattleEndData] = useState<{ rank: number; totalPlayers: number; returnPct: number } | null>(null);
   const [rankFlash, setRankFlash] = useState<'up' | 'down' | null>(null);
   const [tradeFlashId, setTradeFlashId] = useState<string | null>(null);
   const prevRpRef = useRef(0);
@@ -381,7 +384,39 @@ export default function TradingTerminal() {
       addToast(headline, 'attack', '⚡');
       addFeedItem(headline, '#FF3333', '⚡');
     }).subscribe();
-    channelsRef.current = [pc, poc, sc, lc, rc, ac];
+    // Auto-admin events (game_over, elimination, round transitions)
+    const aac = supabase.channel(`lobby-${lobbyId}-auto`).on('broadcast', { event: 'auto_admin' }, ({ payload }) => {
+      if (!payload) return;
+      if (payload.type === 'game_over') {
+        const finalStandings = payload.final_standings as { name: string; return_pct: number; rank: number }[] | undefined;
+        const traderName = trader?.name;
+        const myStanding = finalStandings?.find(s => s.name === traderName);
+        const total = finalStandings?.length ?? 0;
+        const myFinalRank = myStanding?.rank ?? total + 1;
+        setBattleEndData({
+          rank: myFinalRank,
+          totalPlayers: total,
+          returnPct: myStanding?.return_pct ?? 0,
+        });
+        if (myFinalRank === 1) setWinStreak(prev => prev + 1);
+      } else if (payload.type === 'elimination') {
+        const eliminated = payload.eliminated as string[] | undefined;
+        if (eliminated?.length) {
+          const names = eliminated.join(', ');
+          flash('#FF3333');
+          addToast(`Eliminated: ${names}`, 'attack', '💀');
+          addFeedItem(`${names} eliminated`, '#FF3333', '💀');
+        }
+      } else if (payload.type === 'intermission') {
+        const secs = payload.seconds as number;
+        addToast(`Next round in ${secs}s`, 'info', '⏱');
+        addFeedItem(`Intermission — ${secs}s`, '#F5A0D0', '⏱');
+      } else if (payload.type === 'round_started') {
+        addToast('Round started!', 'success', '🔔');
+        addFeedItem('New round started', '#00FF88', '🔔');
+      }
+    }).subscribe();
+    channelsRef.current = [pc, poc, sc, lc, rc, ac, aac];
     return () => { for (const c of channelsRef.current) supabase.removeChannel(c); channelsRef.current = []; };
   }, [lobbyId, trader, flash, addToast, addFeedItem]);
 
@@ -951,7 +986,7 @@ export default function TradingTerminal() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
         <span style={{ ...B, fontSize: 10, color: '#666' }}>YOUR P&L</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {winStreak >= 3 && <span style={{ ...B, fontSize: 9, color: '#00FF88', padding: '1px 6px', border: '1px solid #00FF88', animation: 'streakGlow 2s infinite' }}>{winStreak}x STREAK</span>}
+          {winStreak >= 2 && <StreakBadge streak={winStreak} />}
           <span style={{ ...M, fontSize: 12, color: '#999' }}>${pv.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
         </div>
       </div>
@@ -1238,6 +1273,29 @@ export default function TradingTerminal() {
 
       {/* Overlays */}
       <OverlayManager activeOverlay={activeOverlay} onClose={() => setActiveOverlay(null)} trader={{ name: trader?.name ?? '', avatar: trader?.avatar_url ?? '', returnPct: rp }} />
+      <BattleEndOverlay
+        visible={!!battleEndData}
+        rank={battleEndData?.rank ?? 0}
+        totalPlayers={battleEndData?.totalPlayers ?? 0}
+        returnPct={battleEndData?.returnPct ?? 0}
+        lobbyId={lobbyId}
+        onRematch={async () => {
+          setBattleEndData(null);
+          const pid = trader?.profile_id ?? '';
+          if (!pid) return;
+          const r = await fetch('/api/lobbies/practice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profile_id: pid, display_name: trader?.name }),
+          });
+          if (r.ok) {
+            const d = await r.json();
+            window.location.href = `/lobby/${d.lobby_id}/trade?code=${d.code}`;
+          }
+        }}
+        onViewRecap={() => setBattleEndData(null)}
+        onBackToDashboard={() => { window.location.href = '/dashboard'; }}
+      />
 
       <div style={{ height: '100dvh', background: '#0A0A0A', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
@@ -1454,13 +1512,19 @@ export default function TradingTerminal() {
           {/* ═══ DESKTOP (>= 768px) ═══ */}
           <div className="hidden md:flex" style={{ flex: 1, overflow: 'hidden' }}>
             {/* LEFT: P&L + Standings + Arsenal + Feed + History */}
-            <div style={{ width: 270, flexShrink: 0, borderRight: '1px solid #1A1A1A', overflowY: 'auto', background: '#0A0A0A' }}>
-              {pnlHero}
-              {effectsBar}
-              {leaderboardPanel}
-              {arsenalPanel}
-              {liveFeed}
-              {roundHistoryPanel}
+            <div style={{ width: 270, flexShrink: 0, borderRight: '1px solid #1A1A1A', display: 'flex', flexDirection: 'column', background: '#0A0A0A', overflow: 'hidden' }}>
+              {/* Top fixed: P&L + Effects */}
+              <div style={{ flexShrink: 0 }}>
+                {pnlHero}
+                {effectsBar}
+              </div>
+              {/* Scrollable middle: Standings + Arsenal + Feed + History */}
+              <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+                {leaderboardPanel}
+                {arsenalPanel}
+                {liveFeed}
+                {roundHistoryPanel}
+              </div>
             </div>
 
             {/* CENTER: Chart + Full Position Strip */}
@@ -1473,9 +1537,13 @@ export default function TradingTerminal() {
             </div>
 
             {/* RIGHT: Quick Positions + Order Entry + Defense */}
-            <div style={{ width: 310, flexShrink: 0, borderLeft: '1px solid #1A1A1A', display: 'flex', flexDirection: 'column', background: '#0A0A0A' }}>
-              <div style={{ flex: 1, overflowY: 'auto' }}>
+            <div style={{ width: 310, flexShrink: 0, borderLeft: '1px solid #1A1A1A', display: 'flex', flexDirection: 'column', background: '#0A0A0A', overflow: 'hidden' }}>
+              {/* Positions strip (compact, fixed) */}
+              <div style={{ flexShrink: 0, maxHeight: 120, overflowY: 'auto' }}>
                 {quickPositions}
+              </div>
+              {/* Order entry + defense (scrollable) */}
+              <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
                 {orderPanel}
                 {defensePanel}
               </div>
@@ -1494,7 +1562,7 @@ export default function TradingTerminal() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ ...M, fontSize: 11, color: '#888' }}>${Math.round(pv).toLocaleString()}</span>
-                <span style={{ ...M, fontSize: 10, color: '#F5A0D0', padding: '2px 6px', background: 'rgba(245,160,208,0.08)', border: '1px solid rgba(245,160,208,0.2)' }}>{credits.balance}CR</span>
+                <button onClick={() => setShowPurchaseModal(true)} style={{ ...M, fontSize: 10, color: '#F5A0D0', padding: '2px 6px', background: 'rgba(245,160,208,0.08)', border: '1px solid rgba(245,160,208,0.2)', cursor: 'pointer' }}>{credits.balance}CR</button>
               </div>
             </div>
 

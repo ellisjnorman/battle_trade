@@ -17,6 +17,10 @@ import type { Position } from '@/types';
 
 // Track active auto-admin loops per lobby
 const activeLoops = new Map<string, NodeJS.Timeout>();
+// Track bot tick intervals per lobby
+const botIntervals = new Map<string, NodeJS.Timeout>();
+
+const BOT_TICK_INTERVAL_MS = 8_000; // Bots act every 8 seconds
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -46,6 +50,7 @@ export function stopAutoAdmin(lobbyId: string): void {
     clearTimeout(timer);
     activeLoops.delete(lobbyId);
   }
+  stopBotTicks(lobbyId);
 }
 
 /** Check if a lobby should start auto-admin (called on player join) */
@@ -172,6 +177,9 @@ async function startRound(
     // Price feed may already be running
   }
 
+  // Start bot trading loop
+  startBotTicks(lobbyId, roundId);
+
   await broadcast('auto_admin', { type: 'round_started', round_id: roundId });
 }
 
@@ -194,6 +202,7 @@ async function endRoundAndAdvance(
     .update({ status: 'completed', ended_at: new Date().toISOString() })
     .eq('id', roundId);
 
+  stopBotTicks(lobbyId);
   activeLoops.delete(lobbyId);
 
   // Get standings from leaderboard
@@ -335,7 +344,8 @@ async function finishGame(
   // Mark lobby complete
   await sb.from('lobbies').update({ status: 'completed' }).eq('id', lobbyId);
 
-  // Clean up lobby engine to prevent memory leak
+  // Clean up lobby engine and bot ticks
+  stopBotTicks(lobbyId);
   try {
     const { unregisterLobbyEngine } = await import('./prices');
     unregisterLobbyEngine(lobbyId);
@@ -400,6 +410,31 @@ async function finishGame(
   });
 
   activeLoops.delete(lobbyId);
+}
+
+// ---------------------------------------------------------------------------
+// Bot tick management
+// ---------------------------------------------------------------------------
+
+function startBotTicks(lobbyId: string, roundId: string): void {
+  stopBotTicks(lobbyId); // Clear any existing interval
+  const interval = setInterval(async () => {
+    try {
+      const { tickBots } = await import('./bots');
+      await tickBots(lobbyId, roundId);
+    } catch (err) {
+      captureError(err, { context: 'bot-tick', lobbyId, roundId });
+    }
+  }, BOT_TICK_INTERVAL_MS);
+  botIntervals.set(lobbyId, interval);
+}
+
+function stopBotTicks(lobbyId: string): void {
+  const interval = botIntervals.get(lobbyId);
+  if (interval) {
+    clearInterval(interval);
+    botIntervals.delete(lobbyId);
+  }
 }
 
 async function getLatestRoundNumber(lobbyId: string): Promise<number> {
