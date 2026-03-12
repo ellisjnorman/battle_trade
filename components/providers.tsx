@@ -41,9 +41,10 @@ export default function Providers({ children }: { children: React.ReactNode }) {
         config={{
           appearance: {
             theme: 'dark',
-            logo: '/brand/logo-icon.png',
-            landingHeader: 'sign in to battle trade',
-            loginMessage: 'compete with real prices. learn, trade, win.',
+            accentColor: '#F5A0D0',
+            logo: '/brand/logo-main.png',
+            landingHeader: 'Sign In',
+            loginMessage: 'Trade against real people. Win real prizes.',
             showWalletLoginFirst: false,
           },
           loginMethods: ['google', 'twitter', 'email', 'wallet'],
