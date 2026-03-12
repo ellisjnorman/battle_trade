@@ -20,10 +20,10 @@ const WORDS = ['YOUR FRIENDS', 'STRANGERS', 'DEGENS', 'YOUR EX', 'ANYONE', 'THE 
 
 // Battle simulation data
 const BATTLE_PLAYERS = [
-  { name: 'wolfpack', tier: '#F5A0D0' },
-  { name: 'vega', tier: '#00DC82' },
-  { name: 'iron_hands', tier: '#FFD700' },
-  { name: 'degen_prime', tier: '#7B93DB' },
+  { name: 'wolfpack', tier: '#F5A0D0', grad: 'linear-gradient(135deg,#8B3A62,#F5A0D0)' },
+  { name: 'vega', tier: '#00DC82', grad: 'linear-gradient(135deg,#006B3F,#00DC82)' },
+  { name: 'iron_hands', tier: '#FFD700', grad: 'linear-gradient(135deg,#8B6914,#FFD700)' },
+  { name: 'degen_prime', tier: '#7B93DB', grad: 'linear-gradient(135deg,#3A4A6B,#7B93DB)' },
 ]
 const BATTLE_EVENTS = [
   { text: 'wolfpack dropped BLACKOUT on vega', col: '#F5A0D0', icon: '🔒' },
@@ -313,7 +313,7 @@ export default function LandingPage() {
                       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
                         <div style={{display:'flex',alignItems:'center',gap:6}}>
                           <span style={{fontFamily:M,fontSize:9,fontWeight:700,color:i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : '#555',width:14}}>{i+1}.</span>
-                          <div style={{width:18,height:18,borderRadius:4,background:`${p.tier}15`,border:`1px solid ${p.tier}30`,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:M,fontSize:8,fontWeight:700,color:p.tier}}>{p.name[0].toUpperCase()}</div>
+                          <div style={{width:20,height:20,borderRadius:6,background:p.grad,border:`1.5px solid ${p.tier}50`,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:M,fontSize:9,fontWeight:700,color:'#FFF',textShadow:'0 1px 2px rgba(0,0,0,.4)'}}>{p.name[0].toUpperCase()}</div>
                           <span style={{fontFamily:S,fontSize:12,fontWeight:i===0?700:500,color:i===0?'#FFF':'#999'}}>{p.name}</span>
                         </div>
                         <span style={{fontFamily:M,fontSize:13,fontWeight:700,color:isPositive?'#00DC82':'#FF4466',transition:'all .3s'}}>
@@ -458,16 +458,23 @@ export default function LandingPage() {
                   <span style={{fontFamily:M,fontSize:10,fontWeight:600,color:'#888',letterSpacing:'.06em'}}>RANK TIERS</span>
                 </div>
                 {[
-                  { name: 'PAPER HANDS', xp: '0-99', col: '#555555', icon: '📄' },
-                  { name: 'RETAIL', xp: '100-299', col: '#CD7F32', icon: '🏪' },
-                  { name: 'SWING TRADER', xp: '300-599', col: '#C0C0C0', icon: '📊' },
-                  { name: 'MARKET MAKER', xp: '600-999', col: '#F5A0D0', icon: '🏦' },
-                  { name: 'WHALE', xp: '1000-1999', col: '#00DC82', icon: '🐋' },
-                  { name: 'DEGEN KING', xp: '2000-4999', col: '#F5A0D0', icon: '👑' },
-                  { name: 'LEGENDARY', xp: '5000+', col: '#FFFFFF', icon: '⚡' },
+                  { name: 'PAPER HANDS', xp: '0-99', col: '#555555', tag: 'PH', grad: 'linear-gradient(135deg,#333,#555)' },
+                  { name: 'RETAIL', xp: '100-299', col: '#CD7F32', tag: 'RT', grad: 'linear-gradient(135deg,#8B4513,#CD7F32)' },
+                  { name: 'SWING TRADER', xp: '300-599', col: '#C0C0C0', tag: 'SW', grad: 'linear-gradient(135deg,#808080,#C0C0C0)' },
+                  { name: 'MARKET MAKER', xp: '600-999', col: '#F5A0D0', tag: 'MM', grad: 'linear-gradient(135deg,#8B3A62,#F5A0D0)' },
+                  { name: 'WHALE', xp: '1000-1999', col: '#00DC82', tag: 'WH', grad: 'linear-gradient(135deg,#006B3F,#00DC82)' },
+                  { name: 'DEGEN KING', xp: '2000-4999', col: '#F5A0D0', tag: 'DK', grad: 'linear-gradient(135deg,#8B008B,#F5A0D0)' },
+                  { name: 'LEGENDARY', xp: '5000+', col: '#FFFFFF', tag: 'LG', grad: 'linear-gradient(135deg,#FFD700,#FFF)' },
                 ].map((rank, i) => (
                   <div key={rank.name} className="card-row" style={{display:'flex',alignItems:'center',gap:12,padding:'10px 24px',borderBottom:i<6?'1px solid rgba(255,255,255,.03)':'none'}}>
-                    <span style={{fontSize:16,width:24,textAlign:'center'}}>{rank.icon}</span>
+                    <div style={{
+                      width:32,height:32,borderRadius:8,flexShrink:0,
+                      background:rank.grad,border:`1.5px solid ${rank.col}40`,
+                      display:'flex',alignItems:'center',justifyContent:'center',
+                      fontFamily:M,fontSize:10,fontWeight:700,color:'#FFF',
+                      boxShadow:i>=5?`0 0 12px ${rank.col}30`:'none',
+                      letterSpacing:'-.02em',
+                    }}>{rank.tag}</div>
                     <div style={{flex:1}}>
                       <span style={{fontFamily:S,fontSize:13,fontWeight:600,color:rank.col}}>{rank.name}</span>
                     </div>

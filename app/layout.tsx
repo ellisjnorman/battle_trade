@@ -53,7 +53,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${bebasNeue.variable} ${jetbrainsMono.variable} ${dmSans.variable}`}>
-      <body className="font-body antialiased bg-bt-background text-white">
+      <body suppressHydrationWarning className="font-body antialiased bg-bt-background text-white">
         <Providers>{children}</Providers>
         <ToastContainer />
       </body>
