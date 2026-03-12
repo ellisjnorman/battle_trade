@@ -94,26 +94,47 @@ export async function deductCredits(
   trader_id: string,
   lobby_id: string,
   amount: number,
-): Promise<void> {
-  const { supabase } = await import('./supabase');
-  const { data } = await supabase
-    .from('credit_allocations')
-    .select('balance, total_spent')
-    .eq('trader_id', trader_id)
-    .eq('lobby_id', lobby_id)
-    .single();
+): Promise<boolean> {
+  const { getServerSupabase } = await import('./supabase-server');
+  const sb = getServerSupabase();
 
-  if (!data) return;
+  // Try atomic RPC first (created by migration 030)
+  const { data, error } = await sb.rpc('deduct_credits', {
+    p_trader_id: trader_id,
+    p_lobby_id: lobby_id,
+    p_amount: amount,
+  });
 
-  await supabase
-    .from('credit_allocations')
-    .update({
-      balance: data.balance - amount,
-      total_spent: data.total_spent + amount,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('trader_id', trader_id)
-    .eq('lobby_id', lobby_id);
+  if (!error) return !!data;
+
+  // Fallback: optimistic locking (check-and-set)
+  if (error.code === '42883' || error.code === 'PGRST202') {
+    const { data: alloc } = await sb
+      .from('credit_allocations')
+      .select('balance, total_spent')
+      .eq('trader_id', trader_id)
+      .eq('lobby_id', lobby_id)
+      .single();
+
+    if (!alloc || alloc.balance < amount) return false;
+
+    // CAS: only update if balance hasn't changed since read
+    const { data: updated } = await sb
+      .from('credit_allocations')
+      .update({
+        balance: alloc.balance - amount,
+        total_spent: alloc.total_spent + amount,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('trader_id', trader_id)
+      .eq('lobby_id', lobby_id)
+      .eq('balance', alloc.balance)
+      .select('id');
+
+    return (updated?.length ?? 0) > 0;
+  }
+
+  return false;
 }
 
 export async function addCredits(
@@ -121,26 +142,46 @@ export async function addCredits(
   lobby_id: string,
   amount: number,
   _reason?: string,
-): Promise<void> {
-  const { supabase } = await import('./supabase');
-  const { data } = await supabase
-    .from('credit_allocations')
-    .select('balance, total_earned')
-    .eq('trader_id', trader_id)
-    .eq('lobby_id', lobby_id)
-    .single();
+): Promise<boolean> {
+  const { getServerSupabase } = await import('./supabase-server');
+  const sb = getServerSupabase();
 
-  if (!data) return;
+  // Try atomic RPC first
+  const { data, error } = await sb.rpc('add_credits', {
+    p_trader_id: trader_id,
+    p_lobby_id: lobby_id,
+    p_amount: amount,
+  });
 
-  await supabase
-    .from('credit_allocations')
-    .update({
-      balance: data.balance + amount,
-      total_earned: data.total_earned + amount,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('trader_id', trader_id)
-    .eq('lobby_id', lobby_id);
+  if (!error) return !!data;
+
+  // Fallback: optimistic locking
+  if (error.code === '42883' || error.code === 'PGRST202') {
+    const { data: alloc } = await sb
+      .from('credit_allocations')
+      .select('balance, total_earned')
+      .eq('trader_id', trader_id)
+      .eq('lobby_id', lobby_id)
+      .single();
+
+    if (!alloc) return false;
+
+    const { data: updated } = await sb
+      .from('credit_allocations')
+      .update({
+        balance: alloc.balance + amount,
+        total_earned: alloc.total_earned + amount,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('trader_id', trader_id)
+      .eq('lobby_id', lobby_id)
+      .eq('balance', alloc.balance)
+      .select('id');
+
+    return (updated?.length ?? 0) > 0;
+  }
+
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +200,7 @@ export async function checkCooldown(
     .eq('lobby_id', lobby_id)
     .order('fired_at', { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   if (!data) return { onCooldown: false, remainingSeconds: 0 };
 
@@ -292,23 +333,30 @@ export async function applySabotageEffect(
     }
 
     case 'leverage_cap': {
-      // Reduce starting_balance by 10%
-      const { data: session } = await supabase
+      // Temporarily cap leverage to 1x — do NOT modify starting_balance (corrupts scoring)
+      await supabase
         .from('sessions')
-        .select('starting_balance')
+        .update({ max_leverage: 1 })
         .eq('trader_id', sabotage.target_id)
-        .eq('lobby_id', lobby_id)
-        .single();
+        .eq('lobby_id', lobby_id);
+      traderBroadcast('sabotage', { type: 'leverage_cap', max_leverage: 1, duration: sabotage.duration_seconds ?? 120 });
 
-      if (session) {
-        const newBalance = Math.round(session.starting_balance * 0.9);
-        await supabase
-          .from('sessions')
-          .update({ starting_balance: newBalance })
-          .eq('trader_id', sabotage.target_id)
-          .eq('lobby_id', lobby_id);
+      // Restore leverage after duration
+      if (sabotage.duration_seconds) {
+        setTimeout(async () => {
+          const { supabase: sb } = await import('./supabase');
+          await sb
+            .from('sessions')
+            .update({ max_leverage: null })
+            .eq('trader_id', sabotage.target_id)
+            .eq('lobby_id', lobby_id);
+
+          await sb
+            .from('sabotages')
+            .update({ status: 'expired' })
+            .eq('id', sabotage.id);
+        }, sabotage.duration_seconds * 1000);
       }
-      traderBroadcast('sabotage', { type: 'leverage_cap', reduction: 10 });
       break;
     }
 

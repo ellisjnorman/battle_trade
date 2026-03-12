@@ -23,7 +23,7 @@ export async function GET(
   if (action === 'current_round') {
     const { data: round } = await supabase
       .from('rounds')
-      .select('*')
+      .select('id, lobby_id, round_number, status, started_at, ended_at, duration_seconds, starting_balance, event_id')
       .eq('lobby_id', lobbyId)
       .order('round_number', { ascending: false })
       .limit(1)
@@ -35,7 +35,7 @@ export async function GET(
   // Default: return lobby info
   const { data: lobby } = await supabase
     .from('lobbies')
-    .select('*')
+    .select('id, name, format, status, is_public, invite_code, config, created_at, created_by')
     .eq('id', lobbyId)
     .single();
 

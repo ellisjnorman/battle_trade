@@ -6,6 +6,8 @@
 // ---------------------------------------------------------------------------
 
 import { getServerSupabase } from '@/lib/supabase-server';
+import { calcUnrealizedPnl } from '@/lib/pnl';
+import type { Position } from '@/types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -412,12 +414,9 @@ export async function completeDuel(lobbyId: string): Promise<DuelChallenge> {
         // Closed position — use realized PnL
         pnl += pos.realized_pnl;
       } else {
-        // Open position — calculate unrealized
+        // Open position — use same PnL formula as the rest of the platform
         const currentPrice = priceMap[pos.symbol] ?? pos.entry_price;
-        const diff = pos.direction === 'long'
-          ? (currentPrice - pos.entry_price) / pos.entry_price
-          : (pos.entry_price - currentPrice) / pos.entry_price;
-        pnl += diff * pos.size * pos.leverage;
+        pnl += calcUnrealizedPnl(pos as unknown as Position, currentPrice);
       }
     }
 

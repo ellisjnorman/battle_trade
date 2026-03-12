@@ -11,7 +11,9 @@
  */
 
 import { getServerSupabase } from './supabase-server';
+import { calcUnrealizedPnl } from './pnl';
 import { captureError } from './error';
+import type { Position } from '@/types';
 
 // Track active auto-admin loops per lobby
 const activeLoops = new Map<string, NodeJS.Timeout>();
@@ -111,6 +113,8 @@ async function runGameLoop(lobbyId: string): Promise<void> {
         setTimeout(() => supabase.removeChannel(ch), 500);
       }
     });
+    // Fallback: remove channel regardless after 3s (covers subscription failure)
+    setTimeout(() => supabase.removeChannel(ch), 3000);
   };
 
   // Create first round
@@ -224,23 +228,28 @@ async function endRoundAndAdvance(
     let pnl = 0;
     for (const pos of traderPositions) {
       const currentPrice = priceMap[pos.symbol] ?? pos.entry_price;
-      const diff = pos.direction === 'long'
-        ? (currentPrice - pos.entry_price) / pos.entry_price
-        : (pos.entry_price - currentPrice) / pos.entry_price;
-      pnl += diff * pos.size * pos.leverage;
+      pnl += calcUnrealizedPnl(pos as unknown as Position, currentPrice);
     }
     portfolioValues[t.id] = startBal + pnl;
   }
 
-  // Build standings sorted by return %
-  const standings = (tradersData ?? [])
+  // Build standings sorted by return % — separate alive from eliminated
+  const allStandings = (tradersData ?? [])
     .map(t => {
       const startBal = sessionMap[t.id] ?? 10000;
       const pv = portfolioValues[t.id] ?? startBal;
-      const returnPct = ((pv - startBal) / startBal) * 100;
+      const returnPct = startBal > 0 ? ((pv - startBal) / startBal) * 100 : 0;
       return { trader: t, portfolioValue: pv, returnPct, rank: 0 };
+    });
+
+  // Rank alive traders first, then eliminated at the bottom
+  const standings = allStandings
+    .sort((a, b) => {
+      if (a.trader.is_eliminated !== b.trader.is_eliminated) {
+        return a.trader.is_eliminated ? 1 : -1; // alive first
+      }
+      return b.returnPct - a.returnPct;
     })
-    .sort((a, b) => b.returnPct - a.returnPct)
     .map((s, i) => ({ ...s, rank: i + 1 }));
 
   // Count alive players
@@ -326,6 +335,14 @@ async function finishGame(
   // Mark lobby complete
   await sb.from('lobbies').update({ status: 'completed' }).eq('id', lobbyId);
 
+  // Clean up lobby engine to prevent memory leak
+  try {
+    const { unregisterLobbyEngine } = await import('./prices');
+    unregisterLobbyEngine(lobbyId);
+  } catch {
+    // Best-effort cleanup
+  }
+
   // Distribute prizes
   const { distributePrizePool } = await import('./entry-fees');
   const rankings = standings
@@ -335,7 +352,7 @@ async function finishGame(
   await distributePrizePool({ lobby_id: lobbyId, rankings });
 
   // Record payouts to profile history
-  for (const r of rankings.slice(0, 3)) {
+  for (const r of rankings.slice(0, 1)) {
     const { data: trader } = await sb
       .from('traders')
       .select('profile_id')

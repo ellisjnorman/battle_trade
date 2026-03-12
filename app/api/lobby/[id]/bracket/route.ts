@@ -6,6 +6,7 @@ import {
   completeRound,
   getBracketStateByLobby,
 } from '@/lib/brackets';
+import { checkAuthWithLobby, unauthorized } from '../admin/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +30,9 @@ export async function GET(
       );
     }
 
-    return NextResponse.json(state);
+    return NextResponse.json(state, {
+      headers: { 'Cache-Control': 'public, s-maxage=3, stale-while-revalidate=10' },
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });
@@ -46,6 +49,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: lobbyId } = await params;
+  if (!(await checkAuthWithLobby(request, lobbyId))) return unauthorized();
 
   let body: Record<string, unknown>;
   try {
@@ -113,6 +117,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: lobbyId } = await params;
+  if (!(await checkAuthWithLobby(request, lobbyId))) return unauthorized();
 
   let body: Record<string, unknown>;
   try {

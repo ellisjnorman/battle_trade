@@ -26,16 +26,16 @@ export async function GET(request: NextRequest) {
   // Get player counts
   if (lobbies && lobbies.length > 0) {
     const ids = lobbies.map(l => l.id);
-    const { data: sessions } = await sb
-      .from('sessions')
+    const { data: traders } = await sb
+      .from('traders')
       .select('lobby_id, is_competitor')
       .in('lobby_id', ids);
 
     const counts: Record<string, { players: number; spectators: number }> = {};
-    for (const s of sessions ?? []) {
-      if (!counts[s.lobby_id]) counts[s.lobby_id] = { players: 0, spectators: 0 };
-      if (s.is_competitor) counts[s.lobby_id].players++;
-      else counts[s.lobby_id].spectators++;
+    for (const t of traders ?? []) {
+      if (!counts[t.lobby_id]) counts[t.lobby_id] = { players: 0, spectators: 0 };
+      if (t.is_competitor) counts[t.lobby_id].players++;
+      else counts[t.lobby_id].spectators++;
     }
 
     const result = lobbies.map(l => ({
@@ -44,8 +44,12 @@ export async function GET(request: NextRequest) {
       spectator_count: counts[l.id]?.spectators ?? 0,
     }));
 
-    return NextResponse.json({ lobbies: result });
+    return NextResponse.json({ lobbies: result }, {
+      headers: { 'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=15' },
+    });
   }
 
-  return NextResponse.json({ lobbies: [] });
+  return NextResponse.json({ lobbies: [] }, {
+    headers: { 'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=15' },
+  });
 }

@@ -41,6 +41,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Auth profile not found' }, { status: 404 })
   }
 
+  // Find guest's traders before migrating (need IDs for session migration)
+  const { data: guestTraders } = await sb
+    .from('traders')
+    .select('id')
+    .eq('profile_id', guest_profile_id)
+
   // Migrate traders from guest to auth profile
   const { error: traderErr } = await sb
     .from('traders')
@@ -51,40 +57,37 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to migrate traders' }, { status: 500 })
   }
 
-  // Migrate sessions
-  await sb
-    .from('sessions')
-    .update({ profile_id: auth_profile_id })
-    .eq('profile_id', guest_profile_id)
+  // Migrate sessions by trader_id (sessions have no profile_id column)
+  if (guestTraders && guestTraders.length > 0) {
+    // Sessions are already linked via trader_id — no update needed since trader_id stays the same.
+    // The trader's profile_id was updated above, so the chain profile→trader→session is intact.
+  }
 
-  // Transfer credits
-  const { data: guestCredits } = await sb
-    .from('credits')
-    .select('balance')
-    .eq('profile_id', guest_profile_id)
-    .maybeSingle()
+  // Transfer credits from guest profile to auth profile
+  const { data: guestProfileCredits } = await sb
+    .from('profiles')
+    .select('credits')
+    .eq('id', guest_profile_id)
+    .single()
 
-  if (guestCredits && guestCredits.balance > 0) {
-    // Add to auth profile's credits
-    const { data: authCredits } = await sb
-      .from('credits')
-      .select('balance')
-      .eq('profile_id', auth_profile_id)
-      .maybeSingle()
+  if (guestProfileCredits && (guestProfileCredits.credits ?? 0) > 0) {
+    const { data: authProfileCredits } = await sb
+      .from('profiles')
+      .select('credits')
+      .eq('id', auth_profile_id)
+      .single()
 
-    if (authCredits) {
-      await sb.from('credits').update({ balance: authCredits.balance + guestCredits.balance }).eq('profile_id', auth_profile_id)
-    } else {
-      await sb.from('credits').insert({ profile_id: auth_profile_id, balance: guestCredits.balance })
-    }
-    // Zero out guest credits
-    await sb.from('credits').update({ balance: 0 }).eq('profile_id', guest_profile_id)
+    const guestBal = guestProfileCredits.credits ?? 0
+    const authBal = authProfileCredits?.credits ?? 0
+
+    await sb.from('profiles').update({ credits: authBal + guestBal }).eq('id', auth_profile_id)
+    await sb.from('profiles').update({ credits: 0 }).eq('id', guest_profile_id)
   }
 
   // Mark guest profile as upgraded
   await sb
     .from('profiles')
-    .update({ is_guest: false, upgraded_to: auth_profile_id })
+    .update({ is_guest: false })
     .eq('id', guest_profile_id)
 
   return NextResponse.json({

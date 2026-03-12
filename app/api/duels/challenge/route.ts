@@ -28,6 +28,9 @@ export async function POST(request: NextRequest) {
     if (!opponent_id || typeof opponent_id !== 'string') {
       return NextResponse.json({ error: 'opponent_id is required' }, { status: 400 });
     }
+    if (challenger_id === opponent_id) {
+      return NextResponse.json({ error: 'Cannot challenge yourself' }, { status: 400 });
+    }
     if (!VALID_DURATIONS.includes(duration_minutes)) {
       return NextResponse.json(
         { error: `duration_minutes must be one of: ${VALID_DURATIONS.join(', ')}` },

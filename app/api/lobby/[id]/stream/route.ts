@@ -25,6 +25,8 @@ export async function GET(
       status: stream.status,
       created_at: stream.created_at,
     },
+  }, {
+    headers: { 'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=15' },
   });
 }
 

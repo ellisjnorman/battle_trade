@@ -71,6 +71,22 @@ export const c = {
   tierLegend: '#FFFFFF',
 }
 
+// ─── RANK COLORS ────────────────────────────────────────────
+export const rankColor = (rank: number) => {
+  if (rank === 1) return { color: '#FFD700', glow: '0 0 20px rgba(255,215,0,.3)', label: 'GOLD' }
+  if (rank === 2) return { color: '#C0C0C0', glow: '0 0 16px rgba(192,192,192,.25)', label: 'SILVER' }
+  if (rank === 3) return { color: '#CD7F32', glow: '0 0 16px rgba(205,127,50,.25)', label: 'BRONZE' }
+  return { color: c.text2, glow: 'none', label: '' }
+}
+
+// ─── STREAK COLORS ──────────────────────────────────────────
+export const streakStyle = (streak: number) => {
+  if (streak >= 5) return { color: '#FFD700', label: 'UNSTOPPABLE', intensity: 'high' as const }
+  if (streak >= 3) return { color: c.pink, label: 'ON FIRE', intensity: 'medium' as const }
+  if (streak >= 2) return { color: '#FF8C00', label: `${streak} STREAK`, intensity: 'low' as const }
+  return { color: c.text4, label: '', intensity: 'none' as const }
+}
+
 // ─── RADII ──────────────────────────────────────────────────
 export const radius = {
   sm: 8,
@@ -81,13 +97,20 @@ export const radius = {
 }
 
 // ─── TYPE SCALE ─────────────────────────────────────────────
-// Hero:     56px mono 700 (the ONE number)
+// Hero:     56px mono 700 (the ONE number per screen)
+// Mega:     64-80px mono 700 (recap card / celebration)
+// Display:  48px display 700 (Bebas Neue headings)
 // Title:    28px sans 700
 // Section:  18px sans 600
 // Card:     15px sans 600
 // Body:     14px sans 400
 // Caption:  12px sans 500 uppercase .05em
 // Micro:    10px sans 600 uppercase .08em
+
+// ─── RECAP CARD DIMENSIONS ──────────────────────────────────
+// Story:  360x640 (9:16 for IG Story)
+// Square: 360x360 (1:1 for feed)
+// Always include: logo top, hero stat center, BTR bottom, watermark
 
 // ─── SHARED STYLES ──────────────────────────────────────────
 export const navHeight = 56
@@ -214,6 +237,23 @@ export const globalCSS = `
   .fade-up{animation:fadeUp .35s cubic-bezier(.4,0,.2,1) both}
 
   @keyframes slideIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+
+  @keyframes streakPulse{0%,100%{transform:scale(1);filter:brightness(1)}50%{transform:scale(1.08);filter:brightness(1.2)}}
+  .streak-pulse{animation:streakPulse 1.2s ease-in-out infinite}
+
+  @keyframes streakShake{0%,100%{transform:translateX(0)}10%,30%,50%,70%,90%{transform:translateX(-2px)}20%,40%,60%,80%{transform:translateX(2px)}}
+  .streak-shake{animation:streakShake .4s ease-in-out infinite}
+
+  @keyframes celebBurst{0%{transform:scale(0);opacity:1}50%{transform:scale(1.3);opacity:.6}100%{transform:scale(1);opacity:1}}
+  .celeb-burst{animation:celebBurst .6s cubic-bezier(.34,1.56,.64,1) both}
+
+  @keyframes confetti{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(120vh) rotate(720deg);opacity:0}}
+
+  @keyframes goldGlow{0%,100%{box-shadow:0 0 20px rgba(255,215,0,.2)}50%{box-shadow:0 0 40px rgba(255,215,0,.4)}}
+  .gold-glow{animation:goldGlow 2s ease-in-out infinite}
+
+  @keyframes countUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .count-up{animation:countUp .4s ease-out both}
 `
 
 // ─── HELPERS ────────────────────────────────────────────────

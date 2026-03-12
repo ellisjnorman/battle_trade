@@ -306,7 +306,7 @@ export class VolatilityEngine {
   getActiveModifier(): PriceModifier | null {
     if (!this.activeEvent || this.activeEvent.status !== 'active') return null;
     const def = EVENT_DEFINITIONS[this.activeEvent.type];
-    return def.buildModifier(50000, this.activeEvent.magnitude * 10);
+    return def.buildModifier(50000, this.activeEvent.magnitude);
   }
 
   getActiveEvent(): ActiveEvent | null {
@@ -435,7 +435,7 @@ export class VolatilityEngine {
       type: 'event_start',
       event: serializeEvent(event),
       secondsRemaining: event.duration_seconds,
-    });
+    }).catch(err => console.error('[volatility-engine] broadcast event_start failed:', err));
 
     // Per-event timer
     if (event.duration_seconds > 0) {
@@ -476,7 +476,7 @@ export class VolatilityEngine {
     this.broadcastFn(this.lobby_id, {
       type: 'event_complete',
       event: serializeEvent(event),
-    });
+    }).catch(err => console.error('[volatility-engine] broadcast event_complete failed:', err));
   }
 }
 
@@ -515,11 +515,14 @@ function pickAlgoEventType(
 async function defaultBroadcast(lobbyId: string, payload: Record<string, unknown>) {
   const { supabase } = await import('./supabase');
   const channel = supabase.channel(`lobby-${lobbyId}-events`);
-  await channel.send({
-    type: 'broadcast',
-    event: 'volatility',
-    payload,
+  channel.subscribe(async (status) => {
+    if (status === 'SUBSCRIBED') {
+      channel.send({ type: 'broadcast', event: 'volatility', payload }).catch(() => {});
+      setTimeout(() => supabase.removeChannel(channel), 500);
+    }
   });
+  // Fallback: remove channel regardless after 3s
+  setTimeout(() => supabase.removeChannel(channel), 3000);
 }
 
 function serializeEvent(event: ActiveEvent): Record<string, unknown> {

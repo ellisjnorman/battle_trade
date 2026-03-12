@@ -6,11 +6,17 @@ export interface Lobby {
   id: string;
   name: string;
   format: 'elimination' | 'marathon' | 'blitz';
-  status: 'waiting' | 'active' | 'completed';
+  status: 'waiting' | 'active' | 'playing' | 'completed';
   config: LobbyConfig;
   created_by: string | null;
   is_public: boolean;
   invite_code: string | null;
+  auto_admin?: boolean;
+  min_players?: number;
+  max_players?: number;
+  auto_start_countdown?: number;
+  entry_fee_amount?: number;
+  entry_fee_currency?: string;
   created_at: string;
 }
 
@@ -24,6 +30,7 @@ export interface LobbyConfig {
   round_duration_seconds: number;           // each round (default 300 = 5 min)
   lobby_duration_minutes?: number;          // total lobby length (15-60 min, optional)
   scoring_mode?: 'best_round' | 'cumulative' | 'last_round';  // how winner is decided (default best_round)
+  elimination_pct?: number;           // % eliminated each round (default 25)
   trade_execution_mode?: 'paper_only' | 'paper_plus_onchain' | 'live' | 'hyperliquid';
   prediction_rake_pct?: number;   // 0-100, platform rake on prediction market payouts (default 10)
   entry_fee?: number;             // credits required to enter (0 = free / IRL events)
@@ -58,6 +65,10 @@ export interface Session {
   final_balance: number | null;
   final_rank: number | null;
   is_eliminated: boolean;
+  positions_locked?: boolean;
+  positions_public?: boolean;
+  frozen_asset?: string | null;
+  max_leverage?: number | null;
   created_at: string;
 }
 
@@ -87,6 +98,9 @@ export interface Trader {
   avatar_url: string | null;
   is_eliminated: boolean;
   eliminated_at: string | null;
+  is_competitor: boolean;
+  code: string | null;
+  profile_id: string | null;
   event_id: string;
   lobby_id: string | null;
   created_at: string;

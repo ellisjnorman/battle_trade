@@ -48,8 +48,27 @@ export async function checkAuthWithLobby(request: NextRequest, lobbyId: string):
       .eq('id', lobbyId)
       .single();
 
-    // Creator owns their lobby — profile ID match
-    if (lobby?.created_by && authHeader === lobby.created_by) return true;
+    // Creator owns their lobby — verify via Supabase Auth session
+    if (lobby?.created_by) {
+      // Try Supabase Auth token (Bearer <jwt>)
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+      if (token) {
+        try {
+          const { data: { user } } = await sb.auth.getUser(token);
+          if (user) {
+            // Look up profile for this auth user
+            const { data: profile } = await sb
+              .from('profiles')
+              .select('id')
+              .eq('auth_user_id', user.id)
+              .single();
+            if (profile && profile.id === lobby.created_by) return true;
+          }
+        } catch {
+          // Token invalid — fall through
+        }
+      }
+    }
 
     // Fallback: per-lobby admin password
     const lobbyPassword = lobby?.config?.admin_password;

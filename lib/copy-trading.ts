@@ -427,6 +427,32 @@ export async function mirrorPosition(
     return { trade: null, error: 'Leader position not found' };
   }
 
+  // Resolve the follower's trader_id in the same lobby as the leader's position
+  // leaderPos.round_id → round → lobby_id → trader for follower profile
+  const { data: roundRow } = await sb
+    .from('rounds')
+    .select('lobby_id')
+    .eq('id', leaderPos.round_id)
+    .single();
+
+  if (!roundRow) {
+    return { trade: null, error: 'Could not resolve lobby for leader position' };
+  }
+
+  const { data: followerTrader } = await sb
+    .from('traders')
+    .select('id')
+    .eq('profile_id', sub.follower_id)
+    .eq('lobby_id', roundRow.lobby_id)
+    .limit(1)
+    .maybeSingle();
+
+  if (!followerTrader) {
+    return { trade: null, error: 'Follower has no trader in this lobby' };
+  }
+
+  const followerTraderId = followerTrader.id;
+
   // Get leader's current equity from their most recent active session
   const { data: leaderSession } = await sb
     .from('sessions')
@@ -466,7 +492,7 @@ export async function mirrorPosition(
     const { data: paperPos, error: paperErr } = await sb
       .from('positions')
       .insert({
-        trader_id: sub.follower_id,
+        trader_id: followerTraderId,
         round_id: leaderPos.round_id,
         symbol: leaderPos.symbol,
         direction: leaderPos.direction,
@@ -505,7 +531,7 @@ export async function mirrorPosition(
     const { data: trackerPos } = await sb
       .from('positions')
       .insert({
-        trader_id: sub.follower_id,
+        trader_id: followerTraderId,
         round_id: leaderPos.round_id,
         symbol: leaderPos.symbol,
         direction: leaderPos.direction,

@@ -30,7 +30,7 @@ export function getRoundStandings(
   // Sort descending by return%, tie-break alphabetically
   standings.sort((a, b) => {
     if (b.returnPct !== a.returnPct) return b.returnPct - a.returnPct;
-    return a.trader.name.localeCompare(b.trader.name);
+    return (a.trader.name ?? '').localeCompare(b.trader.name ?? '');
   });
 
   // Assign ranks in-place (single pass)

@@ -23,6 +23,8 @@ export async function GET(request: NextRequest) {
       active_trades: portfolio.active_trades,
       total_pnl: portfolio.total_pnl,
       total_fees_paid: portfolio.total_fees_paid,
+    }, {
+      headers: { 'Cache-Control': 'public, s-maxage=3, stale-while-revalidate=10' },
     });
   } catch (err) {
     console.error('GET /api/copy-trading/portfolio error:', err);

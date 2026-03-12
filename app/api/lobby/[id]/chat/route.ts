@@ -50,7 +50,9 @@ export async function GET(
     timestamp: row.created_at,
   }));
 
-  return NextResponse.json({ messages });
+  return NextResponse.json({ messages }, {
+    headers: { 'Cache-Control': 'public, s-maxage=1, stale-while-revalidate=3' },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -86,25 +88,20 @@ export async function POST(
 
   const db = getServerSupabase();
 
-  // Resolve sender info: prefer body fields, fall back to trader lookup
-  let senderName: string = body.sender_name ?? '';
-  let senderRole: string = body.sender_role ?? '';
+  // Always look up sender info from the traders table (ignore body sender_role to prevent spoofing)
+  const { data: trader } = await db
+    .from('traders')
+    .select('name, is_competitor')
+    .eq('id', senderId)
+    .eq('lobby_id', lobbyId)
+    .single();
 
-  if (!senderName || !senderRole) {
-    const { data: trader } = await db
-      .from('traders')
-      .select('name, is_competitor')
-      .eq('id', senderId)
-      .eq('lobby_id', lobbyId)
-      .single();
-
-    if (!trader) {
-      return NextResponse.json({ error: 'Invalid sender' }, { status: 403 });
-    }
-
-    senderName = senderName || trader.name;
-    senderRole = senderRole || (trader.is_competitor ? 'competitor' : 'spectator');
+  if (!trader) {
+    return NextResponse.json({ error: 'Invalid sender' }, { status: 403 });
   }
+
+  const senderName: string = body.sender_name || trader.name;
+  const senderRole: string = trader.is_competitor ? 'competitor' : 'spectator';
 
   const filteredContent = filterMessage(content);
 

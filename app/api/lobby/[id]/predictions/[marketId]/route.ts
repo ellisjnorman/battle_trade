@@ -15,7 +15,9 @@ export async function GET(
     const market = await provider.getMarket(marketId);
     const odds_history = await getOddsHistory(marketId);
 
-    return NextResponse.json({ market, odds_history });
+    return NextResponse.json({ market, odds_history }, {
+      headers: { 'Cache-Control': 'public, s-maxage=2, stale-while-revalidate=5' },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Market not found';
     if (message === 'Market not found') {

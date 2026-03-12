@@ -18,7 +18,8 @@ export interface EliminationResult {
  * dropped to 0 or below.
  */
 export async function checkAndEliminate(lobbyId: string): Promise<EliminationResult[]> {
-  const { supabase } = await import('./supabase');
+  const { getServerSupabase } = await import('./supabase-server');
+  const supabase = getServerSupabase();
 
   // 1. Get active/frozen rounds for this lobby
   const { data: rounds } = await supabase

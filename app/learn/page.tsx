@@ -153,7 +153,7 @@ export default function LearnPage() {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <span style={{ fontFamily: S, fontSize: 13, color: '#888' }}>{strategies.length} strategies</span>
-              <button onClick={() => router.push('/strategies/new')} style={{ fontFamily: B, fontSize: 13, color: '#F5A0D0', background: 'transparent', border: '1px solid #F5A0D0', padding: '8px 16px', cursor: 'pointer' }}>
+              <button onClick={() => router.push('/create')} style={{ fontFamily: B, fontSize: 13, color: '#F5A0D0', background: 'transparent', border: '1px solid #F5A0D0', padding: '8px 16px', cursor: 'pointer' }}>
                 SHARE STRATEGY
               </button>
             </div>
@@ -200,7 +200,7 @@ export default function LearnPage() {
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
                 {mentors.map(m => (
-                  <div key={m.id} className="card" onClick={() => router.push(`/profile/${m.id}`)}
+                  <div key={m.id} className="card" onClick={() => router.push('/profile')}
                     style={{ padding: 20, background: '#0D0D0D', border: `1px solid ${TIER_COLORS[m.rank_tier] ?? '#1A1A1A'}33`, cursor: 'pointer', transition: 'border-color 150ms' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                       <span style={{ fontFamily: B, fontSize: 20, color: '#FFF', letterSpacing: '0.03em' }}>{m.display_name}</span>
@@ -210,7 +210,7 @@ export default function LearnPage() {
                       {m.rank_tier.replace(/_/g, ' ').toUpperCase()} · {m.total_wins}W · {(m.win_rate * 100).toFixed(0)}%
                     </div>
                     {m.bio && <p style={{ fontFamily: S, fontSize: 12, color: '#666', marginTop: 8, lineHeight: 1.4 }}>{m.bio.slice(0, 100)}</p>}
-                    <button onClick={e => { e.stopPropagation(); router.push(`/profile/${m.id}`) }}
+                    <button onClick={e => { e.stopPropagation(); router.push('/profile') }}
                       style={{ marginTop: 12, fontFamily: B, fontSize: 12, color: '#F5A0D0', background: 'transparent', border: '1px solid #F5A0D0', padding: '6px 16px', cursor: 'pointer', width: '100%' }}>
                       VIEW PROFILE
                     </button>

@@ -1,6 +1,6 @@
 "use client"
 // Battle Trade Live Platform v5.0 - Volatility Engine UI Layer
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import Image from "next/image"
 import { useSearchParams } from "next/navigation"
 
@@ -1136,6 +1136,14 @@ function ShareCardView({ teams }: { teams: Team[] }) {
 
 // Main Component
 export default function LeaderboardUI() {
+  return (
+    <Suspense fallback={<div style={{ background: '#000000', minHeight: '100vh' }} />}>
+      <LeaderboardUIInner />
+    </Suspense>
+  )
+}
+
+function LeaderboardUIInner() {
   const searchParams = useSearchParams()
   const stateParam = searchParams.get("state") as ViewState | null
   const currentState: ViewState = stateParam && ["active", "elimination", "round_complete", "connection_lost", "share_card"].includes(stateParam) ? stateParam : "active"

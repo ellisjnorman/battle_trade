@@ -15,18 +15,24 @@ export async function POST(
   // Get final standings — non-eliminated traders sorted by portfolio value
   const { data: traders } = await supabase
     .from('traders')
-    .select('id, name, is_eliminated')
+    .select('id, name, is_eliminated, sessions(final_balance)')
     .eq('lobby_id', lobbyId);
 
   if (!traders || traders.length === 0) {
     return NextResponse.json({ error: 'No traders found' }, { status: 404 });
   }
 
-  // Build rankings: non-eliminated first (they're the winners), then eliminated
+  // Build rankings: non-eliminated first (they're the winners), ordered by performance
   const alive = traders.filter(t => !t.is_eliminated);
   const eliminated = traders.filter(t => t.is_eliminated);
 
-  // For a simple ranking: alive traders are ranked 1..N, eliminated are unranked
+  // Sort alive traders by final_balance descending (best performer first)
+  alive.sort((a, b) => {
+    const balA = Array.isArray(a.sessions) && a.sessions[0] ? (a.sessions[0] as { final_balance: number | null }).final_balance ?? 0 : 0;
+    const balB = Array.isArray(b.sessions) && b.sessions[0] ? (b.sessions[0] as { final_balance: number | null }).final_balance ?? 0 : 0;
+    return balB - balA;
+  });
+
   const rankings = alive.map((t, i) => ({ trader_id: t.id, rank: i + 1 }));
 
   const result = await distributePrizePool({ lobby_id: lobbyId, rankings });

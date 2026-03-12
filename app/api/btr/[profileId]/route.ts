@@ -131,34 +131,15 @@ export async function GET(
     return NextResponse.json({ error: 'Missing profileId' }, { status: 400 });
   }
 
-  // 1. Find all traders associated with this profile
-  const { data: traders, error: traderErr } = await supabase
+  // 1. Find all traders associated with this profile, then fetch their sessions
+  const { data: traders } = await supabase
     .from('traders')
     .select('id, lobby_id')
     .eq('profile_id', profileId);
 
-  // Also try direct profile → sessions link
-  const { data: sessions, error: sessionErr } = await supabase
-    .from('sessions')
-    .select(`
-      id,
-      lobby_id,
-      trader_id,
-      starting_balance,
-      final_balance,
-      final_rank,
-      is_eliminated,
-      created_at,
-      traders!inner ( id, lobby_id ),
-      lobbies!inner ( id, status, config )
-    `)
-    .eq('trader_id', profileId)
-    .not('final_balance', 'is', null);
+  let allSessions: SessionRow[] = [];
 
-  // If direct profile lookup fails, try through traders table
-  let allSessions: SessionRow[] = (sessions as unknown as SessionRow[]) ?? [];
-
-  if ((!allSessions || allSessions.length === 0) && traders && traders.length > 0) {
+  if (traders && traders.length > 0) {
     const traderIds = traders.map((t) => t.id);
 
     const { data: traderSessions, error: tsErr } = await supabase
@@ -275,5 +256,7 @@ export async function GET(
     battles: battles.length,
     qualifies_leaderboard: qualifiesLB,
     qualifies_copy_trading: qualifiesCT,
+  }, {
+    headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' },
   });
 }

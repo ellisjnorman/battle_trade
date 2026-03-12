@@ -28,7 +28,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from('volatility_events')
-    .select('*')
+    .select('id, lobby_id, type, asset, magnitude, duration_seconds, headline, trigger_mode, fired_at, created_by')
     .eq('lobby_id', lobbyId)
     .order('fired_at', { ascending: false });
 
@@ -36,7 +36,9 @@ export async function GET(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ events: data ?? [] });
+  return NextResponse.json({ events: data ?? [] }, {
+    headers: { 'Cache-Control': 'public, s-maxage=3, stale-while-revalidate=10' },
+  });
 }
 
 export async function POST(
@@ -242,13 +244,16 @@ async function applyLeverageSurge(lobbyId: string) {
 
   if (!positions || positions.length === 0) return;
 
-  // Double all position sizes
-  for (const pos of positions) {
-    await supabase
-      .from('positions')
-      .update({ size: pos.size * 2 })
-      .eq('id', pos.id);
-  }
+  // Double all position sizes (parallel)
+  await Promise.all(
+    positions.map((pos) =>
+      supabase
+        .from('positions')
+        .update({ size: pos.size * 2 })
+        .eq('id', pos.id)
+        .then()
+    )
+  );
 
   // Broadcast the surge
   bc(`lobby-${lobbyId}-events`, 'volatility', { type: 'leverage_surge_applied', positions_affected: positions.length });
@@ -260,6 +265,8 @@ async function applyLeverageSurge(lobbyId: string) {
   const priceMap: Record<string, number> = {};
   for (const p of prices) priceMap[p.symbol] = p.price;
 
+  // Check liquidations and close in parallel
+  const liquidationUpdates: PromiseLike<unknown>[] = [];
   for (const pos of positions) {
     const currentPrice = priceMap[pos.symbol];
     if (!currentPrice) continue;
@@ -280,14 +287,20 @@ async function applyLeverageSurge(lobbyId: string) {
         ? (currentPrice - pos.entry_price) / pos.entry_price * pos.size * 2 * pos.leverage
         : (pos.entry_price - currentPrice) / pos.entry_price * pos.size * 2 * pos.leverage;
 
-      await supabase
-        .from('positions')
-        .update({
-          closed_at: new Date().toISOString(),
-          exit_price: currentPrice,
-          realized_pnl: pnl,
-        })
-        .eq('id', pos.id);
+      liquidationUpdates.push(
+        supabase
+          .from('positions')
+          .update({
+            closed_at: new Date().toISOString(),
+            exit_price: currentPrice,
+            realized_pnl: pnl,
+          })
+          .eq('id', pos.id)
+          .then()
+      );
     }
+  }
+  if (liquidationUpdates.length > 0) {
+    await Promise.all(liquidationUpdates);
   }
 }

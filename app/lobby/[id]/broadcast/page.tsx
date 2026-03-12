@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { type LobbyState, type VolatilityEvent } from '@/lib/battle-trade-types'
 import { useBroadcastData } from '@/hooks/use-broadcast-data'
@@ -728,6 +728,14 @@ function StreamControlPanel({ lobbyId, adminPw }: { lobbyId: string; adminPw: st
 
 // Main Broadcast Page
 export default function BroadcastPage() {
+  return (
+    <Suspense fallback={<div style={{ background: '#0A0A0A', width: 1920, height: 1080 }} />}>
+      <BroadcastPageInner />
+    </Suspense>
+  )
+}
+
+function BroadcastPageInner() {
   const { id: lobbyId } = useParams<{ id: string }>()
   const searchParams = useSearchParams()
   const sponsorLogo = searchParams.get('sponsor_logo')

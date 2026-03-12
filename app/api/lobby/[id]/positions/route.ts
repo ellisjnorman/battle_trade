@@ -21,20 +21,23 @@ export async function POST(
   if (!rl.ok) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
 
   const { id: lobbyId } = await params;
-  const body = await request.json();
+  let body: unknown;
+  try { body = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
   const parsed = parseBody(OpenPositionSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   const { trader_id, round_id, symbol, direction, size, leverage, order_type, limit_price, stop_price, trail_pct } = parsed.data;
 
-  // Verify trader belongs to this lobby
-  const trader = await validateTraderInLobby(trader_id, lobbyId);
+  // Verify trader + lobby config in parallel
+  const [trader, config] = await Promise.all([
+    validateTraderInLobby(trader_id, lobbyId),
+    getLobbyConfig(lobbyId),
+  ]);
+
   if (!trader) {
     return NextResponse.json({ error: 'Invalid trader for this lobby' }, { status: 403 });
   }
 
-  // Validate leverage against lobby config
-  const config = await getLobbyConfig(lobbyId);
   if (!config) {
     return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
   }
@@ -54,24 +57,27 @@ export async function POST(
     );
   }
 
-  // Verify round belongs to this lobby
-  const { data: round } = await supabase
-    .from('rounds')
-    .select('id')
-    .eq('id', round_id)
-    .eq('lobby_id', lobbyId)
-    .single();
+  // Verify round + fetch price in parallel
+  const [roundResult, priceResult] = await Promise.all([
+    supabase
+      .from('rounds')
+      .select('id')
+      .eq('id', round_id)
+      .eq('lobby_id', lobbyId)
+      .single(),
+    supabase
+      .from('prices')
+      .select('price')
+      .eq('symbol', symbol)
+      .single(),
+  ]);
+
+  const { data: round } = roundResult;
+  const { data: priceRow, error: priceError } = priceResult;
 
   if (!round) {
     return NextResponse.json({ error: 'Round not found in this lobby' }, { status: 404 });
   }
-
-  // Get current price
-  const { data: priceRow, error: priceError } = await supabase
-    .from('prices')
-    .select('price')
-    .eq('symbol', symbol)
-    .single();
 
   if (priceError || !priceRow) {
     return NextResponse.json({ error: 'Price not available for symbol' }, { status: 404 });
@@ -138,7 +144,7 @@ export async function POST(
   // Fetch the created position to return full data
   const { data: position } = await supabase
     .from('positions')
-    .select('*')
+    .select('id, trader_id, round_id, symbol, direction, size, leverage, entry_price, exit_price, realized_pnl, opened_at, closed_at, order_type, limit_price, stop_price, trail_pct, trail_peak, status')
     .eq('id', result.position_id)
     .single();
 
@@ -152,18 +158,30 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  await params; // acknowledge lobby scope
-  const body = await request.json();
+  const { id: lobbyId } = await params;
+  let body: Record<string, unknown>;
+  try { body = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
   const { position_id } = body;
 
   if (!position_id) {
     return NextResponse.json({ error: 'Missing position_id' }, { status: 400 });
   }
 
+  // Verify the position's trader belongs to this lobby
+  const { data: posCheck } = await supabase
+    .from('positions')
+    .select('trader_id, traders!inner(lobby_id)')
+    .eq('id', position_id)
+    .single();
+
+  if (!posCheck || (posCheck.traders as unknown as { lobby_id: string })?.lobby_id !== lobbyId) {
+    return NextResponse.json({ error: 'Position not found in this lobby' }, { status: 404 });
+  }
+
   // Check if this is a pending limit order — cancel it directly
   const { data: pendingOrder } = await supabase
     .from('positions')
-    .select('*')
+    .select('id')
     .eq('id', position_id)
     .eq('status', 'pending')
     .single();
@@ -185,7 +203,7 @@ export async function DELETE(
   // Otherwise close an open position at market price
   const { data: position, error: fetchError } = await supabase
     .from('positions')
-    .select('*')
+    .select('id, trader_id, round_id, symbol, direction, size, leverage, entry_price, exit_price, realized_pnl, opened_at, closed_at, order_type, limit_price, stop_price, trail_pct, trail_peak, status')
     .eq('id', position_id)
     .eq('status', 'open')
     .is('closed_at', null)

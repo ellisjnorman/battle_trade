@@ -57,16 +57,24 @@ export async function POST(
         // Find top non-eliminated team
         const { data: topTrader } = await supabase
           .from('traders')
-          .select('team_id')
+          .select('team_id, sessions(final_balance)')
           .eq('lobby_id', lobbyId)
           .eq('is_eliminated', false)
           .not('team_id', 'is', null)
-          .limit(1)
-          .single();
+          .order('created_at', { ascending: true })
+          .limit(10);
 
-        if (topTrader?.team_id) {
+        // Sort by final_balance descending to find the actual top trader
+        const sortedTraders = (topTrader ?? []).sort((a, b) => {
+          const balA = Array.isArray(a.sessions) && a.sessions[0] ? (a.sessions[0] as { final_balance: number | null }).final_balance ?? 0 : 0;
+          const balB = Array.isArray(b.sessions) && b.sessions[0] ? (b.sessions[0] as { final_balance: number | null }).final_balance ?? 0 : 0;
+          return balB - balA;
+        });
+        const topOne = sortedTraders[0] ?? null;
+
+        if (topOne?.team_id) {
           const provider = new MockProvider();
-          await provider.resolveMarket(market.id, topTrader.team_id);
+          await provider.resolveMarket(market.id, topOne.team_id);
         }
       }
     }

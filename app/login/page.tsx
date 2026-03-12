@@ -9,7 +9,8 @@ import { font, c } from '@/app/design'
 function LoginInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirect = searchParams.get('redirect') ?? '/dashboard'
+  const rawRedirect = searchParams.get('redirect') ?? '/dashboard'
+  const redirect = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : '/dashboard'
   const { login, authenticated, user, ready } = usePrivy()
 
   useEffect(() => {

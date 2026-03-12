@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { ATTACKS as WEAPONS_LIST } from '@/lib/weapons';
@@ -101,6 +101,14 @@ const cheapestWeapon = Math.min(...WEAPONS.map(w => w.cost));
 // ---------------------------------------------------------------------------
 
 export default function SpectatePage() {
+  return (
+    <Suspense fallback={<div style={{ background: '#0A0A0A', minHeight: '100vh' }} />}>
+      <SpectatePageInner />
+    </Suspense>
+  );
+}
+
+function SpectatePageInner() {
   const { id: lobbyId } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const spectatorCode = searchParams.get('code');
@@ -127,6 +135,8 @@ export default function SpectatePage() {
   // Watch
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const feedIdCounter = useRef(0);
+  const tradersRef = useRef<TraderInfo[]>([]);
+  useEffect(() => { tradersRef.current = traders; }, [traders]);
 
   // Attack
   const [credits, setCredits] = useState(500);
@@ -346,7 +356,7 @@ export default function SpectatePage() {
       if (pType === 'sabotage_received' || pType === 'sabotage_hedged' || pType === 'sabotage_stopped') {
         const sab = payload.sabotage as Record<string, unknown> | undefined;
         const attackerName = (payload.attacker_name as string) ?? 'SOMEONE';
-        const targetName = (payload.target_name as string) ?? traders.find((t) => t.trader_id === (sab?.target_id ?? payload.target_id))?.name ?? '???';
+        const targetName = (payload.target_name as string) ?? tradersRef.current.find((t) => t.trader_id === (sab?.target_id ?? payload.target_id))?.name ?? '???';
         const weaponType = (payload.weapon_type as string) ?? (sab?.type as string);
         const weaponDef = WEAPONS.find((w) => w.type === weaponType);
         const resultSuffix = pType === 'sabotage_hedged' ? ' — HEDGED!' : pType === 'sabotage_stopped' ? ' — STOPPED!' : '';
@@ -365,7 +375,7 @@ export default function SpectatePage() {
 
       // Defense activation events
       if (pType === 'defense_activated') {
-        const traderName = (payload.trader_name as string) ?? traders.find((t) => t.trader_id === payload.trader_id)?.name ?? '???';
+        const traderName = (payload.trader_name as string) ?? tradersRef.current.find((t) => t.trader_id === payload.trader_id)?.name ?? '???';
         const defType = (payload.defense_type as string) ?? 'hedge';
         setFeed((prev) => [{
           id,
@@ -381,8 +391,8 @@ export default function SpectatePage() {
 
       // Also handle sabotage_launched from applySabotageEffect (dedup via different event name)
       if (pType === 'sabotage_launched') {
-        const attackerName = traders.find((t) => t.trader_id === payload.attacker_id)?.name ?? (payload.sponsor_name as string) ?? 'SOMEONE';
-        const targetName = traders.find((t) => t.trader_id === payload.target_id)?.name ?? '???';
+        const attackerName = tradersRef.current.find((t) => t.trader_id === payload.attacker_id)?.name ?? (payload.sponsor_name as string) ?? 'SOMEONE';
+        const targetName = tradersRef.current.find((t) => t.trader_id === payload.target_id)?.name ?? '???';
         const weaponType = payload.sabotage_type as string;
         const weaponDef = WEAPONS.find((w) => w.type === weaponType);
         // Only add if we haven't already added a sabotage_received for this (avoid duplicate)
@@ -461,7 +471,7 @@ export default function SpectatePage() {
       supabase.removeChannel(lobbyCh);
       supabase.removeChannel(mktCh);
     };
-  }, [lobbyId, traders]);
+  }, [lobbyId]);
 
   // ---------------------------------------------------------------------------
   // Polling

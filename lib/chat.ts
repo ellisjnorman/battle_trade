@@ -51,11 +51,20 @@ export function adminBroadcast(text: string): ChatMessage {
 
 // Rate limiting: max 1 message per second per user
 const lastMessageTime = new Map<string, number>();
+const MAX_RATE_LIMIT_ENTRIES = 10_000;
 
 export function canSendMessage(senderId: string): boolean {
+  const now = Date.now();
   const last = lastMessageTime.get(senderId) ?? 0;
-  if (Date.now() - last < 1000) return false;
-  lastMessageTime.set(senderId, Date.now());
+  if (now - last < 1000) return false;
+  lastMessageTime.set(senderId, now);
+
+  // Prevent unbounded growth: evict stale entries when map gets large
+  if (lastMessageTime.size > MAX_RATE_LIMIT_ENTRIES) {
+    for (const [key, ts] of lastMessageTime) {
+      if (now - ts > 60_000) lastMessageTime.delete(key);
+    }
+  }
   return true;
 }
 

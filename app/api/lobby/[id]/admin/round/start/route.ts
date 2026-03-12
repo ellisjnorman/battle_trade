@@ -7,9 +7,6 @@ import { parseBody, AdminRoundSchema } from '@/lib/validation';
 import { logAdminAction } from '@/lib/audit';
 import { checkAuthWithLobby, unauthorized } from '../../auth';
 
-// Track if price feed is already running
-let priceFeedStarted = false;
-
 export const dynamic = 'force-dynamic';
 
 export async function POST(
@@ -60,11 +57,8 @@ export async function POST(
     logger.warn('Market creation failed (best-effort)', { lobbyId, action: 'start_round' }, err);
   }
 
-  // Start price feed if not already running
-  if (!priceFeedStarted) {
-    startPriceFeed();
-    priceFeedStarted = true;
-  }
+  // Start price feed (idempotent — startPriceFeed has its own internal guard)
+  startPriceFeed();
 
   // Participation enforcement disabled — let traders trade at their own pace
   // To re-enable, uncomment below:

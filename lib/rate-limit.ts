@@ -6,13 +6,16 @@
 const windowMs = 60_000; // 1 minute window
 const hits: Map<string, { count: number; resetAt: number }> = new Map();
 
-// Cleanup stale entries every 5 minutes
-setInterval(() => {
+// Cleanup stale entries every 5 minutes (unref to not block process exit)
+const cleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [key, val] of hits) {
     if (val.resetAt < now) hits.delete(key);
   }
 }, 300_000);
+if (typeof cleanupTimer === 'object' && 'unref' in cleanupTimer) {
+  cleanupTimer.unref();
+}
 
 export function rateLimit(key: string, maxPerMinute: number): { ok: boolean; remaining: number } {
   const now = Date.now();

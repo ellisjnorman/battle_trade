@@ -51,7 +51,8 @@ export function getLiquidationPrice(position: Position): number {
  * Returns list of liquidated positions.
  */
 export async function checkAndLiquidate(lobbyId: string): Promise<LiquidationResult[]> {
-  const { supabase } = await import('./supabase');
+  const { getServerSupabase } = await import('./supabase-server');
+  const supabase = getServerSupabase();
 
   // Get all open positions for this lobby
   const { data: rounds } = await supabase

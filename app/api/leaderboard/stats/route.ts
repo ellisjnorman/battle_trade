@@ -77,5 +77,7 @@ export async function GET() {
     total_lobbies_completed: lobbiesResult.count ?? 0,
     total_volume_traded: Math.round(totalVolume * 100) / 100,
     tier_distribution: tierDistribution,
+  }, {
+    headers: { 'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=30' },
   });
 }

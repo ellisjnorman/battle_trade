@@ -83,6 +83,16 @@ export const BADGE_DEFINITIONS: BadgeDef[] = [
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Fetch all trader IDs for a given profile */
+async function getTraderIdsForProfile(profileId: string): Promise<string[]> {
+  const { supabase } = await import('./supabase');
+  const { data } = await supabase
+    .from('traders')
+    .select('id')
+    .eq('profile_id', profileId);
+  return (data ?? []).map(t => t.id);
+}
+
 /** Clamp a value to 0-100 */
 function clamp(v: number): number {
   return Math.max(0, Math.min(100, Math.round(v)));
@@ -111,14 +121,17 @@ function confidence(n: number, threshold = 20): number {
 // Pillar: Performance (30%)
 // ---------------------------------------------------------------------------
 
-export async function calcPerformance(profileId: string): Promise<number> {
+export async function calcPerformance(profileId: string, traderIds?: string[]): Promise<number> {
   const { supabase } = await import('./supabase');
 
-  // Pull completed sessions for this profile
+  const ids = traderIds ?? await getTraderIdsForProfile(profileId);
+  if (ids.length === 0) return 0;
+
+  // Pull completed sessions for this profile's traders
   const { data: sessions } = await supabase
     .from('sessions')
     .select('final_balance, starting_balance, final_rank')
-    .eq('trader_id', profileId)
+    .in('trader_id', ids)
     .not('final_balance', 'is', null);
 
   if (!sessions || sessions.length === 0) return 0;
@@ -154,28 +167,31 @@ export async function calcPerformance(profileId: string): Promise<number> {
 // Pillar: Combat (20%)
 // ---------------------------------------------------------------------------
 
-export async function calcCombat(profileId: string): Promise<number> {
+export async function calcCombat(profileId: string, traderIds?: string[]): Promise<number> {
   const { supabase } = await import('./supabase');
+
+  const ids = traderIds ?? await getTraderIdsForProfile(profileId);
+  if (ids.length === 0) return 0;
 
   // Attacks sent
   const { count: attacksSent } = await supabase
     .from('sabotages')
     .select('*', { count: 'exact', head: true })
-    .eq('attacker_id', profileId)
+    .in('attacker_id', ids)
     .eq('landed', true);
 
   // Blocks
   const { count: blocks } = await supabase
     .from('sabotages')
     .select('*', { count: 'exact', head: true })
-    .eq('defender_id', profileId)
+    .in('defender_id', ids)
     .eq('blocked', true);
 
   // Deflects
   const { count: deflects } = await supabase
     .from('sabotages')
     .select('*', { count: 'exact', head: true })
-    .eq('defender_id', profileId)
+    .in('defender_id', ids)
     .eq('deflected', true);
 
   const attacks = attacksSent ?? 0;
@@ -197,24 +213,17 @@ export async function calcCombat(profileId: string): Promise<number> {
 // Pillar: Strategy (20%)
 // ---------------------------------------------------------------------------
 
-export async function calcStrategy(profileId: string): Promise<number> {
+export async function calcStrategy(profileId: string, traderIds?: string[]): Promise<number> {
   const { supabase } = await import('./supabase');
 
-  // Fetch all closed positions for this profile via their sessions
-  const { data: sessions } = await supabase
-    .from('sessions')
-    .select('id')
-    .eq('trader_id', profileId);
+  const ids = traderIds ?? await getTraderIdsForProfile(profileId);
+  if (ids.length === 0) return 0;
 
-  if (!sessions || sessions.length === 0) return 0;
-
-  const sessionIds = sessions.map((s) => s.id);
-
-  // Get positions through rounds linked to these sessions
+  // Get closed positions for all traders belonging to this profile
   const { data: positions } = await supabase
     .from('positions')
     .select('symbol, leverage, order_type, round_id, size')
-    .in('trader_id', [profileId])
+    .in('trader_id', ids)
     .eq('status', 'closed');
 
   if (!positions || positions.length === 0) return 0;
@@ -286,7 +295,7 @@ export async function calcCommunity(profileId: string): Promise<number> {
 // Pillar: Streak (15%)
 // ---------------------------------------------------------------------------
 
-export async function calcStreak(profileId: string): Promise<number> {
+export async function calcStreak(profileId: string, traderIds?: string[]): Promise<number> {
   const { supabase } = await import('./supabase');
 
   // Profile streak data
@@ -299,11 +308,15 @@ export async function calcStreak(profileId: string): Promise<number> {
   const current = profile?.streak_current ?? 0;
   const best = profile?.streak_best ?? 0;
 
+  const ids = traderIds ?? await getTraderIdsForProfile(profileId);
+
   // Daily consistency: count distinct active days
-  const { data: dailyStats } = await supabase
-    .from('daily_stats')
-    .select('date')
-    .eq('trader_id', profileId);
+  const { data: dailyStats } = ids.length > 0
+    ? await supabase
+        .from('daily_stats')
+        .select('date')
+        .in('trader_id', ids)
+    : { data: null };
 
   const activeDays = dailyStats?.length ?? 0;
 
@@ -345,12 +358,15 @@ export function getRankTier(score: number): RankTier {
 }
 
 export async function calcTR(profileId: string): Promise<TRScore> {
+  // Fetch all trader IDs for this profile once, pass to each pillar
+  const traderIds = await getTraderIdsForProfile(profileId);
+
   const [performance, combat, strategy, community, streak] = await Promise.all([
-    calcPerformance(profileId),
-    calcCombat(profileId),
-    calcStrategy(profileId),
-    calcCommunity(profileId),
-    calcStreak(profileId),
+    calcPerformance(profileId, traderIds),
+    calcCombat(profileId, traderIds),
+    calcStrategy(profileId, traderIds),
+    calcCommunity(profileId), // community uses profileId (author_id, profiles table)
+    calcStreak(profileId, traderIds),
   ]);
 
   const total = clamp(
@@ -401,6 +417,9 @@ export async function evaluateBadges(profileId: string): Promise<EarnedBadge[]> 
   const now = new Date().toISOString();
   const earned: EarnedBadge[] = [];
 
+  // Fetch all trader IDs for this profile
+  const traderIds = await getTraderIdsForProfile(profileId);
+
   // Fetch existing badges so we only return newly earned ones
   const { data: profile } = await supabase
     .from('profiles')
@@ -420,6 +439,10 @@ export async function evaluateBadges(profileId: string): Promise<EarnedBadge[]> 
     if (def) earned.push({ ...def, earned_at: now });
   }
 
+  // If no traders exist, we can still check profile-level badges
+  // but skip trader-level queries
+  const hasTraders = traderIds.length > 0;
+
   // --- Performance badges ---
 
   // first_blood: at least 1 win
@@ -430,11 +453,13 @@ export async function evaluateBadges(profileId: string): Promise<EarnedBadge[]> 
   if (profile.streak_best >= 5 || profile.streak_current >= 5) award('streak_5');
 
   // perfect_round: any session with 100%+ return
-  const { data: perfectSessions } = await supabase
-    .from('sessions')
-    .select('starting_balance, final_balance')
-    .eq('trader_id', profileId)
-    .not('final_balance', 'is', null);
+  const { data: perfectSessions } = hasTraders
+    ? await supabase
+        .from('sessions')
+        .select('starting_balance, final_balance')
+        .in('trader_id', traderIds)
+        .not('final_balance', 'is', null)
+    : { data: null };
 
   if (perfectSessions?.some((s) => {
     const ret = ((s.final_balance - s.starting_balance) / s.starting_balance) * 100;
@@ -444,12 +469,14 @@ export async function evaluateBadges(profileId: string): Promise<EarnedBadge[]> 
   }
 
   // comeback_king: won a round after finishing last in a previous round
-  const { data: comebackSessions } = await supabase
-    .from('sessions')
-    .select('final_rank, lobby_id')
-    .eq('trader_id', profileId)
-    .not('final_rank', 'is', null)
-    .order('created_at', { ascending: true });
+  const { data: comebackSessions } = hasTraders
+    ? await supabase
+        .from('sessions')
+        .select('final_rank, lobby_id')
+        .in('trader_id', traderIds)
+        .not('final_rank', 'is', null)
+        .order('created_at', { ascending: true })
+    : { data: null };
 
   if (comebackSessions && comebackSessions.length >= 2) {
     let wasLast = false;
@@ -469,128 +496,132 @@ export async function evaluateBadges(profileId: string): Promise<EarnedBadge[]> 
 
   // --- Combat badges ---
 
-  const { count: attacksLanded } = await supabase
-    .from('sabotages')
-    .select('*', { count: 'exact', head: true })
-    .eq('attacker_id', profileId)
-    .eq('landed', true);
+  if (hasTraders) {
+    const { count: attacksLanded } = await supabase
+      .from('sabotages')
+      .select('*', { count: 'exact', head: true })
+      .in('attacker_id', traderIds)
+      .eq('landed', true);
 
-  if ((attacksLanded ?? 0) >= 50) award('saboteur');
+    if ((attacksLanded ?? 0) >= 50) award('saboteur');
 
-  const { count: blocksCount } = await supabase
-    .from('sabotages')
-    .select('*', { count: 'exact', head: true })
-    .eq('defender_id', profileId)
-    .eq('blocked', true);
+    const { count: blocksCount } = await supabase
+      .from('sabotages')
+      .select('*', { count: 'exact', head: true })
+      .in('defender_id', traderIds)
+      .eq('blocked', true);
 
-  if ((blocksCount ?? 0) >= 10) award('iron_wall');
+    if ((blocksCount ?? 0) >= 10) award('iron_wall');
 
-  const { count: deflectsCount } = await supabase
-    .from('sabotages')
-    .select('*', { count: 'exact', head: true })
-    .eq('defender_id', profileId)
-    .eq('deflected', true);
+    const { count: deflectsCount } = await supabase
+      .from('sabotages')
+      .select('*', { count: 'exact', head: true })
+      .in('defender_id', traderIds)
+      .eq('deflected', true);
 
-  if ((deflectsCount ?? 0) >= 5) award('deflector');
+    if ((deflectsCount ?? 0) >= 5) award('deflector');
 
-  // assassin: eliminated someone via sabotage
-  const { count: eliminations } = await supabase
-    .from('sabotages')
-    .select('*', { count: 'exact', head: true })
-    .eq('attacker_id', profileId)
-    .eq('caused_elimination', true);
+    // assassin: eliminated someone via sabotage
+    const { count: eliminations } = await supabase
+      .from('sabotages')
+      .select('*', { count: 'exact', head: true })
+      .in('attacker_id', traderIds)
+      .eq('caused_elimination', true);
 
-  if ((eliminations ?? 0) >= 1) award('assassin');
+    if ((eliminations ?? 0) >= 1) award('assassin');
 
-  // pacifist: won a lobby with 0 attacks sent
-  const { data: wonSessions } = await supabase
-    .from('sessions')
-    .select('lobby_id')
-    .eq('trader_id', profileId)
-    .eq('final_rank', 1);
+    // pacifist: won a lobby with 0 attacks sent
+    const { data: wonSessions } = await supabase
+      .from('sessions')
+      .select('lobby_id')
+      .in('trader_id', traderIds)
+      .eq('final_rank', 1);
 
-  if (wonSessions) {
-    for (const ws of wonSessions) {
-      const { count: lobbyAttacks } = await supabase
-        .from('sabotages')
-        .select('*', { count: 'exact', head: true })
-        .eq('attacker_id', profileId)
-        .eq('lobby_id', ws.lobby_id);
+    if (wonSessions) {
+      for (const ws of wonSessions) {
+        const { count: lobbyAttacks } = await supabase
+          .from('sabotages')
+          .select('*', { count: 'exact', head: true })
+          .in('attacker_id', traderIds)
+          .eq('lobby_id', ws.lobby_id);
 
-      if ((lobbyAttacks ?? 0) === 0) {
-        award('pacifist');
-        break;
+        if ((lobbyAttacks ?? 0) === 0) {
+          award('pacifist');
+          break;
+        }
       }
     }
   }
 
   // --- Trading badges ---
 
-  const { data: bigPositions } = await supabase
-    .from('positions')
-    .select('size')
-    .eq('trader_id', profileId)
-    .gte('size', 5000)
-    .limit(1);
+  if (hasTraders) {
+    const { data: bigPositions } = await supabase
+      .from('positions')
+      .select('size')
+      .in('trader_id', traderIds)
+      .gte('size', 5000)
+      .limit(1);
 
-  if (bigPositions && bigPositions.length > 0) award('whale_trade');
+    if (bigPositions && bigPositions.length > 0) award('whale_trade');
 
-  // scalper_king: 10+ trades in a single round
-  const { data: roundCounts } = await supabase
-    .from('positions')
-    .select('round_id')
-    .eq('trader_id', profileId);
+    // scalper_king: 10+ trades in a single round
+    const { data: roundCounts } = await supabase
+      .from('positions')
+      .select('round_id')
+      .in('trader_id', traderIds);
 
-  if (roundCounts) {
-    const perRound = new Map<string, number>();
-    for (const p of roundCounts) {
-      perRound.set(p.round_id, (perRound.get(p.round_id) ?? 0) + 1);
+    if (roundCounts) {
+      const perRound = new Map<string, number>();
+      for (const p of roundCounts) {
+        perRound.set(p.round_id, (perRound.get(p.round_id) ?? 0) + 1);
+      }
+      if ([...perRound.values()].some((c) => c >= 10)) award('scalper_king');
     }
-    if ([...perRound.values()].some((c) => c >= 10)) award('scalper_king');
-  }
 
-  // diversifier: 5+ unique symbols in one round
-  const { data: roundSymbols } = await supabase
-    .from('positions')
-    .select('round_id, symbol')
-    .eq('trader_id', profileId);
+    // diversifier: 5+ unique symbols in one round
+    const { data: roundSymbols } = await supabase
+      .from('positions')
+      .select('round_id, symbol')
+      .in('trader_id', traderIds);
 
-  if (roundSymbols) {
-    const symbolsPerRound = new Map<string, Set<string>>();
-    for (const p of roundSymbols) {
-      if (!symbolsPerRound.has(p.round_id)) symbolsPerRound.set(p.round_id, new Set());
-      symbolsPerRound.get(p.round_id)!.add(p.symbol);
+    if (roundSymbols) {
+      const symbolsPerRound = new Map<string, Set<string>>();
+      for (const p of roundSymbols) {
+        if (!symbolsPerRound.has(p.round_id)) symbolsPerRound.set(p.round_id, new Set());
+        symbolsPerRound.get(p.round_id)!.add(p.symbol);
+      }
+      if ([...symbolsPerRound.values()].some((s) => s.size >= 5)) award('diversifier');
     }
-    if ([...symbolsPerRound.values()].some((s) => s.size >= 5)) award('diversifier');
-  }
 
-  // diamond_hands: held through -20% and still profited
-  const { data: diamondPositions } = await supabase
-    .from('positions')
-    .select('entry_price, exit_price, direction, trail_peak')
-    .eq('trader_id', profileId)
-    .eq('status', 'closed')
-    .not('exit_price', 'is', null);
+    // diamond_hands: held through -20% and still profited
+    const { data: diamondPositions } = await supabase
+      .from('positions')
+      .select('entry_price, exit_price, direction, trail_peak')
+      .in('trader_id', traderIds)
+      .eq('status', 'closed')
+      .not('exit_price', 'is', null);
 
-  if (diamondPositions) {
-    for (const p of diamondPositions) {
-      if (!p.exit_price) continue;
-      const pnl = p.direction === 'long'
-        ? (p.exit_price - p.entry_price) / p.entry_price
-        : (p.entry_price - p.exit_price) / p.entry_price;
-      // trail_peak tracks worst drawdown implicitly; if profitable and had -20%+ drawdown
-      // We approximate: if profitable but trail_peak indicates a significant dip
-      if (pnl > 0 && p.trail_peak) {
-        const worstDrawdown = p.direction === 'long'
-          ? (p.trail_peak - p.entry_price) / p.entry_price
-          : (p.entry_price - p.trail_peak) / p.entry_price;
-        if (worstDrawdown <= -0.20) {
-          award('diamond_hands');
-          break;
+    if (diamondPositions) {
+      for (const p of diamondPositions) {
+        if (!p.exit_price) continue;
+        const pnl = p.direction === 'long'
+          ? (p.exit_price - p.entry_price) / p.entry_price
+          : (p.entry_price - p.exit_price) / p.entry_price;
+        // trail_peak tracks worst drawdown implicitly; if profitable and had -20%+ drawdown
+        // We approximate: if profitable but trail_peak indicates a significant dip
+        if (pnl > 0 && p.trail_peak) {
+          const worstDrawdown = p.direction === 'long'
+            ? (p.trail_peak - p.entry_price) / p.entry_price
+            : (p.entry_price - p.trail_peak) / p.entry_price;
+          if (worstDrawdown <= -0.20) {
+            award('diamond_hands');
+            break;
+          }
         }
       }
     }
-  }
+  } // end hasTraders (trading badges)
 
   // --- Community badges ---
 

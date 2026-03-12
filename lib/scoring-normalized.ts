@@ -55,6 +55,9 @@ export function normalizeTrade(
   const leverageRatio = effectiveLeverage / Math.max(trade.leverage, 1)
 
   // Scale PnL proportionally — if leverage was capped, PnL scales down too
+  if (!trade.size_usd) {
+    return { virtual_size_usd: 0, virtual_pnl_usd: 0, return_pct: 0, capital_deployed_pct: 0 }
+  }
   const pnlRatio = (trade.pnl_usd / trade.size_usd) * leverageRatio
   const virtualPnl = virtualSize * pnlRatio
 

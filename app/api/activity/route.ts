@@ -12,14 +12,30 @@ export async function GET() {
   const sb = getServerSupabase()
   const events: string[] = []
 
-  // Recent completed sessions with good returns
-  const { data: sessions } = await sb
-    .from('sessions')
-    .select('final_balance, starting_balance, traders!inner(name, lobby_id, lobbies!inner(name))')
-    .not('final_balance', 'is', null)
-    .order('updated_at', { ascending: false })
-    .limit(5)
+  // Run all independent queries in parallel
+  const [sessionsResult, sabotagesResult, activeLobbiesResult, completedResult] = await Promise.all([
+    sb
+      .from('sessions')
+      .select('final_balance, starting_balance, traders!inner(name, lobby_id, lobbies!inner(name))')
+      .not('final_balance', 'is', null)
+      .order('updated_at', { ascending: false })
+      .limit(5),
+    sb
+      .from('sabotages')
+      .select('type, attacker:traders!sabotages_attacker_id_fkey(name), target:traders!sabotages_target_id_fkey(name)')
+      .order('created_at', { ascending: false })
+      .limit(3),
+    sb
+      .from('lobbies')
+      .select('id', { count: 'exact' })
+      .eq('status', 'active'),
+    sb
+      .from('lobbies')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'completed'),
+  ])
 
+  const { data: sessions } = sessionsResult
   if (sessions) {
     for (const s of sessions) {
       const trader = (s as Record<string, unknown>).traders as Record<string, unknown> | undefined
@@ -37,35 +53,41 @@ export async function GET() {
     }
   }
 
-  // Recent sabotages
-  const { data: sabotages } = await sb
-    .from('sabotages')
-    .select('attack_type, source_trader:traders!sabotages_source_trader_id_fkey(name), target_trader:traders!sabotages_target_trader_id_fkey(name)')
-    .order('created_at', { ascending: false })
-    .limit(3)
-
+  const { data: sabotages } = sabotagesResult
   if (sabotages) {
     for (const s of sabotages) {
-      const src = ((s.source_trader as unknown) as Record<string, unknown>)?.name ?? 'Someone'
-      const tgt = ((s.target_trader as unknown) as Record<string, unknown>)?.name ?? 'a trader'
-      const atk = ((s.attack_type as string) ?? 'sabotage').replace(/_/g, ' ')
+      const src = ((s.attacker as unknown) as Record<string, unknown>)?.name ?? 'Someone'
+      const tgt = ((s.target as unknown) as Record<string, unknown>)?.name ?? 'a trader'
+      const atk = ((s.type as string) ?? 'sabotage').replace(/_/g, ' ')
       events.push(`${src} used ${atk} on ${tgt}`)
     }
   }
 
-  // Active lobby count
-  const { count: liveCount } = await sb
-    .from('lobbies')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'active')
+  const liveCount = activeLobbiesResult.count ?? 0
+  const activeLobbyIds = (activeLobbiesResult.data ?? []).map((l: { id: string }) => l.id)
 
-  if (liveCount && liveCount > 0) {
+  if (liveCount > 0) {
     events.push(`${liveCount} battle${liveCount > 1 ? 's' : ''} happening right now`)
   }
 
+  // Active players: depends on activeLobbies result
+  const { count: activePlayers } = activeLobbyIds.length > 0
+    ? await sb
+        .from('traders')
+        .select('id', { count: 'exact', head: true })
+        .in('lobby_id', activeLobbyIds)
+    : { count: 0 }
+
+  const { count: battlesCompleted } = completedResult
+
   // If no real events, return empty (dashboard will hide ticker)
   return NextResponse.json(
-    { events: events.slice(0, 10) },
+    {
+      events: events.slice(0, 10),
+      activePlayers: activePlayers ?? 0,
+      battlesCompleted: battlesCompleted ?? 0,
+      liveBattles: liveCount ?? 0,
+    },
     { headers: { 'Cache-Control': 's-maxage=10, stale-while-revalidate=30' } },
   )
 }

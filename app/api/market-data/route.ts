@@ -5,5 +5,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   await refreshMarketData();
-  return NextResponse.json(getCachedMarketData());
+  return NextResponse.json(getCachedMarketData(), {
+    headers: { 'Cache-Control': 'public, s-maxage=1, stale-while-revalidate=5' },
+  });
 }

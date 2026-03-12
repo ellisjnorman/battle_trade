@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { createMarket } from '@/lib/prediction-markets';
+import { checkAuthWithLobby, unauthorized } from '../admin/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +14,7 @@ export async function GET(
 
   const { data: markets, error } = await supabase
     .from('prediction_markets')
-    .select('*')
+    .select('id, lobby_id, round_id, status, total_volume, rake_collected, created_at')
     .eq('lobby_id', lobbyId)
     .order('created_at', { ascending: false });
 
@@ -43,7 +44,9 @@ export async function GET(
     }),
   );
 
-  return NextResponse.json({ markets: enriched });
+  return NextResponse.json({ markets: enriched }, {
+    headers: { 'Cache-Control': 'public, s-maxage=3, stale-while-revalidate=10' },
+  });
 }
 
 /** POST — Create a new prediction market for the active round */
@@ -52,6 +55,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: lobbyId } = await params;
+  if (!(await checkAuthWithLobby(request, lobbyId))) return unauthorized();
 
   let body: { teams: Array<{ id: string; name: string }> };
   try {

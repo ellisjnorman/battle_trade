@@ -218,8 +218,11 @@ export default function CreateLobbyPage() {
         const data = await res.json();
         setCreatedLobby(data);
         setStep('done');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || `Failed to create lobby (${res.status})`);
       }
-    } catch { /* */ }
+    } catch { alert('Network error — could not create lobby.'); }
     finally { setCreating(false); }
   };
 

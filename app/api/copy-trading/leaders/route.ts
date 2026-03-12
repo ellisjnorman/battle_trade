@@ -10,7 +10,9 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
     const leaders = await getTop20Leaders();
-    return NextResponse.json({ leaders });
+    return NextResponse.json({ leaders }, {
+      headers: { 'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=15' },
+    });
   } catch (err) {
     console.error('GET /api/copy-trading/leaders error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

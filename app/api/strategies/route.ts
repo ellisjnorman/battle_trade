@@ -56,7 +56,9 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({ strategies, total: count ?? 0 });
+    return NextResponse.json({ strategies, total: count ?? 0 }, {
+      headers: { 'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=15' },
+    });
   } catch (err) {
     console.error('GET /api/strategies error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

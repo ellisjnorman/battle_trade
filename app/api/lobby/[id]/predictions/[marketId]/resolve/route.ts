@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProvider } from '@/lib/prediction-markets';
+import { checkAuthWithLobby, unauthorized } from '../../../admin/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,7 +9,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; marketId: string }> },
 ) {
-  const { marketId } = await params;
+  const { id: lobbyId, marketId } = await params;
+  if (!(await checkAuthWithLobby(request, lobbyId))) return unauthorized();
 
   let body: { winner_team_id: string };
   try {

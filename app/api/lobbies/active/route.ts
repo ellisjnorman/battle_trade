@@ -20,17 +20,27 @@ export async function GET() {
     }
 
     const lobbyIds = lobbies.map((l) => l.id);
+    const activeLobbyIds = lobbies.filter((l) => l.status === 'active').map((l) => l.id);
 
-    // 2. Get trader (is_competitor=true) and spectator counts per lobby
-    // sessions table does not have is_competitor; use traders table instead
-    const { data: traders } = await supabase
-      .from('traders')
-      .select('lobby_id, is_competitor')
-      .in('lobby_id', lobbyIds);
+    // 2+3. Parallelize independent queries: traders + rounds
+    const [tradersResult, roundsResult] = await Promise.all([
+      supabase
+        .from('traders')
+        .select('lobby_id, is_competitor')
+        .in('lobby_id', lobbyIds),
+      activeLobbyIds.length > 0
+        ? supabase
+            .from('rounds')
+            .select('lobby_id, round_number, status, started_at, duration_seconds')
+            .in('lobby_id', activeLobbyIds)
+            .in('status', ['active', 'frozen'])
+            .order('round_number', { ascending: false })
+        : Promise.resolve({ data: [] as { lobby_id: string; round_number: number; status: string; started_at: string | null; duration_seconds: number }[] }),
+    ]);
 
     const playerCounts: Record<string, number> = {};
     const spectatorCounts: Record<string, number> = {};
-    for (const t of traders ?? []) {
+    for (const t of tradersResult.data ?? []) {
       if (t.is_competitor) {
         playerCounts[t.lobby_id] = (playerCounts[t.lobby_id] ?? 0) + 1;
       } else {
@@ -38,28 +48,15 @@ export async function GET() {
       }
     }
 
-    // 3. Get active/current rounds per lobby
-    const activeLobbyIds = lobbies.filter((l) => l.status === 'active').map((l) => l.id);
     const roundMap: Record<string, { round_number: number; status: string; started_at: string | null; duration_seconds: number }> = {};
-
-    if (activeLobbyIds.length > 0) {
-      const { data: rounds } = await supabase
-        .from('rounds')
-        .select('lobby_id, round_number, status, started_at, duration_seconds')
-        .in('lobby_id', activeLobbyIds)
-        .in('status', ['active', 'frozen'])
-        .order('round_number', { ascending: false });
-
-      for (const r of rounds ?? []) {
-        // Keep only the latest round per lobby
-        if (!roundMap[r.lobby_id]) {
-          roundMap[r.lobby_id] = {
-            round_number: r.round_number,
-            status: r.status,
-            started_at: r.started_at,
-            duration_seconds: r.duration_seconds,
-          };
-        }
+    for (const r of roundsResult.data ?? []) {
+      if (!roundMap[r.lobby_id]) {
+        roundMap[r.lobby_id] = {
+          round_number: r.round_number,
+          status: r.status,
+          started_at: r.started_at,
+          duration_seconds: r.duration_seconds,
+        };
       }
     }
 

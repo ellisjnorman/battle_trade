@@ -1,10 +1,11 @@
-import { supabase } from './supabase';
+import { getServerSupabase } from './supabase-server';
 import { calcPortfolioValue } from './pnl';
 import { getRoundStandings } from './scoring';
 import type { Lobby, LobbyConfig, Position, Trader } from '@/types';
 import type { TraderStanding } from './scoring';
 
 export async function getLobby(id: string): Promise<Lobby | null> {
+  const supabase = getServerSupabase();
   const { data, error } = await supabase
     .from('lobbies')
     .select('*')
@@ -23,6 +24,7 @@ export async function createLobby(config: {
   created_by?: string;
   config: LobbyConfig;
 }): Promise<Lobby | null> {
+  const supabase = getServerSupabase();
   const { data, error } = await supabase
     .from('lobbies')
     .insert({
@@ -45,6 +47,7 @@ export async function joinLobby(
   lobby_id: string,
   invite_code?: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const supabase = getServerSupabase();
   const lobby = await getLobby(lobby_id);
   if (!lobby) return { success: false, error: 'Lobby not found' };
 
@@ -83,6 +86,7 @@ export async function getLobbyStandings(
   lobby_id: string,
   round_id: string,
 ): Promise<TraderStanding[]> {
+  const supabase = getServerSupabase();
   // Batch 1: round + traders fetched in parallel with positions + prices
   const [roundRes, tradersRes, positionsRes, pricesRes] = await Promise.all([
     supabase

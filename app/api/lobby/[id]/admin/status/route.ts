@@ -18,7 +18,7 @@ export async function GET(
   // Get current/latest round
   const { data: round } = await supabase
     .from('rounds')
-    .select('*')
+    .select('id, lobby_id, round_number, status, started_at, ended_at, duration_seconds, starting_balance')
     .eq('lobby_id', lobbyId)
     .order('round_number', { ascending: false })
     .limit(1)
@@ -28,39 +28,47 @@ export async function GET(
     return NextResponse.json({ error: 'No rounds found' }, { status: 404 });
   }
 
-  // Get all traders in lobby
+  // Get traders, positions, prices, and profiles in parallel
   const { data: traders } = await supabase
     .from('traders')
-    .select('*')
+    .select('id, name, lobby_id, team_id, is_eliminated, is_competitor, profile_id')
     .eq('lobby_id', lobbyId);
 
   if (!traders || traders.length === 0) {
     return NextResponse.json({ round, traders: [] });
   }
 
-  // Get all positions for this round
-  const { data: positions } = await supabase
-    .from('positions')
-    .select('*')
-    .eq('round_id', round.id);
+  const profileIds = traders.map((t) => (t as Record<string, unknown>).profile_id as string).filter(Boolean);
 
-  // Get current prices
-  const { data: prices } = await supabase.from('prices').select('*');
+  const [positionsResult, pricesResult, profilesResult] = await Promise.all([
+    supabase
+      .from('positions')
+      .select('id, trader_id, round_id, symbol, direction, size, leverage, entry_price, exit_price, realized_pnl, opened_at, closed_at, order_type, limit_price, stop_price, trail_pct, trail_peak, status')
+      .eq('round_id', round.id),
+    supabase.from('prices').select('symbol, price'),
+    profileIds.length > 0
+      ? supabase.from('profiles').select('id, credits').in('id', profileIds)
+      : Promise.resolve({ data: [] as { id: string; credits: number }[] }),
+  ]);
+
+  const { data: positions } = positionsResult;
+  const { data: prices } = pricesResult;
+  const profiles = (profilesResult as { data: { id: string; credits: number }[] | null }).data;
   const currentPrices: Record<string, number> = {};
   for (const p of prices ?? []) {
     currentPrices[p.symbol] = p.price;
   }
 
-  // Get profiles for credits
-  const traderIds = traders.map((t) => t.id);
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, credits')
-    .in('id', traderIds);
-
-  const creditsMap: Record<string, number> = {};
+  // Build profile credits lookup keyed by profile_id
+  const profileCredits: Record<string, number> = {};
   for (const p of profiles ?? []) {
-    creditsMap[p.id] = p.credits ?? 0;
+    profileCredits[p.id] = p.credits ?? 0;
+  }
+  // Map trader.id → credits via trader.profile_id
+  const creditsMap: Record<string, number> = {};
+  for (const t of traders) {
+    const pid = (t as Record<string, unknown>).profile_id as string | null;
+    creditsMap[t.id] = pid ? (profileCredits[pid] ?? 0) : 0;
   }
 
   // Calculate standings

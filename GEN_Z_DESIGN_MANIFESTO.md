@@ -544,18 +544,20 @@ Before shipping any screen, verify:
 
 Map these principles to Battle Trade's existing design system (`app/design.ts`):
 
-| Principle | Current State | Action |
+| Principle | Status | Implementation |
 |---|---|---|
-| Depth layers | Single `surface` at 3% white | Add 5-layer system: bg/surface/elevated/hover/border |
-| Hero numbers | No defined hero style | Add `heroNumber` style: 56px JetBrains Mono 700 |
-| Celebrations | Basic glow animations exist | Add confetti/particle system for rank-ups, trade fills |
-| Skeleton screens | Not implemented | Add `<Skeleton>` component matching each card layout |
-| Empty states | Likely missing | Add per-screen empty states with CTA |
-| Shareable cards | Not implemented | Add rank card generator (canvas or server-rendered) |
-| Streaks | Not implemented | Add daily trading streak to profile |
-| Bottom sheets | Not implemented | Add `<BottomSheet>` for mobile trade entry |
-| Motion signature | No signature animation | PnL rolling counter on every screen entry |
-| Sound | None | Optional sound pack for trades, rank-ups |
+| Depth layers | DONE | 5-layer system in `design.ts`: bg/surface/elevated/hover/border |
+| Hero numbers | DONE | Type scale in `design.ts`, hero 56px mono 700. ONE hero number per screen enforced. |
+| Celebrations | DONE | `battle-end-overlay.tsx` — full-screen rank reveal with confetti CSS for #1. `celeb-burst`, `gold-glow` keyframes in globalCSS. |
+| Skeleton screens | DONE | `.skeleton` shimmer class in globalCSS. `BtrSkeleton` in `components/ui/index.tsx`. Used across trading terminal, predictions, dashboard. |
+| Empty states | DONE | Dashboard, duel, predictions panel all have contextual empty states with CTAs. |
+| Shareable cards | DONE | `recap-card.tsx` — 360x640 "Spotify Wrapped for trading" card with hero return %, rank badge, stats grid, BTR tier, share button. |
+| Streaks | DONE | `streak-badge.tsx` — fire animation at 2+, pulse at 3-4, shake at 5+. `streakStyle()` helper + keyframes in `design.ts`. |
+| Battle end + Rematch | DONE | `battle-end-overlay.tsx` — rank reveal, return %, REMATCH (primary), VIEW RECAP, back to dashboard. |
+| Social proof | DONE | Dashboard shows live player count + battles live with pulsing green dot. `/api/activity` returns `activePlayers`, `battlesCompleted`. |
+| Motion signature | DONE | PnL rolling counter on dashboard (rAF spring animation). `count-up` keyframe in globalCSS. |
+| Bottom sheets | PARTIAL | Mobile trading terminal uses tab-based layout. Full bottom sheet component not yet built. |
+| Sound | NOT STARTED | Optional sound pack for trades, rank-ups. Low priority. |
 
 ---
 

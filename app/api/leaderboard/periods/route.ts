@@ -141,5 +141,7 @@ export async function GET(request: NextRequest) {
     total: count ?? 0,
     payouts: payoutMap ?? null,
     resets_at: getResetsAt(period),
+  }, {
+    headers: { 'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=15' },
   });
 }

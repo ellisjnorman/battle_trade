@@ -63,12 +63,11 @@ export async function POST(request: NextRequest) {
   // Check if this guest already has a profile (by guest_id stored in metadata)
   // We use the guest_id as a stable identifier stored in the profile's auth_user_id field
   // with a "guest:" prefix to distinguish from real Privy IDs
-  const guestAuthId = `guest:${guestId}`;
-
   const { data: existingProfile } = await supabase
     .from('profiles')
     .select('id')
-    .eq('auth_user_id', guestAuthId)
+    .eq('auth_user_id', guestId)
+    .eq('is_guest', true)
     .maybeSingle();
 
   let profileId: string;
@@ -97,7 +96,7 @@ export async function POST(request: NextRequest) {
     const { data: newProfile, error: profileError } = await supabase
       .from('profiles')
       .insert({
-        auth_user_id: guestAuthId,
+        auth_user_id: guestId,
         display_name: displayName,
         is_guest: true,
         credits: 0,

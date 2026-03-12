@@ -27,5 +27,7 @@ export async function GET(
     );
   }
 
-  return NextResponse.json(data);
+  return NextResponse.json(data, {
+    headers: { 'Cache-Control': 'public, s-maxage=2, stale-while-revalidate=10' },
+  });
 }

@@ -25,61 +25,45 @@ export async function chargeEntryFee(opts: {
 
   const { supabase } = await import('./supabase');
 
-  // Check trader's credit balance
-  const { data: alloc } = await supabase
-    .from('credit_allocations')
-    .select('balance, total_spent')
-    .eq('trader_id', opts.trader_id)
-    .eq('lobby_id', opts.lobby_id)
-    .single();
-
-  const balance = alloc?.balance ?? 0;
-  if (balance < fee) {
+  // Atomic deduct via sabotage module (uses RPC with CAS fallback)
+  const { deductCredits } = await import('./sabotage');
+  const deducted = await deductCredits(opts.trader_id, opts.lobby_id, fee);
+  if (!deducted) {
+    // Check balance for error message
+    const { data: alloc } = await supabase
+      .from('credit_allocations')
+      .select('balance')
+      .eq('trader_id', opts.trader_id)
+      .eq('lobby_id', opts.lobby_id)
+      .single();
+    const balance = alloc?.balance ?? 0;
     return { charged: false, error: `Not enough credits. Need ${fee}CR, have ${balance}CR.` };
   }
 
-  // Deduct from trader
-  const prevSpent = (alloc?.total_spent as number) ?? 0;
-  await supabase
-    .from('credit_allocations')
-    .update({
-      balance: balance - fee,
-      total_spent: prevSpent + fee,
-    })
-    .eq('trader_id', opts.trader_id)
-    .eq('lobby_id', opts.lobby_id);
-
-  // Add to pot
+  // Add to pot atomically
   const rakePct = getEntryRakePct(opts.config);
   const rake = Math.round(fee * rakePct / 100);
   const prizeContribution = fee - rake;
 
-  const { data: pot } = await supabase
-    .from('entry_fee_pots')
-    .select('*')
-    .eq('lobby_id', opts.lobby_id)
-    .single();
+  // Try atomic RPC first, fallback to upsert
+  const { error: rpcErr } = await supabase.rpc('add_to_pot', {
+    p_lobby_id: opts.lobby_id,
+    p_fee: fee,
+    p_rake: rake,
+    p_prize: prizeContribution,
+  });
 
-  if (pot) {
+  if (rpcErr) {
+    // Fallback: upsert
     await supabase
       .from('entry_fee_pots')
-      .update({
-        total_collected: pot.total_collected + fee,
-        total_entries: pot.total_entries + 1,
-        rake_collected: pot.rake_collected + rake,
-        prize_pool: pot.prize_pool + prizeContribution,
-      })
-      .eq('lobby_id', opts.lobby_id);
-  } else {
-    await supabase
-      .from('entry_fee_pots')
-      .insert({
+      .upsert({
         lobby_id: opts.lobby_id,
         total_collected: fee,
         total_entries: 1,
         rake_collected: rake,
         prize_pool: prizeContribution,
-      });
+      }, { onConflict: 'lobby_id' });
   }
 
   return { charged: true };
@@ -109,24 +93,9 @@ export async function distributePrizePool(opts: {
     const amount = Math.round(pot.prize_pool * (splits[splitIdx] ?? 0));
     if (amount <= 0) continue;
 
-    // Credit the winner
-    const { data: alloc } = await supabase
-      .from('credit_allocations')
-      .select('balance, total_earned')
-      .eq('trader_id', winner.trader_id)
-      .eq('lobby_id', opts.lobby_id)
-      .single();
-
-    if (alloc) {
-      await supabase
-        .from('credit_allocations')
-        .update({
-          balance: alloc.balance + amount,
-          total_earned: alloc.total_earned + amount,
-        })
-        .eq('trader_id', winner.trader_id)
-        .eq('lobby_id', opts.lobby_id);
-    }
+    // Credit the winner atomically
+    const { addCredits } = await import('./sabotage');
+    await addCredits(winner.trader_id, opts.lobby_id, amount, 'prize_payout');
 
     // Record payout
     await supabase

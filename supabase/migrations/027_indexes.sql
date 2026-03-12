@@ -1,18 +1,13 @@
 -- 027_indexes.sql
 -- Comprehensive indexes for all critical query paths.
--- Covers positions, traders, rounds, sessions, sabotages, defenses,
--- volatility_events, profiles, chat_messages, markets, predictions,
--- copy_subscriptions, and credits tables.
 -- All indexes use IF NOT EXISTS for idempotent re-runs.
+-- Fixed: correct table and column names to match actual schema.
 
 -- =============================================================================
 -- 1. positions
 -- =============================================================================
 CREATE INDEX IF NOT EXISTS idx_positions_trader_round
   ON positions (trader_id, round_id);
-
-CREATE INDEX IF NOT EXISTS idx_positions_lobby
-  ON positions (lobby_id);
 
 CREATE INDEX IF NOT EXISTS idx_positions_symbol_round
   ON positions (symbol, round_id);
@@ -50,17 +45,14 @@ CREATE INDEX IF NOT EXISTS idx_sessions_trader
 CREATE INDEX IF NOT EXISTS idx_sessions_lobby
   ON sessions (lobby_id);
 
-CREATE INDEX IF NOT EXISTS idx_sessions_profile
-  ON sessions (profile_id);
-
 -- =============================================================================
--- 5. sabotages
+-- 5. sabotages (correct column names: attacker_id, target_id)
 -- =============================================================================
 CREATE INDEX IF NOT EXISTS idx_sabotages_target_lobby
-  ON sabotages (target_trader_id, lobby_id);
+  ON sabotages (target_id, lobby_id);
 
-CREATE INDEX IF NOT EXISTS idx_sabotages_source
-  ON sabotages (source_trader_id);
+CREATE INDEX IF NOT EXISTS idx_sabotages_attacker
+  ON sabotages (attacker_id);
 
 -- =============================================================================
 -- 6. defenses
@@ -69,10 +61,10 @@ CREATE INDEX IF NOT EXISTS idx_defenses_trader_lobby
   ON defenses (trader_id, lobby_id);
 
 -- =============================================================================
--- 7. volatility_events
+-- 7. volatility_events (no status column — index by lobby + fired_at)
 -- =============================================================================
-CREATE INDEX IF NOT EXISTS idx_volatility_events_lobby_status
-  ON volatility_events (lobby_id, status);
+CREATE INDEX IF NOT EXISTS idx_volatility_events_lobby_fired
+  ON volatility_events (lobby_id, fired_at DESC);
 
 -- =============================================================================
 -- 8. profiles
@@ -90,13 +82,13 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_lobby_created
   ON chat_messages (lobby_id, created_at DESC);
 
 -- =============================================================================
--- 10. markets / predictions
+-- 10. prediction_markets / bets (correct table names)
 -- =============================================================================
-CREATE INDEX IF NOT EXISTS idx_markets_lobby
-  ON markets (lobby_id);
+CREATE INDEX IF NOT EXISTS idx_prediction_markets_lobby
+  ON prediction_markets (lobby_id);
 
-CREATE INDEX IF NOT EXISTS idx_predictions_market
-  ON predictions (market_id);
+CREATE INDEX IF NOT EXISTS idx_bets_market_idx
+  ON bets (market_id);
 
 -- =============================================================================
 -- 11. copy_subscriptions
@@ -108,7 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_copy_subscriptions_follower
   ON copy_subscriptions (follower_id);
 
 -- =============================================================================
--- 12. credits
+-- 12. credit_allocations (correct table name)
 -- =============================================================================
-CREATE INDEX IF NOT EXISTS idx_credits_profile
-  ON credits (profile_id);
+CREATE INDEX IF NOT EXISTS idx_credit_allocations_trader_lobby
+  ON credit_allocations (trader_id, lobby_id);

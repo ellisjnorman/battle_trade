@@ -36,7 +36,8 @@ export default function ProfilePage() {
   const { user: privyUser, linkWallet } = usePrivy()
   const addToast = useToastStore((s) => s.addToast)
 
-  const profileId = typeof window !== 'undefined' ? localStorage.getItem('bt_profile_id') : null
+  const [profileId, setProfileId] = useState<string | null>(null)
+  useEffect(() => { setProfileId(localStorage.getItem('bt_profile_id')); }, [])
   const linkedWallet = privyUser?.linkedAccounts?.find(
     (a) => a.type === 'wallet'
   ) as { type: 'wallet'; address: string; chainType?: string } | undefined
@@ -55,25 +56,30 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!profileId) { setLoading(false); return }
     (async () => {
-      const { data: p } = await supabase.from('profiles').select('*').eq('id', profileId).single()
-      if (p) { setProfile(p as ProfileData); setEditName(p.display_name ?? ''); setEditHandle(p.handle ?? ''); setEditAvatar(p.avatar_url ?? '') }
-      const { data: sessions } = await supabase.from('sessions')
-        .select('id, lobby_id, final_rank, is_eliminated, starting_balance, final_balance, created_at')
-        .eq('trader_id', profileId).order('created_at', { ascending: false }).limit(20)
-      if (sessions && sessions.length > 0) {
-        const lobbyIds = sessions.map(s => s.lobby_id)
-        const { data: lobbies } = await supabase.from('lobbies').select('id, name').in('id', lobbyIds)
-        const lobbyMap = new Map((lobbies ?? []).map(l => [l.id, l.name]))
-        setHistory(sessions.map(s => ({
-          id: s.id, lobby_name: lobbyMap.get(s.lobby_id) ?? 'Unknown',
-          final_rank: s.final_rank, is_eliminated: s.is_eliminated,
-          returnPct: s.final_balance && s.starting_balance ? ((s.final_balance - s.starting_balance) / s.starting_balance) * 100 : 0,
-          date: new Date(s.created_at).toLocaleDateString(),
-        })))
+      try {
+        const { data: p } = await supabase.from('profiles').select('*').eq('id', profileId).single()
+        if (p) { setProfile(p as ProfileData); setEditName(p.display_name ?? ''); setEditHandle(p.handle ?? ''); setEditAvatar(p.avatar_url ?? '') }
+        const { data: sessions } = await supabase.from('sessions')
+          .select('id, lobby_id, final_rank, is_eliminated, starting_balance, final_balance, created_at')
+          .eq('trader_id', profileId).order('created_at', { ascending: false }).limit(20)
+        if (sessions && sessions.length > 0) {
+          const lobbyIds = sessions.map(s => s.lobby_id)
+          const { data: lobbies } = await supabase.from('lobbies').select('id, name').in('id', lobbyIds)
+          const lobbyMap = new Map((lobbies ?? []).map(l => [l.id, l.name]))
+          setHistory(sessions.map(s => ({
+            id: s.id, lobby_name: lobbyMap.get(s.lobby_id) ?? 'Unknown',
+            final_rank: s.final_rank, is_eliminated: s.is_eliminated,
+            returnPct: s.final_balance && s.starting_balance ? ((s.final_balance - s.starting_balance) / s.starting_balance) * 100 : 0,
+            date: new Date(s.created_at).toLocaleDateString(),
+          })))
+        }
+      } catch (err) {
+        addToast('Failed to load profile', 'error')
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     })()
-  }, [profileId])
+  }, [profileId, addToast])
 
   const handleSave = async () => {
     if (!profileId || !editName.trim()) return

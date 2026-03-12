@@ -55,7 +55,8 @@ export async function PATCH(
       .select('config')
       .eq('id', lobbyId)
       .single();
-    updates.config = { ...(current?.config ?? {}), ...body.config };
+    const { admin_password: _strip, ...safeConfig } = body.config;
+    updates.config = { ...(current?.config ?? {}), ...safeConfig };
   }
 
   if (Object.keys(updates).length === 0) {

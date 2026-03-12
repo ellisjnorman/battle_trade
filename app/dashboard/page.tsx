@@ -84,6 +84,7 @@ export default function DashboardPage() {
   const [playLoading, setPlayLoading] = useState<string | null>(null)
   const [liveEvents, setLiveEvents] = useState<string[]>(FALLBACK_EVENTS)
   const [liveEventIdx, setLiveEventIdx] = useState(0)
+  const [socialProof, setSocialProof] = useState<{ activePlayers: number; liveBattles: number; battlesCompleted: number }>({ activePlayers: 0, liveBattles: 0, battlesCompleted: 0 })
   const [displayPnl, setDisplayPnl] = useState(0)
   const targetPnl = useRef(0)
   const animFrame = useRef<number>(0)
@@ -98,12 +99,15 @@ export default function DashboardPage() {
   useEffect(() => {
     targetPnl.current = totalPnl
     const spring = () => {
+      let shouldContinue = true
       setDisplayPnl(prev => {
         const diff = targetPnl.current - prev
-        if (Math.abs(diff) < 0.5) return targetPnl.current
+        if (Math.abs(diff) < 0.5) { shouldContinue = false; return targetPnl.current }
         return prev + diff * 0.1
       })
-      animFrame.current = requestAnimationFrame(spring)
+      if (shouldContinue) {
+        animFrame.current = requestAnimationFrame(spring)
+      }
     }
     animFrame.current = requestAnimationFrame(spring)
     return () => { if (animFrame.current) cancelAnimationFrame(animFrame.current) }
@@ -113,6 +117,7 @@ export default function DashboardPage() {
   useEffect(() => {
     fetch('/api/activity').then(r => r.ok ? r.json() : null).then(d => {
       if (d?.events?.length > 0) setLiveEvents(d.events)
+      if (d) setSocialProof({ activePlayers: d.activePlayers ?? 0, liveBattles: d.liveBattles ?? 0, battlesCompleted: d.battlesCompleted ?? 0 })
     }).catch(() => {})
     const t = setInterval(() => setLiveEventIdx(i => (i + 1) % Math.max(liveEvents.length, 1)), 3500)
     return () => clearInterval(t)
@@ -227,6 +232,7 @@ export default function DashboardPage() {
         @keyframes pulse2{0%,100%{opacity:.6}50%{opacity:1}}
         @keyframes glow{0%,100%{box-shadow:0 0 20px rgba(245,160,208,.06)}50%{box-shadow:0 0 40px rgba(245,160,208,.14)}}
         @keyframes tickerSlide{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+        @keyframes greenPulse{0%,100%{box-shadow:0 0 0 0 rgba(0,220,130,.4)}70%{box-shadow:0 0 0 4px rgba(0,220,130,0)}}
         .fu{animation:fadeUp .25s ease both}
         .fu1{animation-delay:.03s}.fu2{animation-delay:.06s}.fu3{animation-delay:.09s}.fu4{animation-delay:.12s}
         .play-btn{
@@ -331,6 +337,40 @@ export default function DashboardPage() {
           )}
         </div>
       </nav>
+
+      {/* ══ SOCIAL PROOF BAR ══ */}
+      {(socialProof.activePlayers > 0 || socialProof.liveBattles > 0 || socialProof.battlesCompleted > 0) && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 20,
+          padding: '8px 16px', background: c.surface, borderBottom: `1px solid ${c.border}`,
+        }}>
+          {socialProof.activePlayers > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{
+                width: 6, height: 6, borderRadius: '50%', background: c.green,
+                animation: 'greenPulse 1.4s ease-in-out infinite',
+              }} />
+              <span style={{ fontFamily: font.sans, fontSize: 12, color: c.text3 }}>
+                <span style={{ fontFamily: font.mono, fontWeight: 700, color: c.text2 }}>{socialProof.activePlayers}</span> players online
+              </span>
+            </div>
+          )}
+          {socialProof.liveBattles > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontFamily: font.sans, fontSize: 12, color: c.text3 }}>
+                <span style={{ fontFamily: font.mono, fontWeight: 700, color: c.pink }}>{socialProof.liveBattles}</span> battles live
+              </span>
+            </div>
+          )}
+          {socialProof.battlesCompleted > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontFamily: font.sans, fontSize: 12, color: c.text3 }}>
+                <span style={{ fontFamily: font.mono, fontWeight: 700, color: c.text2 }}>{socialProof.battlesCompleted}</span> battles completed
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ══ BODY ══ */}
       {!authReady ? (

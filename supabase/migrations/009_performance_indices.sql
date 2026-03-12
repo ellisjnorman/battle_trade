@@ -29,12 +29,12 @@ CREATE INDEX IF NOT EXISTS idx_rounds_lobby_number
 CREATE INDEX IF NOT EXISTS idx_sessions_trader_lobby
   ON sessions (trader_id, lobby_id);
 
--- Sabotage records: active sabotages per target
+-- Sabotages: active sabotages per target (correct table name: sabotages)
 CREATE INDEX IF NOT EXISTS idx_sabotages_target_active
-  ON sabotage_records (target_id, lobby_id, status) WHERE status = 'active';
+  ON sabotages (target_id, lobby_id, status) WHERE status = 'active';
 
 CREATE INDEX IF NOT EXISTS idx_sabotages_attacker
-  ON sabotage_records (attacker_id, lobby_id);
+  ON sabotages (attacker_id, lobby_id);
 
 -- Credit allocations: per-trader per-lobby
 CREATE INDEX IF NOT EXISTS idx_credits_trader_lobby

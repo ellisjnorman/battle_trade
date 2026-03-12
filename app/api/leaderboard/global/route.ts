@@ -123,5 +123,7 @@ export async function GET(request: NextRequest) {
     limit,
     sort,
     ...(myRank ? { my_rank: myRank } : {}),
+  }, {
+    headers: { 'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=15' },
   });
 }

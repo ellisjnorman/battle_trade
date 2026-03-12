@@ -41,6 +41,10 @@ export async function POST(
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
 
+  if (attacker_id === target_id) {
+    return NextResponse.json({ error: 'Cannot sabotage yourself' }, { status: 400 });
+  }
+
   // Verify attacker belongs to this lobby
   const attacker = await validateTraderInLobby(attacker_id, lobbyId);
   if (!attacker) {
