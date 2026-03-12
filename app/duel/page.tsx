@@ -149,7 +149,7 @@ export default function DuelPage() {
 
   useEffect(() => {
     loadChallenges()
-    const iv = setInterval(loadChallenges, 8000)
+    const iv = setInterval(loadChallenges, 20000)
     return () => clearInterval(iv)
   }, [loadChallenges])
 

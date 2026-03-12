@@ -522,27 +522,27 @@ export default function AdminPanel() {
     fetchActiveSabotages();
     fetchRoundHistory();
     fetchRevenue();
-    // Fast poll: standings + prices (1.5s) — what the admin stares at
+    // Fast poll: standings + prices (5s) — what the admin stares at
     const fastInterval = setInterval(() => {
       fetchStatus();
       fetchPrices();
       fetchActiveSabotages();
-    }, 1500);
-    // Medium poll: markets, sabotage feed, credits (5s)
+    }, 5000);
+    // Medium poll: markets, sabotage feed, credits (15s)
     const medInterval = setInterval(() => {
       fetchEvents();
       fetchSabotage();
       fetchCredits();
       fetchMarket();
-    }, 5000);
-    // Slow poll: revenue, history (15s)
+    }, 15000);
+    // Slow poll: revenue, history (60s)
     const slowInterval = setInterval(() => {
       fetchRoundHistory();
       fetchRevenue();
-    }, 15000);
+    }, 60000);
     // Keep price feed alive
     fetch('/api/health').catch(() => {});
-    const healthInterval = setInterval(() => { fetch('/api/health').catch(() => {}); }, 10000);
+    const healthInterval = setInterval(() => { fetch('/api/health').catch(() => {}); }, 30000);
     return () => { clearInterval(fastInterval); clearInterval(medInterval); clearInterval(slowInterval); clearInterval(healthInterval); };
   }, [authenticated, fetchStatus, fetchEvents, fetchPrices, fetchSabotage, fetchCredits, fetchMarket, fetchActiveSabotages, fetchRoundHistory, fetchRevenue]);
 

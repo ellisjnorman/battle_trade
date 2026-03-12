@@ -36,7 +36,7 @@ export default function MarketsPage() {
       setLoading(false)
     }
     load()
-    const i = setInterval(load, 5000)
+    const i = setInterval(load, 20000)
     return () => clearInterval(i)
   }, [])
 

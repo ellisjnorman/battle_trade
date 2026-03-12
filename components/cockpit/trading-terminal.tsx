@@ -204,7 +204,7 @@ export default function TradingTerminal() {
         }
       } catch { /* polling failure is non-blocking */ }
     };
-    const i = setInterval(poll, 3000);
+    const i = setInterval(poll, 15000);
     return () => clearInterval(i);
   }, [lobbyId, round, positions, addToast]);
 
@@ -273,7 +273,7 @@ export default function TradingTerminal() {
   // ── Market data poll (every 60s) ──
   useEffect(() => {
     const poll = async () => { try { const r = await fetch('/api/market-data'); if (r.ok) { const d = await r.json(); setMarketData(d.assets ?? {}); setFearGreed(d.fearGreed ?? { value: null, label: null }); } } catch {} };
-    const i = setInterval(poll, 60000);
+    const i = setInterval(poll, 120000);
     return () => clearInterval(i);
   }, []);
 

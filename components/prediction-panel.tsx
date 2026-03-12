@@ -87,7 +87,7 @@ export default function PredictionPanel({
 
   useEffect(() => {
     fetchMarkets();
-    pollRef.current = setInterval(fetchMarkets, 5000);
+    pollRef.current = setInterval(fetchMarkets, 15000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [fetchMarkets]);
 

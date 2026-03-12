@@ -12,6 +12,7 @@ const lastUpdateTime: Record<string, number> = {};
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 let staleCheckInterval: ReturnType<typeof setInterval> | null = null;
 let running = false;
+let sweepTickCounter = 0;
 
 const STALE_THRESHOLD_MS = 30_000; // 30 seconds
 const STALE_CHECK_INTERVAL_MS = 10_000; // check every 10 seconds
@@ -147,17 +148,22 @@ export function startPriceFeed() {
   // Initial fetch
   fetchPythPrices().then(flushPricesToSupabase);
 
-  // Poll every 2 seconds
+  // Poll every 5 seconds (reduced from 2s to limit Supabase DB calls)
   pollInterval = setInterval(async () => {
     await fetchPythPrices();
     await flushPricesToSupabase();
-    // Auto-liquidation check for all active lobbies
-    runLiquidationSweep();
-    // Auto-elimination check for traders with wiped portfolios
-    runEliminationSweep();
-    // Auto-volatility event trigger for algorithmic lobbies
-    runVolatilityAutoTrigger();
-  }, 2000);
+    // Run sweeps every 3rd tick (~15s) to reduce DB load
+    sweepTickCounter++;
+    if (sweepTickCounter >= 3) {
+      sweepTickCounter = 0;
+      // Auto-liquidation check for all active lobbies
+      runLiquidationSweep();
+      // Auto-elimination check for traders with wiped portfolios
+      runEliminationSweep();
+      // Auto-volatility event trigger for algorithmic lobbies
+      runVolatilityAutoTrigger();
+    }
+  }, 5000);
 
   // Check for stale prices every 10 seconds and fall back to Binance REST
   staleCheckInterval = setInterval(checkStalePrices, STALE_CHECK_INTERVAL_MS);

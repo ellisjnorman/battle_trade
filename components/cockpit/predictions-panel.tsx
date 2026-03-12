@@ -116,7 +116,7 @@ export default function PredictionsPanel({ lobbyId, traderId, creditsBalance, on
   // ---------------------------------------------------------------------------
   useEffect(() => {
     fetchMarkets();
-    const interval = setInterval(fetchMarkets, 10000);
+    const interval = setInterval(fetchMarkets, 30000);
     return () => clearInterval(interval);
   }, [fetchMarkets]);
 

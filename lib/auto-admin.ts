@@ -20,7 +20,7 @@ const activeLoops = new Map<string, NodeJS.Timeout>();
 // Track bot tick intervals per lobby
 const botIntervals = new Map<string, NodeJS.Timeout>();
 
-const BOT_TICK_INTERVAL_MS = 8_000; // Bots act every 8 seconds
+const BOT_TICK_INTERVAL_MS = 15_000; // Bots act every 15 seconds
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -108,18 +108,21 @@ async function runGameLoop(lobbyId: string): Promise<void> {
   const eliminationPct = Number(config.elimination_pct ?? 25);
   const intermissionSeconds = 15; // Brief pause between rounds
 
-  // Broadcast helper
+  // Long-lived broadcast channel — reuse instead of create/destroy per message
+  const { supabase } = await import('./supabase');
+  const broadcastChannel = supabase.channel(`lobby-${lobbyId}-auto`);
+  let channelReady = false;
+  broadcastChannel.subscribe((status) => { if (status === 'SUBSCRIBED') channelReady = true; });
+
   const broadcast = async (event: string, payload: Record<string, unknown>) => {
-    const { supabase } = await import('./supabase');
-    const ch = supabase.channel(`lobby-${lobbyId}-auto`);
-    ch.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        await ch.send({ type: 'broadcast', event, payload });
-        setTimeout(() => supabase.removeChannel(ch), 500);
-      }
-    });
-    // Fallback: remove channel regardless after 3s (covers subscription failure)
-    setTimeout(() => supabase.removeChannel(ch), 3000);
+    if (channelReady) {
+      await broadcastChannel.send({ type: 'broadcast', event, payload }).catch(() => {});
+    }
+  };
+
+  // Cleanup channel when game finishes
+  const cleanupBroadcast = () => {
+    try { supabase.removeChannel(broadcastChannel); } catch {}
   };
 
   // Create first round
@@ -150,6 +153,7 @@ async function runGameLoop(lobbyId: string): Promise<void> {
       startingBalance,
       intermissionSeconds,
       broadcast,
+      cleanupBroadcast,
     });
   }, roundDuration * 1000);
 
@@ -192,6 +196,7 @@ async function endRoundAndAdvance(
     startingBalance: number;
     intermissionSeconds: number;
     broadcast: (event: string, payload: Record<string, unknown>) => Promise<void>;
+    cleanupBroadcast: () => void;
   },
 ): Promise<void> {
   const sb = getServerSupabase();
@@ -265,7 +270,7 @@ async function endRoundAndAdvance(
   const alive = standings.filter(s => !s.trader.is_eliminated);
   if (alive.length <= 1) {
     // Game over — distribute prizes
-    await finishGame(lobbyId, standings, opts.broadcast);
+    await finishGame(lobbyId, standings, opts.broadcast, opts.cleanupBroadcast);
     return;
   }
 
@@ -290,7 +295,7 @@ async function endRoundAndAdvance(
   // Check if game should end
   const remainingCount = alive.length - elimCount;
   if (remainingCount <= 1) {
-    await finishGame(lobbyId, standings, opts.broadcast);
+    await finishGame(lobbyId, standings, opts.broadcast, opts.cleanupBroadcast);
     return;
   }
 
@@ -338,6 +343,7 @@ async function finishGame(
   lobbyId: string,
   standings: Array<{ trader: { id: string; name: string; is_eliminated: boolean }; returnPct: number; rank: number }>,
   broadcast: (event: string, payload: Record<string, unknown>) => Promise<void>,
+  cleanupBroadcast?: () => void,
 ): Promise<void> {
   const sb = getServerSupabase();
 
@@ -410,6 +416,9 @@ async function finishGame(
   });
 
   activeLoops.delete(lobbyId);
+
+  // Clean up long-lived broadcast channel
+  if (cleanupBroadcast) cleanupBroadcast();
 }
 
 // ---------------------------------------------------------------------------

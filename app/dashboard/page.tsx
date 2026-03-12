@@ -175,7 +175,7 @@ export default function DashboardPage() {
 
     const i = setInterval(() => {
       fetch('/api/lobbies/active').then(r => r.ok ? r.json() : { lobbies: [] }).then(d => setLobbies(d.lobbies ?? [])).catch(() => {})
-    }, 10000)
+    }, 30000)
     return () => { cancelled = true; clearInterval(i) }
   }, [authReady, user])
 
