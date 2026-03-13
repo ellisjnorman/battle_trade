@@ -72,6 +72,7 @@ const rules: RateRule[] = [
   { pattern: /^\/api\/lobby\/[^/]+\/positions$/, method: 'POST', limit: 30 },
   { pattern: /^\/api\/lobby\/[^/]+\/positions$/, method: 'DELETE', limit: 30 },
   { pattern: /^\/api\/lobby\/[^/]+\/chat/, method: 'POST', limit: 60 },
+  { pattern: /^\/api\/lobby\/[^/]+\/tick/, method: 'POST', limit: 12 },
   { pattern: /^\/api\/lobby\/[^/]+\/spectate-join/, method: 'POST', limit: 10 },
   { pattern: /^\/api\/lobby\/[^/]+\/predictions/, method: 'POST', limit: 30 },
 

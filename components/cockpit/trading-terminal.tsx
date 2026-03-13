@@ -300,11 +300,46 @@ export default function TradingTerminal() {
       const t = await lookupTrader();
       if (t) {
         await fetchInitialData(t);
-        // Trigger auto-admin for practice/auto lobbies (fire-and-forget)
-        fetch(`/api/lobby/${lobbyId}/auto-start`, { method: 'POST' }).catch(() => {});
       }
     })();
   }, [lookupTrader, fetchInitialData, lobbyId]);
+
+  // ── Auto-admin tick loop (drives bot trading + round transitions for practice lobbies) ──
+  useEffect(() => {
+    if (!lobbyId || !trader) return;
+    let active = true;
+    const tick = async () => {
+      try {
+        const r = await fetch(`/api/lobby/${lobbyId}/tick`, { method: 'POST' });
+        if (!r.ok || !active) return;
+        const d = await r.json();
+        if (!d.auto) return; // Not an auto-admin lobby
+
+        // Update round info if returned
+        if (d.round) {
+          setRound(prev => prev ? { ...prev, round_number: d.round.round_number, status: d.round.status } : prev);
+          setTimeRemaining(Math.round(d.round.time_remaining ?? 0));
+        }
+        if (d.game_over || d.status === 'completed') {
+          // Show battle end overlay
+          const myRank = standings.findIndex(s => s.trader?.id === trader?.id) + 1;
+          const myReturn = standings.find(s => s.trader?.id === trader?.id)?.returnPct ?? 0;
+          setBattleEndData({ rank: myRank || 1, totalPlayers: standings.length || 2, returnPct: myReturn });
+        }
+        // Refresh standings after eliminations or round changes
+        if (d.eliminated?.length > 0 || d.round?.status === 'active') {
+          try {
+            const sr = await fetch(`/api/lobby/${lobbyId}/leaderboard`);
+            if (sr.ok) { const sd = await sr.json(); setStandings(sd.standings ?? sd.leaderboard ?? []); }
+          } catch {}
+        }
+      } catch {}
+    };
+    // Initial tick immediately, then every 10s
+    tick();
+    const i = setInterval(tick, 10_000);
+    return () => { active = false; clearInterval(i); };
+  }, [lobbyId, trader]);
 
   // ── Market data poll (every 60s) ──
   useEffect(() => {
@@ -1828,7 +1863,7 @@ export default function TradingTerminal() {
                 {effectsBar}
               </div>
               {/* Scrollable: Standings → Positions → Feed → History → Arsenal + Defense */}
-              <div style={{ flexShrink: 0 }}>
+              <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, scrollbarWidth: 'thin', scrollbarColor: '#333 transparent' }}>
                 {leaderboardPanel}
                 {quickPositions}
                 {liveFeed}

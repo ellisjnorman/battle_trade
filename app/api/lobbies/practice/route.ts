@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabase } from '@/lib/supabase-server';
-import { startAutoAdmin } from '@/lib/auto-admin';
 import crypto from 'crypto';
 import { SupabaseClient } from '@supabase/supabase-js';
 
@@ -203,12 +202,25 @@ export async function POST(request: NextRequest) {
       console.error('Failed to create first round for practice lobby:', err);
     }
 
-    // Also try starting auto-admin game loop
+    // Seed initial prices so bots can trade immediately
     try {
-      await startAutoAdmin(lobbyId);
+      const seedPrices = [
+        { symbol: 'BTCUSDT', price: 65000 + Math.random() * 2000 },
+        { symbol: 'ETHUSDT', price: 3400 + Math.random() * 200 },
+        { symbol: 'SOLUSDT', price: 140 + Math.random() * 20 },
+      ];
+      for (const p of seedPrices) {
+        await sb.from('prices').upsert(
+          { symbol: p.symbol, price: Math.round(p.price * 100) / 100, updated_at: new Date().toISOString() },
+          { onConflict: 'symbol' },
+        );
+      }
     } catch (err) {
-      console.error('Auto-admin start failed (non-critical):', err);
+      console.error('Price seed failed (non-critical):', err);
     }
+
+    // Note: auto-admin game loop is driven by the /tick endpoint polled by the trading terminal.
+    // No need to start a long-running loop here (won't survive serverless function exit).
 
     return NextResponse.json({
       lobby_id: lobbyId,
