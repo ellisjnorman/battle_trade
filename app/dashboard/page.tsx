@@ -1401,29 +1401,50 @@ export default function DashboardPage() {
             {/* Game Mode — 2x2 compact */}
             <div style={{ marginBottom: 12 }}>
               <span style={{ fontFamily: font.sans, fontSize: 11, fontWeight: 600, color: c.text2, display: 'block', marginBottom: 6 }}>Game Mode</span>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
-                {([
-                  { id: 'classic', label: 'Classic', desc: 'Best round wins', icon: '🏆' },
-                  { id: 'elimination', label: 'Elimination', desc: 'Bottom 50% cut each round', icon: '💀' },
-                  { id: 'cumulative', label: 'Marathon', desc: 'Total return across rounds', icon: '📊' },
-                  { id: 'last_round', label: 'Final Round', desc: 'Only last round counts', icon: '🎯' },
-                ] as const).map(gm => (
-                  <button
-                    key={gm.id}
-                    onClick={() => setPracticeGameMode(gm.id)}
-                    style={{
-                      padding: '8px 10px', textAlign: 'left', cursor: 'pointer', transition: 'all .15s',
-                      border: practiceGameMode === gm.id ? `2px solid ${c.pink}` : `1px solid ${c.border}`,
-                      borderRadius: radius.sm, background: practiceGameMode === gm.id ? `${c.pink}08` : c.surface,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 1 }}>
-                      <span style={{ fontSize: 12 }}>{gm.icon}</span>
-                      <span style={{ fontFamily: font.sans, fontSize: 12, fontWeight: 700, color: practiceGameMode === gm.id ? c.text : c.text2 }}>{gm.label}</span>
-                    </div>
-                    <div style={{ fontFamily: font.sans, fontSize: 9, color: c.text4 }}>{gm.desc}</div>
-                  </button>
-                ))}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {/* Paper mode — full width */}
+                {(() => {
+                  const sel = practiceGameMode === 'paper'
+                  return (
+                    <button onClick={() => setPracticeGameMode('paper')} style={{
+                      padding: '8px 12px', textAlign: 'left', cursor: 'pointer', transition: 'all .15s',
+                      border: sel ? `2px solid ${c.green}` : `1px solid ${c.border}`,
+                      borderRadius: radius.sm, background: sel ? `${c.green}08` : c.surface,
+                      display: 'flex', alignItems: 'center', gap: 8,
+                    }}>
+                      <span style={{ fontSize: 14 }}>📝</span>
+                      <div>
+                        <span style={{ fontFamily: font.sans, fontSize: 12, fontWeight: 700, color: sel ? c.text : c.text2 }}>Paper Trade</span>
+                        <span style={{ fontFamily: font.sans, fontSize: 9, color: c.text4, marginLeft: 8 }}>Solo — no bots, no weapons, just you & the market</span>
+                      </div>
+                    </button>
+                  )
+                })()}
+                {/* Battle modes — 2x2 */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+                  {([
+                    { id: 'classic', label: 'Classic', desc: 'Best round wins', icon: '🏆' },
+                    { id: 'elimination', label: 'Elimination', desc: 'Bottom 50% cut', icon: '💀' },
+                    { id: 'cumulative', label: 'Marathon', desc: 'Total return across rounds', icon: '📊' },
+                    { id: 'last_round', label: 'Final Round', desc: 'Only last round counts', icon: '🎯' },
+                  ] as const).map(gm => (
+                    <button
+                      key={gm.id}
+                      onClick={() => setPracticeGameMode(gm.id)}
+                      style={{
+                        padding: '8px 10px', textAlign: 'left', cursor: 'pointer', transition: 'all .15s',
+                        border: practiceGameMode === gm.id ? `2px solid ${c.pink}` : `1px solid ${c.border}`,
+                        borderRadius: radius.sm, background: practiceGameMode === gm.id ? `${c.pink}08` : c.surface,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 1 }}>
+                        <span style={{ fontSize: 12 }}>{gm.icon}</span>
+                        <span style={{ fontFamily: font.sans, fontSize: 12, fontWeight: 700, color: practiceGameMode === gm.id ? c.text : c.text2 }}>{gm.label}</span>
+                      </div>
+                      <div style={{ fontFamily: font.sans, fontSize: 9, color: c.text4 }}>{gm.desc}</div>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 

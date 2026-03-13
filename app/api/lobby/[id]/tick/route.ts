@@ -169,8 +169,9 @@ export async function POST(
     } catch {}
   }
 
-  // ── Tick bots (if round is active and game isn't over) ──
-  if (!gameOver && !roundEnded) {
+  // ── Tick bots (if round is active, game isn't over, and bots are enabled) ──
+  const noBots = !!(config.no_bots);
+  if (!gameOver && !roundEnded && !noBots) {
     try {
       const { tickBots } = await import('@/lib/bots');
       const activeRoundId = roundEnded ? undefined : round.id;

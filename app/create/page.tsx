@@ -159,6 +159,8 @@ export default function CreateLobbyPage() {
   const [volatilityEngine, setVolatilityEngine] = useState<'manual' | 'algorithmic' | 'off'>('manual');
   const [entryFee, setEntryFee] = useState(0);
   const [format, setFormat] = useState<'elimination' | 'rounds'>('elimination');
+  const [gameMode, setGameMode] = useState<'classic' | 'paper' | 'elimination' | 'cumulative' | 'last_round'>('classic');
+  const [gameSpeed, setGameSpeed] = useState(1);
 
   const handlePresetSelect = (presetId: string) => {
     setSelectedPreset(presetId);
@@ -210,6 +212,10 @@ export default function CreateLobbyPage() {
             entry_rake_pct: 20,
             operator_controlled: true,
             credit_source: entryFee > 0 ? 'self_funded' : 'sponsor_funded',
+            game_mode: gameMode,
+            game_speed: gameSpeed,
+            no_bots: gameMode === 'paper',
+            no_weapons: gameMode === 'paper',
           },
         }),
       });
@@ -445,6 +451,38 @@ export default function CreateLobbyPage() {
                             ${(b / 1000).toFixed(0)}K
                           </button>
                         ))}
+                      </div>
+                    </div>
+
+                    {/* Game Mode + Speed */}
+                    <div style={{ display: 'flex', gap: 16 }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ ...S, fontSize: 10, color: '#777', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>GAME MODE</label>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          {([
+                            { key: 'paper' as const, label: 'PAPER' },
+                            { key: 'classic' as const, label: 'CLASSIC' },
+                            { key: 'elimination' as const, label: 'ELIM' },
+                          ]).map(gm => (
+                            <button key={gm.key} onClick={() => setGameMode(gm.key)} style={{ flex: 1, height: 40, ...M, fontSize: 11, fontWeight: 700, color: gameMode === gm.key ? '#0A0A0A' : '#555', background: gameMode === gm.key ? '#F5A0D0' : 'transparent', border: `1px solid ${gameMode === gm.key ? '#F5A0D0' : '#222'}`, cursor: 'pointer' }}>
+                              {gm.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ ...S, fontSize: 10, color: '#777', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>SPEED</label>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          {([
+                            { val: 1, label: '1x' },
+                            { val: 2, label: '2x' },
+                            { val: 5, label: '5x' },
+                          ]).map(s => (
+                            <button key={s.val} onClick={() => setGameSpeed(s.val)} style={{ flex: 1, height: 40, ...M, fontSize: 11, fontWeight: 700, color: gameSpeed === s.val ? '#0A0A0A' : '#555', background: gameSpeed === s.val ? '#F5A0D0' : 'transparent', border: `1px solid ${gameSpeed === s.val ? '#F5A0D0' : '#222'}`, cursor: 'pointer' }}>
+                              {s.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
 

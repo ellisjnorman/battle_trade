@@ -53,7 +53,8 @@ async function insertTrader(
 }
 
 // Game modes — scoring and rule variations
-const GAME_MODES: Record<string, { label: string; scoring_mode: string; elimination_pct_override?: number; desc: string }> = {
+const GAME_MODES: Record<string, { label: string; scoring_mode: string; elimination_pct_override?: number; no_bots?: boolean; no_weapons?: boolean; desc: string }> = {
+  paper:        { label: 'Paper Trade', scoring_mode: 'best_round', elimination_pct_override: 0, no_bots: true, no_weapons: true, desc: 'Solo paper trading — no bots, no weapons' },
   classic:      { label: 'Classic', scoring_mode: 'best_round', desc: 'Best single-round return wins' },
   elimination:  { label: 'Elimination', scoring_mode: 'best_round', elimination_pct_override: 50, desc: 'Bottom 50% eliminated each round' },
   cumulative:   { label: 'Marathon', scoring_mode: 'cumulative', desc: 'Total return across all rounds' },
@@ -114,6 +115,8 @@ export async function POST(request: NextRequest) {
         rank_multiplier: difficulty === 'easy' ? 0.5 : difficulty === 'medium' ? 0.75 : difficulty === 'hard' ? 1.0 : 1.25,
         practice_rank_cap: 100,
         game_speed: gameSpeed,
+        no_bots: gameModeConfig.no_bots ?? false,
+        no_weapons: gameModeConfig.no_weapons ?? false,
       },
     };
 
@@ -166,9 +169,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 3. Create NPC bot traders
+    // 3. Create NPC bot traders (skip for paper mode)
+    const actualBotCount = gameModeConfig.no_bots ? 0 : botCount;
     const shuffled = [...BOT_NAMES].sort(() => Math.random() - 0.5);
-    const botNames = shuffled.slice(0, botCount);
+    const botNames = shuffled.slice(0, actualBotCount);
 
     for (const botName of botNames) {
       const botCode = generateCode();
@@ -243,7 +247,7 @@ export async function POST(request: NextRequest) {
       lobby_id: lobbyId,
       trader_id: humanTrader?.id,
       code: humanCode,
-      bot_count: botCount,
+      bot_count: actualBotCount,
       difficulty,
     }, { status: 201 });
   } catch (err) {
