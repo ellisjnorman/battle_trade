@@ -931,26 +931,26 @@ export default function TradingTerminal() {
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       {/* RANK HERO — Mario Kart position indicator */}
       <div style={{
-        padding: '6px 12px', borderBottom: `2px solid ${rankColor}40`,
+        padding: '12px 14px', borderBottom: `2px solid ${rankColor}40`,
         background: `linear-gradient(180deg, ${pnlColor}06, transparent)`,
         animation: rankFlash === 'up' ? 'rankUpFlash 1.5s ease-out' : rankFlash === 'down' ? 'rankDownFlash 1.5s ease-out' : 'none',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{
-              ...B, fontSize: 24, lineHeight: 1, color: rankColor,
-              textShadow: `0 0 12px ${rankColor}50`,
+              ...B, fontSize: 48, lineHeight: 1, color: rankColor,
+              textShadow: `0 0 16px ${rankColor}50`,
               animation: myRank === 1 ? 'glowPulse 3s ease-in-out infinite' : 'none',
               transition: 'all 400ms',
             }}>#{myRank || '—'}</span>
             <div>
-              <span style={{ ...B, fontSize: 18, color: pnlColor, lineHeight: 1, display: 'block', textShadow: rp !== 0 ? `0 0 10px ${pnlColor}40` : 'none' }}>{rp >= 0 ? '+' : ''}{rp.toFixed(1)}%</span>
-              <span style={{ ...M, fontSize: 9, color: '#666', marginTop: 1, display: 'block' }}>${pv.toLocaleString(undefined, { maximumFractionDigits: 0 })} · {openPos.length} open</span>
+              <span style={{ ...B, fontSize: 36, color: pnlColor, lineHeight: 1, display: 'block', textShadow: rp !== 0 ? `0 0 12px ${pnlColor}40` : 'none' }}>{rp >= 0 ? '+' : ''}{rp.toFixed(1)}%</span>
+              <span style={{ ...M, fontSize: 13, color: '#666', marginTop: 3, display: 'block' }}>${pv.toLocaleString(undefined, { maximumFractionDigits: 0 })} · {openPos.length} open</span>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {winStreak >= 2 && <StreakBadge streak={winStreak} />}
-            <span style={{ ...M, fontSize: 9, color: '#555' }}>{myRank}/{totalTraders}</span>
+            <span style={{ ...M, fontSize: 14, color: '#555' }}>{myRank}/{totalTraders}</span>
           </div>
         </div>
         {proximityGap !== null && proximityGap < 2 && myRank > 1 && (
@@ -1056,14 +1056,14 @@ export default function TradingTerminal() {
           const quickPicks = [...new Set([minLev, ...leverageTiers.filter(t => t <= maxLev), maxLev])].sort((a, b) => a - b).slice(0, 6);
           return (
             <>
-              <div style={{ position: 'relative', height: 36, display: 'flex', alignItems: 'center', padding: '0 2px' }}>
-                <div style={{ position: 'absolute', left: 0, right: 0, height: 6, borderRadius: 3, background: '#1A1A1A', overflow: 'hidden' }}>
-                  <div style={{ width: `${pct}%`, height: '100%', borderRadius: 3, background: dangerZone ? 'linear-gradient(90deg, #F5A0D0, #FF3333)' : 'linear-gradient(90deg, #F5A0D060, #F5A0D0)', transition: 'width 50ms, background 200ms' }} />
+              <div style={{ position: 'relative', height: 20, display: 'flex', alignItems: 'center', padding: '0 2px' }}>
+                <div style={{ position: 'absolute', left: 0, right: 0, height: 4, borderRadius: 2, background: '#1A1A1A', overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, background: dangerZone ? 'linear-gradient(90deg, #F5A0D0, #FF3333)' : 'linear-gradient(90deg, #F5A0D060, #F5A0D0)', transition: 'width 50ms, background 200ms' }} />
                 </div>
                 <input type="range" min={minLev} max={maxLev} step={1} value={leverage}
                   onChange={(e) => setLeverage(parseInt(e.target.value))}
-                  style={{ position: 'absolute', left: 0, right: 0, width: '100%', height: 36, opacity: 0, cursor: 'pointer', zIndex: 2, margin: 0 }} />
-                <div style={{ position: 'absolute', left: `${pct}%`, top: '50%', transform: 'translate(-50%, -50%)', width: 20, height: 20, borderRadius: 10, background: dangerZone ? '#FF3333' : '#F5A0D0', border: '1px solid rgba(255,255,255,0.3)', transition: 'left 50ms, background 200ms', pointerEvents: 'none' }} />
+                  style={{ position: 'absolute', left: 0, right: 0, width: '100%', height: 20, opacity: 0, cursor: 'pointer', zIndex: 2, margin: 0 }} />
+                <div style={{ position: 'absolute', left: `${pct}%`, top: '50%', transform: 'translate(-50%, -50%)', width: 14, height: 14, borderRadius: 7, background: dangerZone ? '#FF3333' : '#F5A0D0', border: '1px solid rgba(255,255,255,0.3)', transition: 'left 50ms, background 200ms', pointerEvents: 'none' }} />
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
                 {quickPicks.map(v => (
@@ -1914,7 +1914,6 @@ export default function TradingTerminal() {
               <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, scrollbarWidth: 'thin', scrollbarColor: '#333 transparent' }}>
                 {leaderboardPanel}
                 {quickPositions}
-                {liveFeed}
                 {roundHistoryPanel}
                 {arsenalPanel}
                 {defensePanel}
@@ -2060,8 +2059,9 @@ export default function TradingTerminal() {
               <div style={{ flexShrink: 0, maxHeight: 120, overflowY: 'auto' }}>
                 {quickPositions}
               </div>
-              {/* Order entry (scrollable) */}
+              {/* Live feed + Order entry (scrollable) */}
               <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, WebkitOverflowScrolling: 'touch' }}>
+                {liveFeed}
                 {orderPanel}
               </div>
               {/* Chat toggle button — fixed at bottom of right column */}
