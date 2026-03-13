@@ -1356,7 +1356,7 @@ export default function DashboardPage() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
               <div>
                 <div style={{ fontFamily: font.display, fontSize: 22, color: c.text }}>Start Practice</div>
-                <div style={{ fontFamily: font.sans, fontSize: 11, color: c.text3 }}>Rank pts capped outside top 100</div>
+                <div style={{ fontFamily: font.sans, fontSize: 11, color: c.text3 }}>Practice builds rank (capped outside top 100)</div>
               </div>
               <button onClick={() => setShowPracticeModal(false)} style={{
                 width: 28, height: 28, borderRadius: 6, border: `1px solid ${c.border}`,
@@ -1365,68 +1365,78 @@ export default function DashboardPage() {
               }}>&times;</button>
             </div>
 
-            {/* Difficulty — single row */}
-            <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+            {/* Difficulty cards — 2x2 compact */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 14 }}>
               {([
-                { id: 'easy', label: 'Chill', color: c.green, mult: '0.5x' },
-                { id: 'medium', label: 'Standard', color: c.blue, mult: '0.75x' },
-                { id: 'hard', label: 'Intense', color: '#FF6B35', mult: '1.0x' },
-                { id: 'insane', label: 'Degen', color: c.red, mult: '1.25x' },
-              ] as const).map(d => {
-                const sel = practiceDifficulty === d.id
-                return (
-                  <button key={d.id}
-                    onClick={() => { setPracticeDifficulty(d.id); setPracticeBotCount(d.id === 'easy' ? 2 : d.id === 'medium' ? 4 : d.id === 'hard' ? 6 : 7); setPracticeRoundDuration(d.id === 'easy' ? 180 : d.id === 'medium' ? 120 : d.id === 'hard' ? 60 : 45) }}
-                    style={{
-                      flex: 1, padding: '10px 6px', textAlign: 'center', cursor: 'pointer', transition: 'all .15s',
-                      border: sel ? `2px solid ${d.color}` : `1px solid ${c.border}`,
-                      borderRadius: radius.sm, background: sel ? `${d.color}10` : c.surface,
-                    }}
-                  >
-                    <div style={{ fontFamily: font.sans, fontSize: 12, fontWeight: 700, color: sel ? c.text : c.text3, marginBottom: 2 }}>{d.label}</div>
-                    <div style={{ fontFamily: font.mono, fontSize: 9, fontWeight: 600, color: d.color }}>{d.mult}</div>
-                  </button>
-                )
-              })}
+                { id: 'easy', label: 'Chill', desc: '2 bots, 3min rounds, $50K', color: c.green, multiplier: '0.5x rank pts', icon: '~' },
+                { id: 'medium', label: 'Standard', desc: '4 bots, 2min rounds, $10K', color: c.blue, multiplier: '0.75x rank pts', icon: '!' },
+                { id: 'hard', label: 'Intense', desc: '6 bots, 1min rounds, $5K', color: '#FF6B35', multiplier: '1.0x rank pts', icon: '!!' },
+                { id: 'insane', label: 'Degen', desc: '7 bots, 45s rounds, $2K', color: c.red, multiplier: '1.25x rank pts', icon: '!!!' },
+              ] as const).map(d => (
+                <button
+                  key={d.id}
+                  onClick={() => { setPracticeDifficulty(d.id); setPracticeBotCount(d.id === 'easy' ? 2 : d.id === 'medium' ? 4 : d.id === 'hard' ? 6 : 7); setPracticeRoundDuration(d.id === 'easy' ? 180 : d.id === 'medium' ? 120 : d.id === 'hard' ? 60 : 45) }}
+                  style={{
+                    padding: '10px 12px', textAlign: 'left', cursor: 'pointer', transition: 'all .15s',
+                    border: practiceDifficulty === d.id ? `2px solid ${d.color}` : `1px solid ${c.border}`,
+                    borderRadius: radius.sm, background: practiceDifficulty === d.id ? `${d.color}08` : c.surface,
+                    position: 'relative', overflow: 'hidden',
+                  }}
+                >
+                  {practiceDifficulty === d.id && (
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: d.color }} />
+                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                    <span style={{ fontFamily: font.mono, fontSize: 9, fontWeight: 700, color: d.color, background: `${d.color}15`, padding: '1px 5px', borderRadius: 3 }}>{d.icon}</span>
+                    <span style={{ fontFamily: font.sans, fontSize: 14, fontWeight: 700, color: practiceDifficulty === d.id ? c.text : c.text2 }}>{d.label}</span>
+                  </div>
+                  <div style={{ fontFamily: font.sans, fontSize: 10, color: c.text4, marginBottom: 2 }}>{d.desc}</div>
+                  <div style={{ fontFamily: font.mono, fontSize: 9, fontWeight: 600, color: d.color }}>{d.multiplier}</div>
+                </button>
+              ))}
             </div>
 
-            {/* Game Mode — single row */}
-            <div style={{ marginBottom: 14 }}>
-              <span style={{ fontFamily: font.sans, fontSize: 11, fontWeight: 600, color: c.text3, display: 'block', marginBottom: 6 }}>Game Mode</span>
-              <div style={{ display: 'flex', gap: 6 }}>
+            {/* Game Mode — 2x2 compact */}
+            <div style={{ marginBottom: 12 }}>
+              <span style={{ fontFamily: font.sans, fontSize: 11, fontWeight: 600, color: c.text2, display: 'block', marginBottom: 6 }}>Game Mode</span>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
                 {([
-                  { id: 'classic', label: 'Classic', icon: '🏆' },
-                  { id: 'elimination', label: 'Elim', icon: '💀' },
-                  { id: 'cumulative', label: 'Marathon', icon: '📊' },
-                  { id: 'last_round', label: 'Final', icon: '🎯' },
-                ] as const).map(gm => {
-                  const sel = practiceGameMode === gm.id
-                  return (
-                    <button key={gm.id} onClick={() => setPracticeGameMode(gm.id)} style={{
-                      flex: 1, padding: '8px 4px', textAlign: 'center', cursor: 'pointer', transition: 'all .15s',
-                      border: sel ? `2px solid ${c.pink}` : `1px solid ${c.border}`,
-                      borderRadius: radius.sm, background: sel ? `${c.pink}10` : c.surface,
-                    }}>
-                      <span style={{ fontSize: 12, display: 'block', marginBottom: 2 }}>{gm.icon}</span>
-                      <span style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 600, color: sel ? c.text : c.text3 }}>{gm.label}</span>
-                    </button>
-                  )
-                })}
+                  { id: 'classic', label: 'Classic', desc: 'Best round wins', icon: '🏆' },
+                  { id: 'elimination', label: 'Elimination', desc: 'Bottom 50% cut each round', icon: '💀' },
+                  { id: 'cumulative', label: 'Marathon', desc: 'Total return across rounds', icon: '📊' },
+                  { id: 'last_round', label: 'Final Round', desc: 'Only last round counts', icon: '🎯' },
+                ] as const).map(gm => (
+                  <button
+                    key={gm.id}
+                    onClick={() => setPracticeGameMode(gm.id)}
+                    style={{
+                      padding: '8px 10px', textAlign: 'left', cursor: 'pointer', transition: 'all .15s',
+                      border: practiceGameMode === gm.id ? `2px solid ${c.pink}` : `1px solid ${c.border}`,
+                      borderRadius: radius.sm, background: practiceGameMode === gm.id ? `${c.pink}08` : c.surface,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 1 }}>
+                      <span style={{ fontSize: 12 }}>{gm.icon}</span>
+                      <span style={{ fontFamily: font.sans, fontSize: 12, fontWeight: 700, color: practiceGameMode === gm.id ? c.text : c.text2 }}>{gm.label}</span>
+                    </div>
+                    <div style={{ fontFamily: font.sans, fontSize: 9, color: c.text4 }}>{gm.desc}</div>
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Rounds / Duration / Bots — compact 3-column */}
+            {/* Rounds & Duration & Bots — inline row */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 600, color: c.text3 }}>Rounds</span>
+                  <span style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 600, color: c.text2 }}>Rounds</span>
                   <span style={{ fontFamily: font.mono, fontSize: 12, fontWeight: 700, color: c.text }}>{practiceNumRounds}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 3 }}>
                   {[1, 3, 5, 10].map(n => (
                     <button key={n} onClick={() => setPracticeNumRounds(n)} style={{
                       flex: 1, padding: '6px 0', fontFamily: font.mono, fontSize: 11, fontWeight: 700,
-                      color: practiceNumRounds === n ? c.bg : c.text4,
+                      color: practiceNumRounds === n ? c.bg : c.text3,
                       background: practiceNumRounds === n ? c.pink : c.surface,
                       border: practiceNumRounds === n ? 'none' : `1px solid ${c.border}`,
                       borderRadius: radius.sm, cursor: 'pointer', transition: 'all .15s',
@@ -1436,14 +1446,14 @@ export default function DashboardPage() {
               </div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 600, color: c.text3 }}>Duration</span>
+                  <span style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 600, color: c.text2 }}>Duration</span>
                   <span style={{ fontFamily: font.mono, fontSize: 12, fontWeight: 700, color: c.text }}>{practiceRoundDuration >= 60 ? `${practiceRoundDuration / 60}m` : `${practiceRoundDuration}s`}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 3 }}>
                   {[{ label: '45s', val: 45 }, { label: '1m', val: 60 }, { label: '2m', val: 120 }, { label: '5m', val: 300 }].map(d => (
                     <button key={d.val} onClick={() => setPracticeRoundDuration(d.val)} style={{
                       flex: 1, padding: '6px 0', fontFamily: font.mono, fontSize: 11, fontWeight: 700,
-                      color: practiceRoundDuration === d.val ? c.bg : c.text4,
+                      color: practiceRoundDuration === d.val ? c.bg : c.text3,
                       background: practiceRoundDuration === d.val ? c.pink : c.surface,
                       border: practiceRoundDuration === d.val ? 'none' : `1px solid ${c.border}`,
                       borderRadius: radius.sm, cursor: 'pointer', transition: 'all .15s',
@@ -1453,7 +1463,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 600, color: c.text3 }}>Bots</span>
+                  <span style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 600, color: c.text2 }}>Bots</span>
                   <span style={{ fontFamily: font.mono, fontSize: 12, fontWeight: 700, color: c.text }}>{practiceBotCount}</span>
                 </div>
                 <input
