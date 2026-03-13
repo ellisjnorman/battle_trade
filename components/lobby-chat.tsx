@@ -15,6 +15,8 @@ interface LobbyChatProps {
   userName: string;
   userRole: 'competitor' | 'spectator' | 'admin';
   collapsed?: boolean;
+  /** Render inline (not floating) — for embedding in sidebars */
+  embedded?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -48,7 +50,7 @@ function relativeTime(iso: string): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function LobbyChat({ lobbyId, userId, userName, userRole, collapsed: initialCollapsed }: LobbyChatProps) {
+export default function LobbyChat({ lobbyId, userId, userName, userRole, collapsed: initialCollapsed, embedded }: LobbyChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [collapsed, setCollapsed] = useState(initialCollapsed ?? true);
@@ -151,6 +153,43 @@ export default function LobbyChat({ lobbyId, userId, userName, userRole, collaps
   const handleReaction = (emoji: string) => {
     sendMessage(emoji);
   };
+
+  // ─── Embedded mode: inline in sidebar ───
+  if (embedded) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: 220 }}>
+        <div style={{ padding: '6px 14px', borderBottom: '1px solid #1A1A1A', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontFamily: "var(--font-bebas, 'Bebas Neue'), sans-serif", fontSize: 12, color: '#777', letterSpacing: '0.05em' }}>CHAT</span>
+          <span style={{ fontFamily: "var(--font-jetbrains, 'JetBrains Mono'), monospace", fontSize: 9, color: '#555' }}>{messages.length}</span>
+        </div>
+        <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
+          {messages.length === 0 && (
+            <div style={{ padding: '16px 14px', textAlign: 'center' }}>
+              <span style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), sans-serif", fontSize: 11, color: '#333' }}>No messages yet</span>
+            </div>
+          )}
+          {messages.map((msg) => (
+            <div key={msg.id} style={{ padding: '2px 14px' }}>
+              <span style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), sans-serif", fontSize: 11, fontWeight: 600, color: ROLE_COLORS[msg.sender_role] ?? '#FFF' }}>{msg.sender_name}</span>
+              <span style={{ fontFamily: "var(--font-jetbrains, 'JetBrains Mono'), monospace", fontSize: 8, color: '#555', marginLeft: 4 }}>{relativeTime(msg.timestamp)}</span>
+              <div style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), sans-serif", fontSize: 12, color: '#CCC', lineHeight: 1.3, wordBreak: 'break-word' }}>{msg.text}</div>
+            </div>
+          ))}
+          <div ref={bottomRef} />
+        </div>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', padding: '4px 8px', borderTop: '1px solid #1A1A1A', gap: 4, flexShrink: 0 }}>
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Say something..."
+            maxLength={200}
+            style={{ flex: 1, fontFamily: "var(--font-dm-sans, 'DM Sans'), sans-serif", fontSize: 12, color: '#FFF', background: '#111', border: '1px solid #222', padding: '6px 8px', outline: 'none', minHeight: 32 }}
+          />
+          <button type="submit" disabled={!input.trim() || sending} style={{ fontFamily: "var(--font-bebas, 'Bebas Neue'), sans-serif", fontSize: 11, color: input.trim() ? '#F5A0D0' : '#333', background: 'none', border: '1px solid #222', padding: '4px 10px', cursor: input.trim() ? 'pointer' : 'default', minHeight: 32 }}>SEND</button>
+        </form>
+      </div>
+    );
+  }
 
   // ─── Collapsed: floating toggle button ───
   if (collapsed) {

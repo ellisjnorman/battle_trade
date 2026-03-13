@@ -7,22 +7,26 @@
 // Import from here — never hardcode weapon arrays elsewhere.
 // ---------------------------------------------------------------------------
 
+// unlockRank: which standing you must reach to unlock (e.g. 10 = available from start in lobbies ≤10 players, 3 = only top 3)
+// Lower unlockRank = harder to unlock. 0 = always available.
 export const ATTACKS = [
-  { id: 'blackout',      name: 'BLACKOUT',      icon: '🔒', cost: 200, duration: 90,  desc: 'Exchange outage — trades frozen 90s',       kind: 'attack' as const },
-  { id: 'fake_news',     name: 'HEADLINE',      icon: '📰', cost: 150, duration: 8,   desc: 'Breaking news event shakes the market',     kind: 'attack' as const },
-  { id: 'leverage_cap',  name: 'LEVERAGE CAP',  icon: '💸', cost: 300, duration: 0,   desc: 'Margin call — 10% balance liquidated',      kind: 'attack' as const },
-  { id: 'reveal',        name: 'REVEAL',        icon: '🎯', cost: 100, duration: 120, desc: 'SEC filing exposes all positions',           kind: 'attack' as const },
-  { id: 'trading_halt',  name: 'TRADING HALT',  icon: '🔀', cost: 250, duration: 60,  desc: 'Regulatory halt — locked to one asset',      kind: 'attack' as const },
-  { id: 'glitch',        name: 'GLITCH',        icon: '🌀', cost: 50,  duration: 10,  desc: 'Flash crash — screen interference 10s',      kind: 'attack' as const },
-  { id: 'forced_trade',  name: 'FORCE',         icon: '⚡', cost: 500, duration: 0,   desc: 'Auto-liquidation triggers a random trade',   kind: 'attack' as const },
+  { id: 'glitch',        name: 'GLITCH',        icon: '🌀', cost: 50,  duration: 10,  desc: 'Flash crash — screen interference 10s',      kind: 'attack' as const, unlockRank: 0 },
+  { id: 'reveal',        name: 'REVEAL',        icon: '🎯', cost: 100, duration: 120, desc: 'SEC filing exposes all positions',           kind: 'attack' as const, unlockRank: 0 },
+  { id: 'fake_news',     name: 'HEADLINE',      icon: '📰', cost: 150, duration: 8,   desc: 'Breaking news event shakes the market',     kind: 'attack' as const, unlockRank: 5 },
+  { id: 'blackout',      name: 'BLACKOUT',      icon: '🔒', cost: 200, duration: 90,  desc: 'Exchange outage — trades frozen 90s',       kind: 'attack' as const, unlockRank: 4 },
+  { id: 'trading_halt',  name: 'TRADING HALT',  icon: '🔀', cost: 250, duration: 60,  desc: 'Regulatory halt — locked to one asset',     kind: 'attack' as const, unlockRank: 3 },
+  { id: 'leverage_cap',  name: 'LEVERAGE CAP',  icon: '💸', cost: 300, duration: 0,   desc: 'Margin call — 10% balance liquidated',      kind: 'attack' as const, unlockRank: 3 },
+  { id: 'forced_trade',  name: 'FORCE',         icon: '⚡', cost: 500, duration: 0,   desc: 'Auto-liquidation triggers a random trade',  kind: 'attack' as const, unlockRank: 2 },
 ] as const;
 
 export const DEFENSES = [
-  { id: 'hedge',       name: 'HEDGE',      icon: '🛡', cost: 150, duration: 0,   desc: 'Insurance — blocks next market event',  kind: 'defense' as const },
-  { id: 'stop_loss',   name: 'STOP-LOSS',  icon: '🔄', cost: 200, duration: 0,   desc: 'Redirect the event to sender',          kind: 'defense' as const },
-  { id: 'dark_pool',   name: 'DARK POOL',  icon: '👻', cost: 300, duration: 120, desc: 'Go off-exchange — positions hidden 2m',  kind: 'defense' as const },
-  { id: 'speed_boost', name: 'BOOST',      icon: '⏩', cost: 100, duration: 60,  desc: 'Algo boost — 2x execution speed 60s',    kind: 'defense' as const },
-  { id: 'resume',      name: 'RESUME',     icon: '🔥', cost: 125, duration: 0,   desc: 'Override — clear any active halt',       kind: 'defense' as const },
+  { id: 'speed_boost', name: 'BOOST',       icon: '⏩', cost: 100, duration: 60,  desc: 'Algo boost — 2x execution speed 60s',    kind: 'defense' as const, unlockRank: 0 },
+  { id: 'resume',      name: 'RESUME',      icon: '🔥', cost: 125, duration: 0,   desc: 'Override — clear any active halt',       kind: 'defense' as const, unlockRank: 0 },
+  { id: 'hedge',       name: 'HEDGE',       icon: '🛡', cost: 150, duration: 0,   desc: 'Insurance — blocks next market event',   kind: 'defense' as const, unlockRank: 5 },
+  { id: 'stop_loss',   name: 'STOP-LOSS',   icon: '🔄', cost: 200, duration: 0,   desc: 'Redirect the event to sender',          kind: 'defense' as const, unlockRank: 4 },
+  { id: 'dark_pool',   name: 'DARK POOL',   icon: '👻', cost: 300, duration: 120, desc: 'Go off-exchange — positions hidden 2m',  kind: 'defense' as const, unlockRank: 3 },
+  { id: 'insider',     name: 'INSIDER',     icon: '🕵', cost: 175, duration: 90,  desc: 'Intel leak — see all rival positions',   kind: 'defense' as const, unlockRank: 3 },
+  { id: 'firewall',    name: 'FIREWALL',    icon: '🧱', cost: 250, duration: 120, desc: 'Block all events for 2 minutes',         kind: 'defense' as const, unlockRank: 2 },
 ] as const;
 
 export const ALL_WEAPONS = [...ATTACKS, ...DEFENSES] as const;

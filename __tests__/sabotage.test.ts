@@ -78,13 +78,15 @@ describe('sabotage definitions', () => {
 // ---------------------------------------------------------------------------
 
 describe('defense definitions', () => {
-  test('all 5 defense types are defined', () => {
-    expect(DEFENSE_TYPES).toHaveLength(5);
+  test('all 7 defense types are defined', () => {
+    expect(DEFENSE_TYPES).toHaveLength(7);
     expect(DEFENSE_TYPES).toContain('hedge');
     expect(DEFENSE_TYPES).toContain('stop_loss');
     expect(DEFENSE_TYPES).toContain('dark_pool');
     expect(DEFENSE_TYPES).toContain('speed_boost');
     expect(DEFENSE_TYPES).toContain('resume');
+    expect(DEFENSE_TYPES).toContain('insider');
+    expect(DEFENSE_TYPES).toContain('firewall');
   });
 
   test('all defense types have positive cost', () => {
