@@ -73,7 +73,7 @@ function timeAgo(date: string): string {
 // ─── Component ──────────────────────────────────────────────
 export default function DuelPage() {
   const router = useRouter()
-  const { authenticated, user, ready } = usePrivy()
+  const { authenticated, user, ready, getAccessToken } = usePrivy()
 
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
@@ -110,7 +110,7 @@ export default function DuelPage() {
     let cancelled = false
     ;(async () => {
       try {
-        const p = await getOrCreateProfile(user)
+        const p = await getOrCreateProfile(user, getAccessToken)
         if (!cancelled && p) {
           const raw = p as any
           setProfile({

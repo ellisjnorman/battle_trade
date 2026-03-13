@@ -75,7 +75,9 @@ const rules: RateRule[] = [
   { pattern: /^\/api\/lobby\/[^/]+\/spectate-join/, method: 'POST', limit: 10 },
   { pattern: /^\/api\/lobby\/[^/]+\/predictions/, method: 'POST', limit: 30 },
 
-  // Profile mutations
+  // Auth + Profile mutations
+  { pattern: /^\/api\/auth\/profile$/, method: 'POST', limit: 10 },
+  { pattern: /^\/api\/profile\/[^/]+$/, method: 'PATCH', limit: 10 },
   { pattern: /^\/api\/profile\/[^/]+\/follow/, method: 'POST', limit: 20 },
   { pattern: /^\/api\/strategies/, method: 'POST', limit: 10 },
   { pattern: /^\/api\/strategies\/[^/]+\/vote/, method: 'POST', limit: 20 },

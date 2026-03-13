@@ -11,23 +11,30 @@ function LoginInner() {
   const searchParams = useSearchParams()
   const rawRedirect = searchParams.get('redirect') ?? '/dashboard'
   const redirect = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : '/dashboard'
-  const { login, authenticated, user, ready } = usePrivy()
+  const { login, authenticated, user, ready, getAccessToken } = usePrivy()
 
   useEffect(() => {
     if (!ready) return
     if (authenticated && user) {
-      getOrCreateProfile(user).then(profile => {
+      getOrCreateProfile(user, getAccessToken).then(profile => {
         if (profile) {
           localStorage.setItem('bt_profile_id', profile.id)
           console.log('[auth] profile ready:', profile.id, profile.display_name)
+
+          // If no handle set, they haven't completed onboarding
+          if (!profile.handle) {
+            router.replace('/onboarding')
+            return
+          }
         } else {
-          console.warn('[auth] getOrCreateProfile returned null — profile may not be saved')
+          console.warn('[auth] getOrCreateProfile returned null')
+          router.replace('/onboarding')
+          return
         }
         router.replace(redirect)
       }).catch(err => {
         console.error('[auth] getOrCreateProfile failed:', err)
-        // Still redirect — user is authenticated, just no profile yet
-        router.replace(redirect)
+        router.replace('/onboarding')
       })
     }
   }, [ready, authenticated, user, router, redirect])

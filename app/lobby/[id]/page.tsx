@@ -19,7 +19,7 @@ import { font, c } from '@/app/design'
 export default function LobbyAutoJoin() {
   const { id: lobbyId } = useParams<{ id: string }>()
   const router = useRouter()
-  const { authenticated, user, ready } = usePrivy()
+  const { authenticated, user, ready, getAccessToken } = usePrivy()
   useAuthPersist() // Keep localStorage profile_id in sync with Privy session
   const [status, setStatus] = useState('Loading...')
   const [error, setError] = useState<string | null>(null)
@@ -34,7 +34,7 @@ export default function LobbyAutoJoin() {
     if (!profileId) {
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          const p = await getOrCreateProfile(user)
+          const p = await getOrCreateProfile(user, getAccessToken)
           if (p) { profileId = p.id; localStorage.setItem('bt_profile_id', p.id); break }
         } catch (err) {
           console.error('Profile creation attempt failed:', err)

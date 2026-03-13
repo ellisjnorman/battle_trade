@@ -96,7 +96,7 @@ const PLACEHOLDER_TRADERS = [
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { authenticated, user, ready, logout } = usePrivy()
+  const { authenticated, user, ready, logout, getAccessToken } = usePrivy()
   useAuthPersist() // Keep localStorage profile_id in sync with Privy session
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [lobbies, setLobbies] = useState<Lobby[]>([])
@@ -156,11 +156,25 @@ export default function DashboardPage() {
     return () => clearInterval(t)
   }, [liveEvents.length])
 
-  // Auth check
+  // Auth check + onboarding guard
   useEffect(() => {
     if (!ready) return
     if (!authenticated || !user) { router.push('/'); return }
-    setAuthReady(true)
+
+    // Check if onboarding is complete
+    const pid = localStorage.getItem('bt_profile_id')
+    if (pid) {
+      fetch(`/api/profile/${pid}`).then(r => r.ok ? r.json() : null).then(data => {
+        if (data?.profile && !data.profile.handle) {
+          router.replace('/onboarding')
+          return
+        }
+        setAuthReady(true)
+      }).catch(() => setAuthReady(true))
+    } else {
+      // No profile at all — send to onboarding
+      router.replace('/onboarding')
+    }
   }, [ready, authenticated, user, router])
 
   // Data loading
@@ -173,7 +187,7 @@ export default function DashboardPage() {
       let pid = localStorage.getItem('bt_profile_id')
       if (!pid) {
         try {
-          const p = await getOrCreateProfile(user)
+          const p = await getOrCreateProfile(user, getAccessToken)
           if (p) { pid = p.id; localStorage.setItem('bt_profile_id', p.id) }
         } catch {}
       }
@@ -354,9 +368,10 @@ export default function DashboardPage() {
           padding:20px;cursor:pointer;transition:all .18s cubic-bezier(.25,.1,.25,1);
           background:${c.surface};overflow:hidden;text-align:left;width:100%;
         }
-        .mode-btn:hover{border-color:${c.borderHover};transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.4)}
+        .mode-btn:hover{border-color:${c.borderHover};transform:translateY(-1px);box-shadow:0 4px 20px rgba(0,0,0,.3)}
         .mode-btn:active{transform:scale(.98)}
         .mode-btn.loading{opacity:.6;pointer-events:none}
+        .loading{opacity:.6;pointer-events:none}
         .lobby-row{
           display:flex;align-items:center;gap:12px;padding:12px 16px;
           cursor:pointer;transition:background .1s;border-radius:${radius.sm}px;
@@ -375,12 +390,13 @@ export default function DashboardPage() {
         }
         .pmenu button:hover,.pmenu a:hover{background:${c.hover};color:${c.text}}
         .sidebar-card{
-          background:${c.surface};border:1px solid ${c.border};border-radius:${radius.lg}px;
-          padding:16px;margin-bottom:12px;
+          padding:0 0 16px;margin-bottom:4px;
+          border-bottom:1px solid ${c.border};
         }
+        .sidebar-card:last-child{border-bottom:none}
         .sidebar-label{
-          font-family:${font.sans};font-size:10px;font-weight:700;color:${c.text3};
-          letter-spacing:.06em;margin-bottom:10px;
+          font-family:${font.sans};font-size:10px;font-weight:700;color:${c.text4};
+          letter-spacing:.08em;margin-bottom:8px;
         }
         .credits-btn{
           display:flex;align-items:center;gap:6px;
@@ -736,30 +752,24 @@ export default function DashboardPage() {
             {/* ═══ MAIN COLUMN ═══ */}
             <div>
 
-              {/* LEADERBOARD — front and center */}
-              <div className="fu fu2" style={{
-                background: c.surface, border: `1px solid ${c.border}`, borderRadius: radius.lg,
-                padding: '16px', marginBottom: 16,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 700, color: c.text3, letterSpacing: '.06em' }}>GLOBAL RANKINGS</span>
-                    {profile && <span style={{ fontFamily: font.mono, fontSize: 10, color: c.pink, background: c.pinkDim, padding: '2px 6px', borderRadius: 3 }}>YOU</span>}
-                  </div>
+              {/* LEADERBOARD — borderless, clean */}
+              <div className="fu fu2" style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <span style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 700, color: c.text4, letterSpacing: '.08em' }}>GLOBAL RANKINGS</span>
                   <Link href="/leaderboard" style={{ fontFamily: font.sans, fontSize: 11, color: c.pink, textDecoration: 'none' }}>View All</Link>
                 </div>
 
                 {leaderboard.length > 0 ? (
-                  <div style={{ border: `1px solid ${c.border}`, borderRadius: radius.sm, overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     {leaderboard.map((t, i) => {
                       const tTier = btrTier(t.tr_score)
                       const isYou = profile?.id === t.id
                       return (
                         <Link key={t.id} href={`/profile/${t.id}`} style={{
-                          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
+                          display: 'flex', alignItems: 'center', gap: 12, padding: '8px 10px',
                           textDecoration: 'none', color: 'inherit', transition: 'background .1s',
-                          background: isYou ? `${c.pink}08` : 'transparent',
-                          borderBottom: i < leaderboard.length - 1 ? `1px solid ${c.border}` : 'none',
+                          background: isYou ? `${c.pink}06` : 'transparent',
+                          borderRadius: radius.sm,
                         }} className="lobby-row">
                           <span style={{
                             fontFamily: font.mono, fontSize: 14, fontWeight: 700, width: 22, textAlign: 'center',
@@ -792,26 +802,35 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              {/* MODE SELECT — Practice / 1v1 / Host */}
-              <div className="fu fu3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
-                {[
-                  { id: 'practice', label: 'Practice', sub: 'vs AI bots', accent: c.green, onClick: () => setShowPracticeModal(true) },
-                  { id: 'duel', label: '1v1 Duel', sub: 'head to head', accent: '#FF6B35', onClick: () => play('duel') },
-                  { id: 'create', label: 'Host Battle', sub: 'invite friends', accent: c.blue, onClick: () => play('create') },
-                ].map(m => (
-                  <button
-                    key={m.id}
-                    className={`mode-btn ${playLoading === m.id ? 'loading' : ''}`}
-                    onClick={m.onClick}
-                    style={{ padding: '14px 12px', textAlign: 'center' }}
-                  >
-                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${m.accent}80, transparent)` }} />
-                    <div style={{ fontFamily: font.sans, fontSize: 14, fontWeight: 700, color: c.text }}>{m.label}</div>
-                    <div style={{ fontFamily: font.sans, fontSize: 11, color: c.text4 }}>
-                      {playLoading === m.id ? 'Loading...' : m.sub}
-                    </div>
-                  </button>
-                ))}
+              {/* MODE SELECT — inline text links, not card grid */}
+              <div className="fu fu3" style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
+                <button
+                  className={playLoading === 'practice' ? 'loading' : ''}
+                  onClick={() => setShowPracticeModal(true)}
+                  style={{
+                    fontFamily: font.sans, fontSize: 13, fontWeight: 600, color: c.green,
+                    background: `${c.green}0A`, border: `1px solid ${c.green}20`,
+                    padding: '8px 16px', borderRadius: 20, cursor: 'pointer', transition: 'all .15s',
+                  }}
+                >Practice</button>
+                <button
+                  className={playLoading === 'duel' ? 'loading' : ''}
+                  onClick={() => play('duel')}
+                  style={{
+                    fontFamily: font.sans, fontSize: 13, fontWeight: 600, color: '#FF6B35',
+                    background: 'rgba(255,107,53,.06)', border: '1px solid rgba(255,107,53,.18)',
+                    padding: '8px 16px', borderRadius: 20, cursor: 'pointer', transition: 'all .15s',
+                  }}
+                >1v1 Duel</button>
+                <button
+                  className={playLoading === 'create' ? 'loading' : ''}
+                  onClick={() => play('create')}
+                  style={{
+                    fontFamily: font.sans, fontSize: 13, fontWeight: 600, color: c.blue,
+                    background: `${c.blue}0A`, border: `1px solid ${c.blue}20`,
+                    padding: '8px 16px', borderRadius: 20, cursor: 'pointer', transition: 'all .15s',
+                  }}
+                >Host Battle</button>
               </div>
 
               {/* ── TERMINAL-STYLE LOBBY FEED ── */}
@@ -938,7 +957,6 @@ export default function DashboardPage() {
               {lobbies.length === 0 && !profileLoading && (
                 <div className="fu fu3" style={{
                   textAlign: 'center', padding: '40px 20px',
-                  border: `1px solid ${c.border}`, borderRadius: radius.lg, background: c.surface,
                 }}>
                   <div style={{ fontFamily: font.display, fontSize: 28, color: c.text, marginBottom: 4 }}>
                     Your rank starts at zero
@@ -962,8 +980,8 @@ export default function DashboardPage() {
               {/* ═══ MY BATTLES — Admin management for created lobbies ═══ */}
               {myLobbies.length > 0 && (
                 <div className="fu fu4" style={{
-                  border: `1px solid ${c.border}`, borderRadius: radius.lg, background: c.surface,
-                  overflow: 'hidden', marginTop: 16,
+                  borderTop: `1px solid ${c.border}`, marginTop: 16, paddingTop: 4,
+                  overflow: 'hidden',
                 }}>
                   <button onClick={() => setShowMyBattles(!showMyBattles)} style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%',
@@ -1083,12 +1101,12 @@ export default function DashboardPage() {
             </div>
 
             {/* ═══ SIDEBAR ═══ */}
-            <div className="sidebar">
+            <div className="sidebar" style={{ paddingTop: 4 }}>
 
               {/* BATTLE LOG — recent battles as rank progression */}
               {pastBattles.length > 0 && (
                 <div className="sidebar-card fu fu1">
-                  <div className="sidebar-label">BATTLE LOG</div>
+                  <div className="sidebar-label">RECENT</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
                     {pastBattles.slice(0, 6).map((b, i) => {
                       const startBal = b.starting_balance ?? 10000
@@ -1135,13 +1153,12 @@ export default function DashboardPage() {
 
               {/* PAYOUTS */}
               {totalPayouts > 0 && (
-                <div className="sidebar-card fu fu2" style={{ background: `linear-gradient(135deg, ${c.surface}, rgba(0,220,130,.03))` }}>
-                  <div className="sidebar-label">TOTAL EARNINGS</div>
-                  <div style={{ fontFamily: font.mono, fontSize: 28, fontWeight: 700, color: c.green, lineHeight: 1 }}>
+                <div className="sidebar-card fu fu2">
+                  <div style={{ fontFamily: font.mono, fontSize: 32, fontWeight: 700, color: c.green, lineHeight: 1 }}>
                     +${totalPayouts >= 1000 ? `${(totalPayouts / 1000).toFixed(1)}K` : totalPayouts.toLocaleString()}
                   </div>
-                  <div style={{ fontFamily: font.sans, fontSize: 10, color: c.text4, marginTop: 4 }}>
-                    from {pastBattles.filter(b => b.final_balance != null && b.starting_balance != null && b.final_balance > b.starting_balance).length} profitable battles
+                  <div style={{ fontFamily: font.sans, fontSize: 11, color: c.text4, marginTop: 4 }}>
+                    earned from {pastBattles.filter(b => b.final_balance != null && b.starting_balance != null && b.final_balance > b.starting_balance).length} wins
                   </div>
                 </div>
               )}
@@ -1151,7 +1168,7 @@ export default function DashboardPage() {
                 <div className="sidebar-card fu fu2">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                     <div className="sidebar-label" style={{ marginBottom: 0 }}>BADGES</div>
-                    <Link href="/profile" style={{ fontFamily: font.sans, fontSize: 10, color: c.pink, textDecoration: 'none' }}>View all</Link>
+                    <Link href="/profile" style={{ fontFamily: font.sans, fontSize: 10, color: c.text4, textDecoration: 'none' }}>All</Link>
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {profile.badges.slice(0, 8).map(b => (
@@ -1168,39 +1185,31 @@ export default function DashboardPage() {
 
               {/* CREDITS */}
               <div className="sidebar-card fu fu2">
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div className="sidebar-label" style={{ marginBottom: 0 }}>CREDITS</div>
-                  <span style={{ fontFamily: font.mono, fontSize: 16, fontWeight: 700, color: c.pink }}>{profile?.credits ?? 0}</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <span style={{ fontFamily: font.mono, fontSize: 20, fontWeight: 700, color: c.pink }}>{profile?.credits ?? 0}</span>
+                    <span style={{ fontFamily: font.sans, fontSize: 11, color: c.text4, marginLeft: 6 }}>credits</span>
+                  </div>
+                  <button onClick={() => setShowCreditsModal(true)} style={{
+                    fontFamily: font.sans, fontSize: 11, fontWeight: 600,
+                    color: c.pink, background: 'none', border: `1px solid ${c.pinkBorder}`,
+                    padding: '5px 14px', borderRadius: 16, cursor: 'pointer', transition: 'all .15s',
+                  }}>Buy</button>
                 </div>
-                <button onClick={() => setShowCreditsModal(true)} style={{
-                  width: '100%', fontFamily: font.sans, fontSize: 12, fontWeight: 600,
-                  color: c.bg, background: c.pink, border: 'none', padding: '8px 0',
-                  borderRadius: radius.sm, cursor: 'pointer', transition: 'all .15s',
-                }}>Buy Credits</button>
               </div>
 
-              {/* QUICK LINKS */}
-              <div className="sidebar-card fu fu3">
-                <div className="sidebar-label">EXPLORE</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {[
-                    { href: '/leaderboard', label: 'Global Rankings', desc: 'See where you stand' },
-                    { href: '/markets', label: 'Prediction Markets', desc: 'Bet on outcomes' },
-                    { href: '/profile', label: 'Your Profile', desc: 'Stats, badges, history' },
-                  ].map(link => (
-                    <Link key={link.href} href={link.href} style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '10px 12px', borderRadius: radius.sm, textDecoration: 'none',
-                      color: 'inherit', transition: 'background .1s',
-                    }} className="lobby-row">
-                      <div>
-                        <div style={{ fontFamily: font.sans, fontSize: 13, fontWeight: 600, color: c.text }}>{link.label}</div>
-                        <div style={{ fontFamily: font.sans, fontSize: 10, color: c.text4 }}>{link.desc}</div>
-                      </div>
-                      <span style={{ fontFamily: font.sans, fontSize: 16, color: c.text4 }}>&rsaquo;</span>
-                    </Link>
-                  ))}
-                </div>
+              {/* QUICK LINKS — simple text */}
+              <div className="fu fu3" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', paddingTop: 4 }}>
+                {[
+                  { href: '/leaderboard', label: 'Rankings' },
+                  { href: '/markets', label: 'Markets' },
+                  { href: '/profile', label: 'Profile' },
+                ].map(link => (
+                  <Link key={link.href} href={link.href} style={{
+                    fontFamily: font.sans, fontSize: 12, fontWeight: 500, color: c.text3,
+                    textDecoration: 'none', transition: 'color .15s',
+                  }} className="nav-a">{link.label}</Link>
+                ))}
               </div>
             </div>
           </div>

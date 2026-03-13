@@ -15,7 +15,7 @@ import { getOrCreateProfile } from '@/lib/auth';
  * Returns { ready, authenticated, profileId, user, logout }
  */
 export function useAuthPersist() {
-  const { ready, authenticated, user, logout } = usePrivy();
+  const { ready, authenticated, user, logout, getAccessToken } = usePrivy();
   const synced = useRef(false);
 
   useEffect(() => {
@@ -26,7 +26,7 @@ export function useAuthPersist() {
       // Privy session is valid — ensure profile_id is cached
       const cached = localStorage.getItem('bt_profile_id');
       if (!cached) {
-        getOrCreateProfile(user)
+        getOrCreateProfile(user, getAccessToken)
           .then(p => { if (p) localStorage.setItem('bt_profile_id', p.id); })
           .catch(() => {});
       }

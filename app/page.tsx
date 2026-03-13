@@ -78,7 +78,7 @@ function Reveal({ children, delay = 0, style, className }: { children: React.Rea
 
 export default function LandingPage() {
   const router = useRouter()
-  const { login, authenticated, user, ready } = usePrivy()
+  const { login, authenticated, user, ready, getAccessToken } = usePrivy()
   const [battles, setBattles] = useState<LiveBattle[]>([])
   const [loaded, setLoaded] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -92,7 +92,7 @@ export default function LandingPage() {
   useEffect(() => {
     if (!ready) return
     if (authenticated && user) {
-      getOrCreateProfile(user).then(profile => {
+      getOrCreateProfile(user, getAccessToken).then(profile => {
         if (profile) localStorage.setItem('bt_profile_id', profile.id)
         router.replace('/dashboard')
       }).catch(err => {

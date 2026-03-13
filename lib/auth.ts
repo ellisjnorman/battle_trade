@@ -4,24 +4,6 @@
  * This module provides profile management on top of Privy sessions.
  */
 
-import { createBrowserClient } from '@supabase/ssr';
-import type { SupabaseClient } from '@supabase/supabase-js';
-
-// ---------------------------------------------------------------------------
-// Supabase client (for profile management only — auth is via Privy)
-// ---------------------------------------------------------------------------
-
-let _client: SupabaseClient | null = null;
-
-function getClient(): SupabaseClient {
-  if (_client) return _client;
-  _client = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  );
-  return _client;
-}
-
 // ---------------------------------------------------------------------------
 // Profile helpers
 // ---------------------------------------------------------------------------
@@ -29,36 +11,27 @@ function getClient(): SupabaseClient {
 export interface BattleProfile {
   id: string;
   display_name: string;
+  handle: string | null;
   email: string | null;
   wallet_address: string | null;
   badges: unknown[];
   elo_rating: number;
   total_wins: number;
   total_lobbies_played: number;
+  credits: number;
 }
 
 /**
  * Get or create a profile for a Privy-authenticated user.
- * Called after Privy login with the Privy user object.
+ * Calls server-side API route (uses service_role, bypasses RLS).
+ * @param privyUser - Privy user object from usePrivy()
+ * @param getAccessToken - Function from usePrivy() to get JWT for auth
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getOrCreateProfile(privyUser: any): Promise<BattleProfile | null> {
-  const sb = getClient();
-
-  // Try to find existing profile by Privy ID
-  const { data: existing, error: lookupErr } = await sb
-    .from('profiles')
-    .select('*')
-    .eq('auth_user_id', privyUser.id)
-    .single();
-
-  if (existing) return existing;
-  if (lookupErr && lookupErr.code !== 'PGRST116') {
-    // PGRST116 = "no rows returned" which is expected for new users
-    console.error('[auth] profile lookup error:', lookupErr);
-  }
-
-  // Build display name from available data
+export async function getOrCreateProfile(
+  privyUser: any,
+  getAccessToken?: () => Promise<string | null>,
+): Promise<BattleProfile | null> {
   const displayName =
     privyUser.google?.name ??
     privyUser.email?.address?.split('@')[0] ??
@@ -73,45 +46,42 @@ export async function getOrCreateProfile(privyUser: any): Promise<BattleProfile 
     privyUser.apple?.email ??
     null;
 
-  // Try upsert to handle race conditions (multiple logins before profile exists)
-  const { data: newProfile, error: insertErr } = await sb
-    .from('profiles')
-    .upsert({
-      auth_user_id: privyUser.id,
-      display_name: displayName,
-      email,
-      wallet_address: privyUser.wallet?.address ?? null,
-      wallet_type: privyUser.wallet ? 'evm' : null,
-    }, { onConflict: 'auth_user_id' })
-    .select('*')
-    .single();
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
-  if (insertErr) {
-    console.error('[auth] profile upsert error:', insertErr);
-    // Last resort: try to find the profile again (it may have been created by another tab)
-    const { data: retry } = await sb
-      .from('profiles')
-      .select('*')
-      .eq('auth_user_id', privyUser.id)
-      .single();
-    if (retry) return retry;
+    // Get Privy JWT for authenticated request
+    if (getAccessToken) {
+      try {
+        const token = await getAccessToken();
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+      } catch {
+        console.warn('[auth] could not get access token');
+      }
+    }
+
+    const res = await fetch('/api/auth/profile', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        display_name: displayName,
+        email,
+        wallet_address: privyUser.wallet?.address ?? null,
+        wallet_type: privyUser.wallet ? 'evm' : null,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('[auth] profile API error:', res.status, errText);
+      return null;
+    }
+
+    const data = await res.json();
+    return data.profile ?? null;
+  } catch (err) {
+    console.error('[auth] getOrCreateProfile failed:', err);
     return null;
   }
-
-  return newProfile;
-}
-
-/**
- * Get profile by Privy user ID
- */
-export async function getProfileByPrivyId(privyUserId: string): Promise<BattleProfile | null> {
-  const sb = getClient();
-  const { data } = await sb
-    .from('profiles')
-    .select('*')
-    .eq('auth_user_id', privyUserId)
-    .single();
-  return data;
 }
 
 /**
@@ -121,12 +91,20 @@ export async function updateProfileWallet(
   profileId: string,
   walletAddress: string,
   walletType: 'evm' | 'solana' = 'evm',
+  getAccessToken?: () => Promise<string | null>,
 ): Promise<void> {
-  const sb = getClient();
-  await sb
-    .from('profiles')
-    .update({ wallet_address: walletAddress, wallet_type: walletType })
-    .eq('id', profileId);
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (getAccessToken) {
+    try {
+      const token = await getAccessToken();
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+    } catch {}
+  }
+  await fetch(`/api/profile/${profileId}`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ wallet_address: walletAddress, wallet_type: walletType }),
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -156,28 +134,5 @@ export const BADGE_DEFS: Record<string, { name: string; icon: string; descriptio
 export async function awardBadge(profileId: string, badgeId: string): Promise<void> {
   const def = BADGE_DEFS[badgeId];
   if (!def) return;
-
-  const sb = getClient();
-  const { data: profile } = await sb
-    .from('profiles')
-    .select('badges')
-    .eq('id', profileId)
-    .single();
-
-  if (!profile) return;
-
-  const badges = (profile.badges as Badge[]) ?? [];
-  if (badges.some(b => b.id === badgeId)) return;
-
-  badges.push({
-    id: badgeId,
-    name: def.name,
-    icon: def.icon,
-    earned_at: new Date().toISOString(),
-  });
-
-  await sb
-    .from('profiles')
-    .update({ badges })
-    .eq('id', profileId);
+  console.warn('[auth] awardBadge called from client — should be server-side');
 }

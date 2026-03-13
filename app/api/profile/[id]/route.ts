@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { getServerSupabase } from '@/lib/supabase-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,10 +12,10 @@ export async function GET(
   const viewerId = request.nextUrl.searchParams.get('viewer_id');
 
   try {
-    // 1. Get full profile — this is the only required query
+    // 1. Get profile — exclude sensitive fields (email, auth_user_id, wallet_address)
     const { data: profile, error: profileErr } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, display_name, handle, avatar_url, bio, location, credits, elo_rating, total_wins, total_lobbies_played, win_rate, best_return, global_rank, rank_tier, tr_score, badges, onboarding_complete, created_at')
       .eq('id', id)
       .single();
 
@@ -97,6 +98,25 @@ export async function PATCH(
 ) {
   const { id } = await params;
 
+  // Auth: verify caller owns this profile
+  const privyUserId = request.headers.get('x-privy-user-id');
+  if (!privyUserId) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  }
+
+  const sb = getServerSupabase();
+
+  // Verify the authenticated user owns this profile
+  const { data: ownerCheck } = await sb
+    .from('profiles')
+    .select('id, auth_user_id, onboarding_complete')
+    .eq('id', id)
+    .single();
+
+  if (!ownerCheck || ownerCheck.auth_user_id !== privyUserId) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   try {
     const body = await request.json();
     const updates: Record<string, unknown> = {};
@@ -107,26 +127,50 @@ export async function PATCH(
     if (body.handle !== undefined) {
       updates.handle = body.handle ? String(body.handle).replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20) : null;
     }
-    if (body.avatar_url !== undefined) updates.avatar_url = body.avatar_url || null;
+    // Validate avatar_url: only allow preset IDs or data: image URLs (max 2MB)
+    if (body.avatar_url !== undefined) {
+      const av = body.avatar_url;
+      if (!av) {
+        updates.avatar_url = null;
+      } else if (typeof av === 'string' && av.length <= 20 && /^[a-z]+$/.test(av)) {
+        // Preset avatar ID (bull, bear, shark, etc.)
+        updates.avatar_url = av;
+      } else if (typeof av === 'string' && av.startsWith('data:image/') && av.length <= 3_000_000) {
+        updates.avatar_url = av;
+      } else {
+        // Reject unknown avatar formats
+        return NextResponse.json({ error: 'Invalid avatar format' }, { status: 400 });
+      }
+    }
     if (body.bio !== undefined) updates.bio = body.bio ? String(body.bio).slice(0, 160) : null;
     if (body.location !== undefined) updates.location = body.location ? String(body.location).slice(0, 40) : null;
 
-    if (Object.keys(updates).length === 0) {
+    // Onboarding completion bonus: +1000 credits (one-time only)
+    const grantBonus = body.onboarding_complete === true && !ownerCheck.onboarding_complete;
+
+    if (Object.keys(updates).length === 0 && !grantBonus) {
       return NextResponse.json({ error: 'No valid fields' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    if (grantBonus) {
+      updates.onboarding_complete = true;
+      // Atomic credit increment: read current, add 1000
+      const { data: current } = await sb.from('profiles').select('credits').eq('id', id).single();
+      updates.credits = (current?.credits ?? 0) + 1000;
+    }
+
+    const { data, error } = await sb
       .from('profiles')
       .update(updates)
       .eq('id', id)
-      .select('id, display_name, handle, avatar_url, bio, location')
+      .select('id, display_name, handle, avatar_url, bio, location, credits')
       .single();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ profile: data });
+    return NextResponse.json({ profile: data, bonus_credits: grantBonus ? 1000 : 0 });
   } catch (err) {
     console.error('PATCH /api/profile/[id] error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
