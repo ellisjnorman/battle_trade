@@ -1052,8 +1052,8 @@ export default function TradingTerminal() {
 
   // Defense panel — BLUE/CYAN theme to distinguish from attacks
   const defensePanel = (
-    <div style={{ padding: '10px 14px', borderBottom: '1px solid #1A1A1A' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+    <div style={{ padding: '8px 10px', borderBottom: '1px solid #1A1A1A' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 3, height: 12, background: '#00BFFF', display: 'block' }} />
           <span style={{ ...B, fontSize: 11, color: '#00BFFF' }}>DEFENSE</span>
@@ -1061,27 +1061,28 @@ export default function TradingTerminal() {
         <span style={{ ...M, fontSize: 10, color: '#00BFFF' }}>{credits.balance}CR</span>
       </div>
 
-      {/* Defense cooldown */}
       {defenseCooldown > 0 && (
-        <div style={{ marginBottom: 8, padding: '6px 8px', border: '1px solid rgba(0,191,255,0.3)', background: 'rgba(0,191,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ ...B, fontSize: 10, color: '#00BFFF' }}>RECHARGING</span>
-          <span style={{ ...M, fontSize: 12, color: '#00BFFF' }}>{Math.floor(defenseCooldown / 60)}:{(defenseCooldown % 60).toString().padStart(2, '0')}</span>
+        <div style={{ marginBottom: 6, padding: '4px 8px', border: '1px solid rgba(0,191,255,0.3)', background: 'rgba(0,191,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ ...B, fontSize: 9, color: '#00BFFF' }}>RECHARGING</span>
+          <span style={{ ...M, fontSize: 11, color: '#00BFFF' }}>{Math.floor(defenseCooldown / 60)}:{(defenseCooldown % 60).toString().padStart(2, '0')}</span>
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
         {DEFENSES.map(d => {
-          const locked = d.unlockRank > 0 && myRank > d.unlockRank;
+          const locked = d.unlockRank > 0 && (myRank === 0 || myRank > d.unlockRank);
           const canAfford = !locked && credits.balance >= d.cost;
           const ok = canAfford && defenseCooldown === 0;
           const isLoading = actionLoading === d.id;
           return (
             <button key={d.id} className="weapon-card" onClick={() => !locked && ok && !isLoading && activateDefense(d.id)} disabled={locked || !ok || isLoading}
-              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '8px 4px', minHeight: 56, background: locked ? '#080808' : isLoading ? 'rgba(0,191,255,0.1)' : '#0A0A0A', border: `1px solid ${locked ? '#111' : '#1A1A1A'}`, borderTop: `2px solid ${locked ? '#222' : canAfford ? '#00BFFF' : '#111'}`, opacity: locked ? 0.35 : canAfford ? 1 : 0.5, cursor: locked ? 'not-allowed' : ok ? 'pointer' : 'not-allowed', transition: 'all 150ms', gap: 3, textAlign: 'center', WebkitTapHighlightColor: 'transparent', position: 'relative', overflow: 'hidden' }}>
-              {locked && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', zIndex: 1 }}><span style={{ ...B, fontSize: 9, color: '#00BFFF' }}>TOP {d.unlockRank}</span></div>}
-              <span style={{ fontSize: 16, filter: locked ? 'grayscale(1)' : 'none' }}>{d.icon}</span>
-              <span style={{ ...B, fontSize: 10, color: locked ? '#333' : '#FFF', lineHeight: 1.1 }}>{isLoading ? '...' : d.name}</span>
-              <span style={{ ...M, fontSize: 9, color: locked ? '#222' : canAfford ? '#00BFFF' : '#333' }}>{d.cost}</span>
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 6px', minHeight: 32, background: locked ? '#080808' : isLoading ? 'rgba(0,191,255,0.1)' : '#0A0A0A', border: `1px solid ${locked ? '#111' : '#1A1A1A'}`, borderLeft: `3px solid ${locked ? '#222' : canAfford ? '#00BFFF' : '#111'}`, opacity: locked ? 0.35 : canAfford ? 1 : 0.5, cursor: locked ? 'not-allowed' : ok ? 'pointer' : 'not-allowed', transition: 'all 150ms', textAlign: 'left', WebkitTapHighlightColor: 'transparent', position: 'relative', overflow: 'hidden' }}>
+              {locked && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', zIndex: 1 }}><span style={{ ...B, fontSize: 8, color: '#00BFFF', display: 'flex', alignItems: 'center', gap: 3 }}>🔒 #{d.unlockRank}</span></div>}
+              <span style={{ fontSize: 13, filter: locked ? 'grayscale(1)' : 'none', flexShrink: 0, width: 18, textAlign: 'center' }}>{d.icon}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ ...B, fontSize: 9, color: locked ? '#333' : '#FFF', lineHeight: 1, display: 'block' }}>{isLoading ? '...' : d.name}</span>
+                <span style={{ ...M, fontSize: 8, color: locked ? '#222' : canAfford ? '#00BFFF' : '#333' }}>{d.cost}</span>
+              </div>
             </button>
           );
         })}
@@ -1091,8 +1092,8 @@ export default function TradingTerminal() {
 
   // Market Events panel
   const arsenalPanel = (
-    <div style={{ padding: '10px 14px', borderBottom: '1px solid #1A1A1A' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+    <div style={{ padding: '8px 10px', borderBottom: '1px solid #1A1A1A' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 3, height: 12, background: '#F5A0D0', display: 'block' }} />
           <span style={{ ...B, fontSize: 11, color: '#F5A0D0' }}>MARKET EVENTS</span>
@@ -1101,11 +1102,11 @@ export default function TradingTerminal() {
       </div>
 
       {/* Target indicator */}
-      <div style={{ marginBottom: 8, padding: '5px 8px', border: `1px solid ${selectedTarget ? '#F5A0D0' : '#1A1A1A'}`, background: selectedTarget ? 'rgba(245,160,208,0.05)' : '#0D0D0D', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ marginBottom: 6, padding: '4px 8px', border: `1px solid ${selectedTarget ? '#F5A0D0' : '#1A1A1A'}`, background: selectedTarget ? 'rgba(245,160,208,0.05)' : '#0D0D0D', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ ...S, fontSize: 9, color: '#999' }}>TARGET</span>
         {selectedTarget ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ ...B, fontSize: 12, color: '#F5A0D0' }}>{allTraders.find(t => t.id === selectedTarget)?.name ?? '???'}</span>
+            <span style={{ ...B, fontSize: 11, color: '#F5A0D0' }}>{allTraders.find(t => t.id === selectedTarget)?.name ?? '???'}</span>
             <button onClick={() => setSelectedTarget(null)} style={{ ...S, fontSize: 9, color: '#999', background: 'none', border: 'none', cursor: 'pointer' }}>x</button>
           </div>
         ) : (
@@ -1113,28 +1114,29 @@ export default function TradingTerminal() {
         )}
       </div>
 
-      {/* Cooldown indicator */}
       {cooldownRemaining > 0 && (
-        <div style={{ marginBottom: 8, padding: '6px 8px', border: '1px solid rgba(245,160,208,0.3)', background: 'rgba(245,160,208,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ ...B, fontSize: 10, color: '#F5A0D0' }}>RECHARGING</span>
-          <span style={{ ...M, fontSize: 12, color: '#F5A0D0' }}>{Math.floor(cooldownRemaining / 60)}:{(cooldownRemaining % 60).toString().padStart(2, '0')}</span>
+        <div style={{ marginBottom: 6, padding: '4px 8px', border: '1px solid rgba(245,160,208,0.3)', background: 'rgba(245,160,208,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ ...B, fontSize: 9, color: '#F5A0D0' }}>RECHARGING</span>
+          <span style={{ ...M, fontSize: 11, color: '#F5A0D0' }}>{Math.floor(cooldownRemaining / 60)}:{(cooldownRemaining % 60).toString().padStart(2, '0')}</span>
         </div>
       )}
 
       {/* Event grid — rank-locked like CoD/Fortnite */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
         {ATTACKS.map(a => {
-          const locked = a.unlockRank > 0 && myRank > a.unlockRank;
+          const locked = a.unlockRank > 0 && (myRank === 0 || myRank > a.unlockRank);
           const canAfford = !locked && credits.balance >= a.cost;
           const ok = canAfford && !!selectedTarget && cooldownRemaining === 0;
           const isLoading = actionLoading === a.id;
           return (
             <button key={a.id} className="weapon-card" onClick={() => !locked && selectedTarget && ok && !isLoading && launchAttack(a.id, selectedTarget)} disabled={locked || !ok || isLoading}
-              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '8px 4px', minHeight: 56, background: locked ? '#080808' : isLoading ? 'rgba(245,160,208,0.1)' : '#0A0A0A', border: `1px solid ${locked ? '#111' : '#1A1A1A'}`, borderTop: `2px solid ${locked ? '#222' : canAfford ? '#F5A0D0' : '#111'}`, opacity: locked ? 0.35 : canAfford ? 1 : 0.5, cursor: locked ? 'not-allowed' : ok ? 'pointer' : 'not-allowed', transition: 'all 150ms', gap: 3, textAlign: 'center', WebkitTapHighlightColor: 'transparent', position: 'relative', overflow: 'hidden' }}>
-              {locked && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', zIndex: 1 }}><span style={{ ...B, fontSize: 9, color: '#F5A0D0' }}>TOP {a.unlockRank}</span></div>}
-              <span style={{ fontSize: 16, filter: locked ? 'grayscale(1)' : 'none' }}>{a.icon}</span>
-              <span style={{ ...B, fontSize: 10, color: locked ? '#333' : '#FFF', lineHeight: 1.1 }}>{isLoading ? '...' : a.name}</span>
-              <span style={{ ...M, fontSize: 9, color: locked ? '#222' : canAfford ? '#F5A0D0' : '#333' }}>{a.cost}</span>
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 6px', minHeight: 32, background: locked ? '#080808' : isLoading ? 'rgba(245,160,208,0.1)' : '#0A0A0A', border: `1px solid ${locked ? '#111' : '#1A1A1A'}`, borderLeft: `3px solid ${locked ? '#222' : canAfford ? '#F5A0D0' : '#111'}`, opacity: locked ? 0.35 : canAfford ? 1 : 0.5, cursor: locked ? 'not-allowed' : ok ? 'pointer' : 'not-allowed', transition: 'all 150ms', textAlign: 'left', WebkitTapHighlightColor: 'transparent', position: 'relative', overflow: 'hidden' }}>
+              {locked && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', zIndex: 1 }}><span style={{ ...B, fontSize: 8, color: '#F5A0D0', display: 'flex', alignItems: 'center', gap: 3 }}>🔒 #{a.unlockRank}</span></div>}
+              <span style={{ fontSize: 13, filter: locked ? 'grayscale(1)' : 'none', flexShrink: 0, width: 18, textAlign: 'center' }}>{a.icon}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ ...B, fontSize: 9, color: locked ? '#333' : '#FFF', lineHeight: 1, display: 'block' }}>{isLoading ? '...' : a.name}</span>
+                <span style={{ ...M, fontSize: 8, color: locked ? '#222' : canAfford ? '#F5A0D0' : '#333' }}>{a.cost}</span>
+              </div>
             </button>
           );
         })}
