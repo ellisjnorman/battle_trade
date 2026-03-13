@@ -435,10 +435,17 @@ export default function DashboardPage() {
                 boxShadow: `0 0 30px ${tier.color}20`,
               }}>{profile?.display_name?.[0]?.toUpperCase() ?? '?'}</div>
 
-              {/* Name + Tier label */}
+              {/* Name + Level + Tier label */}
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontFamily: font.sans, fontSize: 20, fontWeight: 700, color: c.text, lineHeight: 1 }}>
-                  {profileLoading ? '...' : profile?.display_name ?? 'Trader'}
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <div style={{ fontFamily: font.sans, fontSize: 20, fontWeight: 700, color: c.text, lineHeight: 1 }}>
+                    {profileLoading ? '...' : profile?.display_name ?? 'Trader'}
+                  </div>
+                  <span style={{
+                    fontFamily: font.mono, fontSize: 22, fontWeight: 800, color: tier.color,
+                    lineHeight: 1, letterSpacing: '-.02em',
+                    textShadow: `0 0 12px ${tier.color}40`,
+                  }}>{btr}</span>
                 </div>
                 <div style={{
                   fontFamily: font.mono, fontSize: 11, fontWeight: 700, color: tier.color,
@@ -526,30 +533,36 @@ export default function DashboardPage() {
             className={`mode-btn fu fu1 ${playLoading === 'practice' ? 'loading' : ''}`}
             onClick={() => setShowPracticeModal(true)}
             style={{
-              padding: '20px 24px', marginBottom: 16, width: '100%',
-              border: `1px solid ${c.pinkBorder}`,
-              background: `linear-gradient(135deg, rgba(245,160,208,.06) 0%, ${c.surface} 50%, rgba(0,220,130,.03) 100%)`,
+              padding: '28px 28px', marginBottom: 16, width: '100%',
+              border: `1px solid rgba(245,160,208,.35)`,
+              background: `linear-gradient(135deg, rgba(245,160,208,.1) 0%, ${c.surface} 40%, rgba(245,160,208,.05) 100%)`,
+              boxShadow: '0 0 40px rgba(245,160,208,.12), 0 0 80px rgba(245,160,208,.06), inset 0 1px 0 rgba(245,160,208,.15)',
               animation: 'glow 4s ease infinite',
+              borderRadius: radius.lg,
             }}
           >
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${c.pink}, transparent 70%)` }} />
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${c.pink}, rgba(245,160,208,.4) 60%, transparent 100%)`, borderRadius: `${radius.lg}px ${radius.lg}px 0 0` }} />
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg, transparent, rgba(245,160,208,.2) 50%, transparent)` }} />
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <div style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 700, color: c.pink, letterSpacing: '.1em', marginBottom: 4 }}>
-                  {playLoading === 'practice' ? 'CREATING BATTLE...' : `${tier.next - btr} PTS TO ${btrTier(tier.next).name}`}
+                <div style={{ fontFamily: font.sans, fontSize: 11, fontWeight: 700, color: c.pink, letterSpacing: '.12em', marginBottom: 6, textShadow: '0 0 20px rgba(245,160,208,.5)' }}>
+                  {playLoading === 'practice' ? 'CREATING BATTLE...' : `${tier.next - btr} PTS TO ${btrTier(tier.next).name.toUpperCase()}`}
                 </div>
-                <div style={{ fontFamily: font.display, fontSize: 32, color: c.text, lineHeight: 1, letterSpacing: '.02em' }}>
-                  Rank Up Now
+                <div style={{ fontFamily: font.display, fontSize: 38, color: c.text, lineHeight: 1, letterSpacing: '.02em', textShadow: '0 2px 20px rgba(255,255,255,.08)' }}>
+                  RANK UP NOW
                 </div>
-                <div style={{ fontFamily: font.sans, fontSize: 12, color: c.text3, marginTop: 2 }}>
+                <div style={{ fontFamily: font.sans, fontSize: 13, color: c.text3, marginTop: 6 }}>
                   Choose your difficulty and climb the ranks
                 </div>
               </div>
               <div style={{
-                width: 50, height: 50, borderRadius: radius.md,
-                background: c.pinkDim, border: `1px solid ${c.pinkBorder}`,
+                width: 60, height: 60, borderRadius: radius.md,
+                background: `linear-gradient(135deg, rgba(245,160,208,.15), rgba(245,160,208,.05))`,
+                border: `1px solid rgba(245,160,208,.4)`,
+                boxShadow: '0 0 20px rgba(245,160,208,.15)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontFamily: font.display, fontSize: 24, color: c.pink,
+                fontFamily: font.display, fontSize: 26, color: c.pink,
+                textShadow: '0 0 12px rgba(245,160,208,.5)',
               }}>GO</div>
             </div>
           </button>
@@ -637,115 +650,123 @@ export default function DashboardPage() {
                 ))}
               </div>
 
-              {/* LIVE NOW */}
-              {live.length > 0 && (
-                <div className="fu fu4" style={{ marginBottom: 16 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                    <div className="live-dot" style={{ width: 5, height: 5 }} />
-                    <span style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 700, color: c.green, letterSpacing: '.06em' }}>LIVE NOW</span>
-                    <span style={{ fontFamily: font.mono, fontSize: 10, color: c.text4, marginLeft: 4 }}>
-                      {live.reduce((a, l) => a + l.player_count, 0)} trading
-                    </span>
+              {/* ── TERMINAL-STYLE LOBBY FEED ── */}
+              {(live.length > 0 || open.length > 0) && (
+                <div className="fu fu4" style={{
+                  marginBottom: 16, background: '#050505', border: `1px solid ${c.border}`,
+                  borderRadius: radius.lg, overflow: 'hidden', fontFamily: font.mono,
+                }}>
+                  {/* Terminal header bar */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '8px 14px', borderBottom: `1px solid ${c.border}`,
+                    background: 'rgba(255,255,255,.02)',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div className="live-dot" style={{ width: 5, height: 5 }} />
+                      <span style={{ fontSize: 10, fontWeight: 700, color: c.green, letterSpacing: '.08em' }}>
+                        BATTLES · {live.length + open.length} ACTIVE
+                      </span>
+                    </div>
+                    <Link href="/create" style={{ fontSize: 10, color: c.pink, textDecoration: 'none', letterSpacing: '.04em' }}>+ NEW</Link>
                   </div>
-                  <div style={{ border: `1px solid ${c.border}`, borderRadius: radius.lg, overflow: 'hidden' }}>
-                    {live.map(l => (
-                      <div key={l.id} className="lobby-row" onClick={() => router.push(`/lobby/${l.id}`)}>
-                        <div style={{
-                          width: 36, height: 36, borderRadius: radius.sm, background: lobbyGrad(l.name),
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontFamily: font.mono, fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,.6)',
-                          flexShrink: 0,
-                        }}>{l.current_round ? `R${l.current_round.number}` : '...'}</div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontFamily: font.sans, fontSize: 13, fontWeight: 600, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</div>
-                          <div style={{ fontFamily: font.sans, fontSize: 10, color: c.text4 }}>
-                            {l.player_count} player{l.player_count !== 1 ? 's' : ''}
-                            {l.spectator_count > 0 && ` / ${l.spectator_count} watching`}
-                          </div>
+
+                  {/* Column headers */}
+                  <div style={{
+                    display: 'grid', gridTemplateColumns: '1fr 70px 80px 70px',
+                    padding: '4px 14px', borderBottom: `1px solid rgba(255,255,255,.03)`,
+                    fontSize: 8, fontWeight: 600, color: c.text4, letterSpacing: '.1em',
+                  }}>
+                    <span>NAME</span>
+                    <span style={{ textAlign: 'center' }}>PLAYERS</span>
+                    <span style={{ textAlign: 'right' }}>LEADER</span>
+                    <span style={{ textAlign: 'right' }}>STATUS</span>
+                  </div>
+
+                  {/* Live battles */}
+                  {live.map(l => (
+                    <div key={l.id} className="lobby-row" onClick={() => router.push(`/lobby/${l.id}`)}
+                      style={{ display: 'grid', gridTemplateColumns: '1fr 70px 80px 70px', alignItems: 'center', padding: '8px 14px', cursor: 'pointer' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</div>
+                        <div style={{ fontSize: 9, color: c.text4 }}>
+                          {l.current_round ? `R${l.current_round.number}` : '···'} · {l.format ?? 'elim'}
                         </div>
-                        {l.top_trader && (
-                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                            <div style={{ fontFamily: font.mono, fontSize: 13, fontWeight: 700, color: l.top_trader.return_pct >= 0 ? c.green : c.red }}>
+                      </div>
+                      <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: c.text2 }}>{l.player_count}</div>
+                      <div style={{ textAlign: 'right' }}>
+                        {l.top_trader ? (
+                          <>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: l.top_trader.return_pct >= 0 ? c.green : c.red }}>
                               {l.top_trader.return_pct >= 0 ? '+' : ''}{l.top_trader.return_pct.toFixed(1)}%
                             </div>
-                            <div style={{ fontFamily: font.sans, fontSize: 9, color: c.text4 }}>{l.top_trader.name}</div>
+                            <div style={{ fontSize: 8, color: c.text4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.top_trader.name}</div>
+                          </>
+                        ) : <span style={{ fontSize: 10, color: c.text4 }}>---</span>}
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{
+                          fontSize: 9, fontWeight: 700, color: c.bg, background: c.green,
+                          padding: '2px 6px', borderRadius: 3, letterSpacing: '.04em',
+                        }}>LIVE</span>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Open battles */}
+                  {open.slice(0, 8).map(l => {
+                    const fee = (l.config?.entry_fee as number) ?? 0
+                    const isOwner = !!(profile?.id && l.created_by === profile.id)
+                    const isSel = selectedLobby === l.id
+                    return (
+                      <div key={l.id}>
+                        <div className={`lobby-row ${isSel ? 'selected' : ''}`}
+                          onClick={() => setSelectedLobby(isSel ? null : l.id)}
+                          style={{ display: 'grid', gridTemplateColumns: '1fr 70px 80px 70px', alignItems: 'center', padding: '8px 14px', cursor: 'pointer' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontSize: 12, fontWeight: 600, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</span>
+                              {isOwner && <span style={{ fontSize: 7, fontWeight: 700, color: c.pink, background: c.pinkDim, padding: '1px 4px', borderRadius: 2 }}>YOU</span>}
+                            </div>
+                            <div style={{ fontSize: 9, color: c.text4 }}>{l.format ?? 'elim'}</div>
+                          </div>
+                          <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: c.text3 }}>{l.player_count}</div>
+                          <div style={{ textAlign: 'right', fontSize: 11, fontWeight: 700, color: fee > 0 ? c.pink : c.text4 }}>
+                            {fee > 0 ? `${fee}CR` : 'FREE'}
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <span style={{
+                              fontSize: 9, fontWeight: 700, color: c.text, background: 'rgba(255,255,255,.06)',
+                              padding: '2px 6px', borderRadius: 3, letterSpacing: '.04em',
+                            }}>OPEN</span>
+                          </div>
+                        </div>
+                        {isSel && (
+                          <div style={{ display: 'flex', gap: 8, padding: '4px 14px 10px' }}>
+                            <button onClick={() => router.push(`/lobby/${l.id}`)} style={{
+                              flex: 1, fontFamily: font.mono, fontSize: 11, fontWeight: 700, color: c.bg,
+                              background: c.green, border: 'none', padding: '7px 0', borderRadius: 4, cursor: 'pointer',
+                              letterSpacing: '.04em',
+                            }}>JOIN</button>
+                            {isOwner && (
+                              <Link href={`/lobby/${l.id}/admin`} style={{
+                                fontFamily: font.mono, fontSize: 11, fontWeight: 700, color: c.pink,
+                                background: c.pinkDim, border: `1px solid ${c.pinkBorder}`,
+                                padding: '7px 12px', borderRadius: 4, textDecoration: 'none',
+                              }}>ADMIN</Link>
+                            )}
+                            {isOwner && l.status === 'waiting' && (
+                              <button onClick={() => { if (confirm(`Delete "${l.name}"?`)) deleteLobby(l.id) }} disabled={saving} style={{
+                                fontFamily: font.mono, fontSize: 11, fontWeight: 700, color: c.red,
+                                background: c.redDim, border: `1px solid rgba(255,68,102,.15)`,
+                                padding: '7px 12px', borderRadius: 4, cursor: 'pointer',
+                              }}>DEL</button>
+                            )}
                           </div>
                         )}
-                        <div style={{
-                          fontFamily: font.sans, fontSize: 11, fontWeight: 600, color: c.green,
-                          padding: '5px 12px', borderRadius: 6, background: `${c.green}12`,
-                          border: `1px solid ${c.green}25`, flexShrink: 0,
-                        }}>Enter</div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* OPEN LOBBIES */}
-              {open.length > 0 && (
-                <div className="fu fu4" style={{ marginBottom: 16 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 700, color: c.text3, letterSpacing: '.06em' }}>OPEN BATTLES</span>
-                    <Link href="/create" style={{ fontFamily: font.sans, fontSize: 11, color: c.pink, textDecoration: 'none' }}>+ New</Link>
-                  </div>
-                  <div style={{ border: `1px solid ${c.border}`, borderRadius: radius.lg, overflow: 'hidden' }}>
-                    {open.slice(0, 8).map(l => {
-                      const fee = (l.config?.entry_fee as number) ?? 0
-                      const prize = (l.config?.prize_pool as number) ?? (fee > 0 ? fee * 8 * 0.9 : 0)
-                      const isOwner = !!(profile?.id && l.created_by === profile.id)
-                      const isSel = selectedLobby === l.id
-
-                      return (
-                        <div key={l.id}>
-                          <div className={`lobby-row ${isSel ? 'selected' : ''}`} onClick={() => setSelectedLobby(isSel ? null : l.id)}>
-                            <div style={{
-                              width: 36, height: 36, borderRadius: radius.sm, background: lobbyGrad(l.name),
-                              flexShrink: 0,
-                            }} />
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ fontFamily: font.sans, fontSize: 13, fontWeight: 600, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</span>
-                                {isOwner && <span style={{ fontFamily: font.mono, fontSize: 8, fontWeight: 700, color: c.pink, background: c.pinkDim, padding: '1px 5px', borderRadius: 3 }}>HOST</span>}
-                              </div>
-                              <div style={{ fontFamily: font.sans, fontSize: 10, color: c.text4 }}>
-                                {l.player_count} player{l.player_count !== 1 ? 's' : ''} / {l.format}
-                              </div>
-                            </div>
-                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                              <div style={{ fontFamily: font.mono, fontSize: 13, fontWeight: 700, color: prize > 0 ? c.green : c.text3 }}>
-                                {prize > 0 ? `$${prize}` : 'FREE'}
-                              </div>
-                              {fee > 0 && <div style={{ fontFamily: font.sans, fontSize: 10, color: c.text4 }}>{fee} CR entry</div>}
-                            </div>
-                          </div>
-                          {isSel && (
-                            <div style={{ display: 'flex', gap: 8, padding: '4px 16px 12px', animation: 'fadeUp .12s ease' }}>
-                              <button onClick={() => router.push(`/lobby/${l.id}`)} style={{
-                                flex: 1, fontFamily: font.sans, fontSize: 13, fontWeight: 600, color: c.bg,
-                                background: c.green, border: 'none', padding: '9px 0', borderRadius: 6, cursor: 'pointer',
-                              }}>Join</button>
-                              {isOwner && (
-                                <Link href={`/lobby/${l.id}/admin`} style={{
-                                  fontFamily: font.sans, fontSize: 13, fontWeight: 600, color: c.pink,
-                                  background: c.pinkDim, border: `1px solid ${c.pinkBorder}`,
-                                  padding: '9px 14px', borderRadius: 6, textDecoration: 'none',
-                                  display: 'flex', alignItems: 'center',
-                                }}>Admin</Link>
-                              )}
-                              {isOwner && l.status === 'waiting' && (
-                                <button onClick={() => { if (confirm(`Delete "${l.name}"?`)) deleteLobby(l.id) }} disabled={saving} style={{
-                                  fontFamily: font.sans, fontSize: 13, fontWeight: 600, color: c.red,
-                                  background: c.redDim, border: `1px solid rgba(255,68,102,.15)`,
-                                  padding: '9px 14px', borderRadius: 6, cursor: 'pointer',
-                                }}>Delete</button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
+                    )
+                  })}
                 </div>
               )}
 

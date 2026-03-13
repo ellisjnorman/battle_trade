@@ -443,20 +443,36 @@ export default function TradingTerminal() {
         });
         if (myFinalRank === 1) setWinStreak(prev => prev + 1);
       } else if (payload.type === 'elimination') {
+        const announce = payload.announce as string | undefined;
         const eliminated = payload.eliminated as string[] | undefined;
         if (eliminated?.length) {
-          const names = eliminated.join(', ');
           flash('#FF3333');
-          addToast(`Eliminated: ${names}`, 'attack', '💀');
-          addFeedItem(`${names} eliminated`, '#FF3333', '💀');
+          addToast(announce || `Eliminated: ${eliminated.join(', ')}`, 'attack', '💀');
+          addFeedItem(announce || `${eliminated.join(', ')} eliminated`, '#FF3333', '💀');
         }
       } else if (payload.type === 'intermission') {
         const secs = payload.seconds as number;
         addToast(`Next round in ${secs}s`, 'info', '⏱');
         addFeedItem(`Intermission — ${secs}s`, '#F5A0D0', '⏱');
       } else if (payload.type === 'round_started') {
-        addToast('Round started!', 'success', '🔔');
-        addFeedItem('New round started', '#00FF88', '🔔');
+        const announce = payload.announce as string | undefined;
+        addToast(announce || 'Round started!', 'success', '🔔');
+        addFeedItem(announce || 'New round started', '#00FF88', '🔔');
+      }
+    }).on('broadcast', { event: 'bot_action' }, ({ payload }) => {
+      if (!payload) return;
+      const bot = payload.bot_name as string;
+      if (payload.action === 'trade') {
+        const dir = payload.direction === 'long' ? 'LONG' : 'SHORT';
+        const sym = payload.symbol as string;
+        const lev = payload.leverage as number;
+        addFeedItem(`${bot} opened ${dir} ${sym} ${lev}x`, payload.direction === 'long' ? '#00FF88' : '#FF4466', payload.direction === 'long' ? '↑' : '↓');
+      } else if (payload.action === 'close') {
+        const pnl = payload.pnl as number;
+        const color = pnl >= 0 ? '#00FF88' : '#FF4466';
+        addFeedItem(`${bot} closed ${payload.symbol} ${pnl >= 0 ? '+' : ''}${pnl.toFixed(1)}%`, color, '✕');
+      } else if (payload.action === 'sabotage') {
+        addFeedItem(`${bot} used sabotage!`, '#F5A0D0', '⚡');
       }
     }).subscribe();
     channelsRef.current = [pc, poc, sc, lc, rc, ac, aac];
@@ -1104,9 +1120,10 @@ export default function TradingTerminal() {
                     {rankDiff < 0 && <span style={{ ...M, fontSize: 9, color: '#FF3333' }}>▼{Math.abs(rankDiff)}</span>}
                     {isTarget && <span style={{ ...B, fontSize: 8, color: '#F5A0D0', padding: '1px 4px', border: '1px solid #F5A0D0' }}>TARGET</span>}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     {isKO && <span style={{ ...B, fontSize: 10, color: '#FF3333', letterSpacing: '0.1em' }}>KO</span>}
-                    <span style={{ ...M, fontSize: 11, color: s.returnPct >= 0 ? '#00FF88' : '#FF3333' }}>{s.returnPct >= 0 ? '+' : ''}{s.returnPct.toFixed(1)}%</span>
+                    <span style={{ ...M, fontSize: 12, color: '#FFF', letterSpacing: '-0.02em' }}>${s.portfolioValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                    <span style={{ ...M, fontSize: 10, color: s.returnPct >= 0 ? '#00FF88' : '#FF3333' }}>{s.returnPct >= 0 ? '+' : ''}{s.returnPct.toFixed(1)}%</span>
                   </div>
                 </div>
                 {/* Health bar — Street Fighter style */}

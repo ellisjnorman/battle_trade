@@ -20,6 +20,8 @@ const activeLoops = new Map<string, NodeJS.Timeout>();
 // Track bot tick intervals per lobby
 const botIntervals = new Map<string, NodeJS.Timeout>();
 
+function pickRandom<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
+
 const BOT_TICK_INTERVAL_MS = 15_000; // Bots act every 15 seconds
 
 // ---------------------------------------------------------------------------
@@ -155,25 +157,45 @@ async function runGameLoop(lobbyId: string): Promise<void> {
     try { supabase.removeChannel(broadcastChannel); } catch {}
   };
 
-  // Create first round
-  const { data: round } = await sb
+  // Check if a round already exists (practice route pre-creates one)
+  const { data: existingRound } = await sb
     .from('rounds')
-    .insert({
-      lobby_id: lobbyId,
-      event_id: lobbyId, // Use lobby_id as event_id for new format
-      round_number: 1,
-      status: 'pending',
-      starting_balance: startingBalance,
-      duration_seconds: roundDuration,
-      elimination_pct: eliminationPct,
-    })
-    .select()
+    .select('*')
+    .eq('lobby_id', lobbyId)
+    .in('status', ['active', 'pending'])
+    .order('round_number', { ascending: false })
+    .limit(1)
     .single();
+
+  let round = existingRound;
+
+  if (!round) {
+    // Create first round
+    const { data: newRound } = await sb
+      .from('rounds')
+      .insert({
+        lobby_id: lobbyId,
+        event_id: lobbyId,
+        round_number: 1,
+        status: 'pending',
+        starting_balance: startingBalance,
+        duration_seconds: roundDuration,
+        elimination_pct: eliminationPct,
+      })
+      .select()
+      .single();
+    round = newRound;
+  }
 
   if (!round) return;
 
-  // Start the round
-  await startRound(lobbyId, round.id, roundDuration, broadcast);
+  // Start the round (if not already active)
+  if (round.status !== 'active') {
+    await startRound(lobbyId, round.id, roundDuration, broadcast);
+  } else {
+    // Round already active — just start bot ticks
+    startBotTicks(lobbyId, round.id);
+  }
 
   // Schedule round end
   const timer = setTimeout(async () => {
@@ -214,7 +236,15 @@ async function startRound(
   // Start bot trading loop
   startBotTicks(lobbyId, roundId);
 
-  await broadcast('auto_admin', { type: 'round_started', round_id: roundId });
+  const roundAnnounce = pickRandom([
+    'Round is LIVE. May the best trader win.',
+    'Clock is ticking. Show me what you got.',
+    'New round just dropped. Time to print.',
+    'We are SO back. Let\'s get this bread.',
+    'Round started. No pressure... just your entire rank on the line.',
+    'The charts wait for no one. GO GO GO.',
+  ]);
+  await broadcast('auto_admin', { type: 'round_started', round_id: roundId, announce: roundAnnounce });
 }
 
 async function endRoundAndAdvance(
@@ -316,10 +346,24 @@ async function endRoundAndAdvance(
   }
 
   const eliminatedNames = toEliminate.map(s => s.trader.name);
+  const elimAnnounce = eliminatedNames.length === 1
+    ? pickRandom([
+        `${eliminatedNames[0]} just got rekt. RIP.`,
+        `${eliminatedNames[0]} is OUT. Skill issue.`,
+        `${eliminatedNames[0]} fumbled the bag. Eliminated.`,
+        `And just like that... ${eliminatedNames[0]} is done.`,
+        `${eliminatedNames[0]} couldn't handle the heat.`,
+      ])
+    : pickRandom([
+        `${eliminatedNames.join(' & ')} — both out. Brutal.`,
+        `Double elimination. ${eliminatedNames.join(' and ')} are done.`,
+        `${eliminatedNames.join(', ')} just got sent home. No mercy.`,
+      ]);
   await opts.broadcast('auto_admin', {
     type: 'elimination',
     eliminated: eliminatedNames,
     remaining: alive.length - elimCount,
+    announce: elimAnnounce,
   });
 
   // Check if game should end
@@ -435,6 +479,13 @@ async function finishGame(
 
   // Broadcast game over
   const winner = standings.find(s => !s.trader.is_eliminated);
+  const winAnnounce = winner ? pickRandom([
+    `${winner.trader.name} WINS with ${winner.returnPct >= 0 ? '+' : ''}${winner.returnPct.toFixed(1)}%. Absolutely goated.`,
+    `GG. ${winner.trader.name} is built different. Champion.`,
+    `${winner.trader.name} just ran the whole lobby. Respect.`,
+    `Crown goes to ${winner.trader.name}. What a performance.`,
+    `That's a wrap! ${winner.trader.name} takes it all. Legendary.`,
+  ]) : 'Battle complete.';
   await broadcast('auto_admin', {
     type: 'game_over',
     winner: winner ? { name: winner.trader.name, return_pct: winner.returnPct } : null,
@@ -443,6 +494,7 @@ async function finishGame(
       return_pct: s.returnPct,
       rank: s.rank,
     })),
+    announce: winAnnounce,
   });
 
   activeLoops.delete(lobbyId);

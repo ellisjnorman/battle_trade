@@ -177,6 +177,9 @@ async function tickSingleBot(
         exit_price: currentPrice,
         lobby_id: lobbyId,
       });
+      broadcastBotAction(lobbyId, traderName, 'close', {
+        symbol: pos.symbol, direction: pos.direction, pnl: returnPct,
+      });
     }
   }
 
@@ -196,7 +199,7 @@ async function tickSingleBot(
         ? lev[Math.floor(Math.random() * lev.length)]
         : leverageTiers[0] ?? 5;
 
-      await executor.execute({
+      const result = await executor.execute({
         lobby_id: lobbyId,
         trader_id: traderId,
         round_id: roundId,
@@ -206,7 +209,14 @@ async function tickSingleBot(
         entry_price: price,
         leverage,
         order_type: 'market',
-      }).catch(() => {/* best effort */});
+      }).catch(() => null);
+
+      // Broadcast bot trade to lobby feed
+      if (result) {
+        broadcastBotAction(lobbyId, traderName, 'trade', {
+          direction, symbol, size, leverage, price,
+        });
+      }
     }
   }
 
@@ -214,6 +224,32 @@ async function tickSingleBot(
   if (Math.random() < botConfig.sabotageChance) {
     await botUseSabotage(traderId, lobbyId).catch(() => {/* best effort */});
   }
+}
+
+// ---------------------------------------------------------------------------
+// Broadcast bot actions to lobby feed (fire-and-forget)
+// ---------------------------------------------------------------------------
+
+function broadcastBotAction(
+  lobbyId: string,
+  botName: string,
+  action: 'trade' | 'close' | 'sabotage',
+  details: Record<string, unknown>,
+): void {
+  import('./supabase').then(({ supabase }) => {
+    const ch = supabase.channel(`lobby-${lobbyId}-auto`);
+    ch.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await ch.send({
+          type: 'broadcast',
+          event: 'bot_action',
+          payload: { bot_name: botName, action, ...details, ts: Date.now() },
+        }).catch(() => {});
+        setTimeout(() => supabase.removeChannel(ch), 300);
+      }
+    });
+    setTimeout(() => supabase.removeChannel(ch), 2000);
+  }).catch(() => {});
 }
 
 // ---------------------------------------------------------------------------
