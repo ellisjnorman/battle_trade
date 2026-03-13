@@ -23,7 +23,7 @@ if (typeof window !== 'undefined') {
   // Use capture phase to run before Next.js dev overlay handler
   window.addEventListener('unhandledrejection', (e) => {
     const msg = e.reason?.message || String(e.reason || '');
-    if (msg.includes('MetaMask') || msg.includes('metamask') || msg.includes('inpage.js') || msg.includes('Failed to connect')) {
+    if (msg.includes('MetaMask') || msg.includes('metamask') || msg.includes('inpage.js') || msg.includes('Failed to connect') || msg.includes('Failed to fetch') || msg.includes('useActiveWallet')) {
       e.preventDefault();
       e.stopImmediatePropagation();
     }
@@ -33,7 +33,7 @@ if (typeof window !== 'undefined') {
   window.addEventListener('error', (e) => {
     const msg = e.message || '';
     const src = e.filename || '';
-    if (msg.includes('MetaMask') || msg.includes('Cross-Origin-Opener-Policy') || msg.includes('Failed to connect') || src.includes('inpage.js')) {
+    if (msg.includes('MetaMask') || msg.includes('Cross-Origin-Opener-Policy') || msg.includes('Failed to connect') || msg.includes('Failed to fetch') || src.includes('inpage.js') || src.includes('useActiveWallet')) {
       e.preventDefault();
       e.stopImmediatePropagation();
     }
@@ -44,7 +44,7 @@ if (typeof window !== 'undefined') {
   window.onerror = function (msg, source, ...rest) {
     const m = typeof msg === 'string' ? msg : '';
     const s = typeof source === 'string' ? source : '';
-    if (m.includes('MetaMask') || m.includes('Failed to connect') || s.includes('inpage.js')) {
+    if (m.includes('MetaMask') || m.includes('Failed to connect') || m.includes('Failed to fetch') || s.includes('inpage.js') || s.includes('useActiveWallet')) {
       return true; // swallow error
     }
     return origOnError ? origOnError.call(this, msg, source, ...rest) : false;
