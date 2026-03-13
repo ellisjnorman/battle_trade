@@ -715,21 +715,7 @@ export default function LandingPage() {
         </Reveal>
       </section>
 
-      {/* MOBILE STICKY CTA */}
-      <div className="mob-only" style={{
-        position:'fixed',bottom:0,left:0,right:0,zIndex:100,
-        padding:'12px 16px env(safe-area-inset-bottom)',
-        background:'rgba(10,10,10,.92)',backdropFilter:'blur(20px)',
-        borderTop:'1px solid rgba(255,255,255,.06)',
-        display:'flex',gap:10,
-      }}>
-        <button onClick={login} className="btn-primary" style={{flex:1,fontSize:15,padding:'14px 0',textAlign:'center'}}>
-          Build Your Rank
-        </button>
-        <button onClick={()=>router.push('/markets')} className="btn-secondary" style={{fontSize:13,padding:'14px 20px',whiteSpace:'nowrap'}}>
-          Watch
-        </button>
-      </div>
+      {/* Mobile CTA removed — inline CTAs are sufficient, fixed bar blocks scroll content */}
 
       {/* FOOTER */}
       <footer style={{borderTop:'1px solid rgba(255,255,255,.04)',padding:'32px'}}>
