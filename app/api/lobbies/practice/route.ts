@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     const preset = DIFFICULTY_PRESETS[difficulty];
     const botCount = rawBotCount != null ? Math.min(Math.max(rawBotCount, 1), 7) : preset.bot_count;
     const numRounds = rawNumRounds != null ? Math.min(Math.max(Math.round(rawNumRounds), 1), 10) : 1;
-    const roundDuration = rawRoundDuration != null ? Math.min(Math.max(Math.round(rawRoundDuration), 30), 600) : preset.round_duration;
+    const roundDuration = rawRoundDuration != null ? Math.min(Math.max(Math.round(rawRoundDuration), 30), 900) : preset.round_duration;
     const gameMode = rawGameMode && GAME_MODES[rawGameMode] ? rawGameMode : 'classic';
     const gameModeConfig = GAME_MODES[gameMode];
     const sb = getServerSupabase();

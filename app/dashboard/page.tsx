@@ -198,7 +198,7 @@ export default function DashboardPage() {
   const [practiceDifficulty, setPracticeDifficulty] = useState<string>('medium')
   const [practiceBotCount, setPracticeBotCount] = useState(4)
   const [practiceNumRounds, setPracticeNumRounds] = useState(1)
-  const [practiceRoundDuration, setPracticeRoundDuration] = useState(120)
+  const [practiceRoundDuration, setPracticeRoundDuration] = useState(300)
   const [practiceGameMode, setPracticeGameMode] = useState('classic')
   const [saving, setSaving] = useState(false)
   const [selectedLobby, setSelectedLobby] = useState<string | null>(null)
@@ -1375,7 +1375,7 @@ export default function DashboardPage() {
               ] as const).map(d => (
                 <button
                   key={d.id}
-                  onClick={() => { setPracticeDifficulty(d.id); setPracticeBotCount(d.id === 'easy' ? 2 : d.id === 'medium' ? 4 : d.id === 'hard' ? 6 : 7); setPracticeRoundDuration(d.id === 'easy' ? 180 : d.id === 'medium' ? 120 : d.id === 'hard' ? 60 : 45) }}
+                  onClick={() => { setPracticeDifficulty(d.id); setPracticeBotCount(d.id === 'easy' ? 2 : d.id === 'medium' ? 4 : d.id === 'hard' ? 6 : 7); setPracticeRoundDuration(d.id === 'easy' ? 300 : d.id === 'medium' ? 300 : d.id === 'hard' ? 60 : 60) }}
                   style={{
                     padding: '10px 12px', textAlign: 'left', cursor: 'pointer', transition: 'all .15s',
                     border: practiceDifficulty === d.id ? `2px solid ${d.color}` : `1px solid ${c.border}`,
@@ -1450,7 +1450,7 @@ export default function DashboardPage() {
                   <span style={{ fontFamily: font.mono, fontSize: 12, fontWeight: 700, color: c.text }}>{practiceRoundDuration >= 60 ? `${practiceRoundDuration / 60}m` : `${practiceRoundDuration}s`}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 3 }}>
-                  {[{ label: '45s', val: 45 }, { label: '1m', val: 60 }, { label: '2m', val: 120 }, { label: '5m', val: 300 }].map(d => (
+                  {[{ label: '1m', val: 60 }, { label: '5m', val: 300 }, { label: '15m', val: 900 }].map(d => (
                     <button key={d.val} onClick={() => setPracticeRoundDuration(d.val)} style={{
                       flex: 1, padding: '6px 0', fontFamily: font.mono, fontSize: 11, fontWeight: 700,
                       color: practiceRoundDuration === d.val ? c.bg : c.text3,
