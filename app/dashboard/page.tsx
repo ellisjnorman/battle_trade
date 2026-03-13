@@ -106,6 +106,9 @@ export default function DashboardPage() {
   const [editingLobby, setEditingLobby] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [showMyBattles, setShowMyBattles] = useState(false)
+  const [lbPeriod, setLbPeriod] = useState<'daily' | 'weekly' | 'all'>('daily')
+  const [topTraders, setTopTraders] = useState<{ id: string; display_name: string; tr_score: number; rank_tier: string; return_pct?: number; wins?: number; battles?: number }[]>([])
+  const [topLoading, setTopLoading] = useState(false)
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
   const targetPnl = useRef(0)
   const animFrame = useRef<number>(0)
@@ -198,6 +201,17 @@ export default function DashboardPage() {
     }, 30000)
     return () => { cancelled = true; clearInterval(i) }
   }, [authReady, user])
+
+  // Fetch top traders by period
+  useEffect(() => {
+    if (!authReady) return
+    setTopLoading(true)
+    fetch(`/api/leaderboard?period=${lbPeriod}&limit=5`)
+      .then(r => r.ok ? r.json() : { leaderboard: [] })
+      .then(d => setTopTraders(d.leaderboard ?? []))
+      .catch(() => {})
+      .finally(() => setTopLoading(false))
+  }, [authReady, lbPeriod])
 
   // ─── Play Actions ─────────────────────────────────────────
   const play = useCallback(async (mode: string, opts?: { difficulty?: string; botCount?: number }) => {
@@ -307,12 +321,21 @@ export default function DashboardPage() {
   return (
     <div style={{ minHeight: '100dvh', background: c.bg, color: '#FFF' }}>
       <style>{globalCSS}{`
-        @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+        @keyframes slideIn{from{opacity:0;transform:translateX(-16px)}to{opacity:1;transform:none}}
         @keyframes pulse2{0%,100%{opacity:.6}50%{opacity:1}}
         @keyframes glow{0%,100%{box-shadow:0 0 20px rgba(245,160,208,.06)}50%{box-shadow:0 0 40px rgba(245,160,208,.14)}}
         @keyframes tickerSlide{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-        .fu{animation:fadeUp .25s ease both}
-        .fu1{animation-delay:.03s}.fu2{animation-delay:.06s}.fu3{animation-delay:.09s}.fu4{animation-delay:.12s}.fu5{animation-delay:.15s}
+        @keyframes countUp{from{opacity:0;transform:translateY(6px) scale(.95)}to{opacity:1;transform:none}}
+        @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+        @keyframes rankPulse{0%{transform:scale(1)}50%{transform:scale(1.05)}100%{transform:scale(1)}}
+        @keyframes glowBar{0%,100%{opacity:.6}50%{opacity:1}}
+        .fu{animation:fadeUp .3s ease both}
+        .fu1{animation-delay:.05s}.fu2{animation-delay:.1s}.fu3{animation-delay:.15s}.fu4{animation-delay:.2s}.fu5{animation-delay:.25s}
+        .si{animation:slideIn .3s ease both}
+        .si1{animation-delay:.05s}.si2{animation-delay:.1s}.si3{animation-delay:.15s}.si4{animation-delay:.2s}.si5{animation-delay:.25s}
+        .lb-row{transition:all .15s ease}
+        .lb-row:hover{background:${c.elevated} !important;transform:translateX(4px)}
         .mode-btn{
           position:relative;border:1px solid ${c.border};border-radius:${radius.lg}px;
           padding:20px;cursor:pointer;transition:all .18s cubic-bezier(.25,.1,.25,1);
@@ -459,6 +482,90 @@ export default function DashboardPage() {
         <div style={{ maxWidth: 1100, margin: '0 auto', padding: '16px 16px 100px' }}>
 
           {/* ═══════════════════════════════════════════════════════ */}
+          {/* TOP 5 LEADERBOARD — daily / weekly / all-time          */}
+          {/* ═══════════════════════════════════════════════════════ */}
+          <div className="fu" style={{
+            background: c.surface, border: `1px solid ${c.border}`, borderRadius: radius.xl,
+            padding: '20px 24px', marginBottom: 16, position: 'relative', overflow: 'hidden',
+          }}>
+            {/* Shimmer accent */}
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, transparent, rgba(245,160,208,.4), rgba(0,191,255,.4), transparent)', backgroundSize: '200% 100%', animation: 'shimmer 3s linear infinite' }} />
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontFamily: font.display, fontSize: 16, color: c.gold, letterSpacing: '.06em' }}>TOP TRADERS</span>
+              </div>
+              {/* Period tabs */}
+              <div style={{ display: 'flex', gap: 0, background: c.bg, borderRadius: 6, overflow: 'hidden', border: `1px solid ${c.border}` }}>
+                {(['daily', 'weekly', 'all'] as const).map(p => (
+                  <button key={p} onClick={() => setLbPeriod(p)} style={{
+                    fontFamily: font.mono, fontSize: 10, fontWeight: 700, padding: '5px 12px',
+                    color: lbPeriod === p ? c.bg : c.text3,
+                    background: lbPeriod === p ? c.gold : 'transparent',
+                    border: 'none', cursor: 'pointer', transition: 'all .15s',
+                    letterSpacing: '.04em', textTransform: 'uppercase',
+                  }}>{p === 'all' ? 'ALL TIME' : p}</button>
+                ))}
+              </div>
+            </div>
+
+            {topLoading ? (
+              <div style={{ display: 'flex', gap: 8 }}>
+                {[1,2,3,4,5].map(i => (
+                  <div key={i} className="skeleton" style={{ flex: 1, height: 64, borderRadius: radius.sm }} />
+                ))}
+              </div>
+            ) : topTraders.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                <span style={{ fontFamily: font.sans, fontSize: 12, color: c.text4 }}>No {lbPeriod} data yet — be the first to compete</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 6 }}>
+                {topTraders.slice(0, 5).map((t, i) => {
+                  const tTier = btrTier(t.tr_score)
+                  const isYou = profile?.id === t.id
+                  const rankColors = ['#FFD700', '#C0C0C0', '#CD7F32', c.text3, c.text4]
+                  const medals = ['👑', '🥈', '🥉', '', '']
+                  return (
+                    <Link key={t.id} href={`/profile/${t.id}`} className={`lb-row si si${i + 1}`} style={{
+                      flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                      padding: '12px 8px', borderRadius: radius.sm, textDecoration: 'none', color: 'inherit',
+                      background: isYou ? `${c.pink}10` : i === 0 ? `${c.gold}08` : 'transparent',
+                      border: `1px solid ${isYou ? `${c.pink}30` : i === 0 ? `${c.gold}20` : c.border}`,
+                      position: 'relative', overflow: 'hidden',
+                    }}>
+                      {i === 0 && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: c.gold, animation: 'glowBar 2s ease infinite' }} />}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ fontFamily: font.mono, fontSize: 18, fontWeight: 800, color: rankColors[i], lineHeight: 1, animation: i < 3 ? 'countUp .4s ease both' : undefined, animationDelay: `${i * 0.08}s` }}>
+                          {medals[i] || `#${i + 1}`}
+                        </span>
+                      </div>
+                      <div style={{
+                        width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: `${tTier.color}18`, border: `1.5px solid ${tTier.color}40`,
+                        fontFamily: font.mono, fontSize: 13, fontWeight: 700, color: tTier.color,
+                      }}>{t.display_name?.[0]?.toUpperCase() ?? '?'}</div>
+                      <span style={{
+                        fontFamily: font.sans, fontSize: 11, fontWeight: isYou ? 700 : 500,
+                        color: isYou ? c.pink : c.text, overflow: 'hidden', textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap', maxWidth: '100%', textAlign: 'center',
+                      }}>{t.display_name}</span>
+                      {lbPeriod === 'all' ? (
+                        <span style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 700, color: tTier.color }}>{t.tr_score}</span>
+                      ) : (
+                        <span style={{ fontFamily: font.mono, fontSize: 13, fontWeight: 700, color: (t.return_pct ?? 0) >= 0 ? c.green : c.red }}>
+                          {(t.return_pct ?? 0) >= 0 ? '+' : ''}{(t.return_pct ?? 0).toFixed(1)}%
+                        </span>
+                      )}
+                      {isYou && <span style={{ fontFamily: font.sans, fontSize: 8, fontWeight: 700, color: c.pink, background: c.pinkDim, padding: '1px 5px', borderRadius: 3 }}>YOU</span>}
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* ═══════════════════════════════════════════════════════ */}
           {/* RANK HERO — The ONE number. The dopamine.              */}
           {/* ═══════════════════════════════════════════════════════ */}
           <div className="fu" style={{
@@ -501,7 +608,7 @@ export default function DashboardPage() {
 
               {/* THE number */}
               <div style={{ flex: 1, textAlign: 'right' }}>
-                <div style={{ fontFamily: font.mono, fontSize: 64, fontWeight: 700, color: tier.color, lineHeight: 1, letterSpacing: '-.02em' }}>{btr}</div>
+                <div style={{ fontFamily: font.mono, fontSize: 64, fontWeight: 700, color: tier.color, lineHeight: 1, letterSpacing: '-.02em', animation: 'countUp .5s ease both', animationDelay: '.2s' }}>{btr}</div>
                 <div style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 600, color: c.text4, letterSpacing: '.12em', marginTop: 4 }}>TRADER RANK</div>
               </div>
             </div>
