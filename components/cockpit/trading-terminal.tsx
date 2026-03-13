@@ -949,7 +949,6 @@ export default function TradingTerminal() {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {winStreak >= 2 && <StreakBadge streak={winStreak} />}
             <span style={{ ...M, fontSize: 14, color: '#555' }}>{myRank}/{totalTraders}</span>
           </div>
         </div>
@@ -1368,7 +1367,6 @@ export default function TradingTerminal() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {winStreak >= 2 && <StreakBadge streak={winStreak} />}
           <span style={{ ...M, fontSize: 9, color: '#555' }}>{myRank}/{totalTraders}</span>
         </div>
       </div>
@@ -1729,6 +1727,13 @@ export default function TradingTerminal() {
               <span style={{ ...B, fontSize: 14, color: rankColor }}>#{myRank || '—'}</span>
               <span style={{ ...M, fontSize: 8, color: '#444' }}>/{totalTraders}</span>
             </div>
+            {/* Win streak (compact) */}
+            {winStreak >= 2 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '2px 6px', background: 'rgba(255,136,0,0.1)', border: '1px solid rgba(255,136,0,0.25)', borderRadius: 6, flexShrink: 0 }}>
+                <span style={{ fontSize: 10 }}>🔥</span>
+                <span style={{ ...B, fontSize: 10, color: '#FF8800' }}>{winStreak}</span>
+              </div>
+            )}
             {/* Account + Global Rank */}
             <div className="top-bar-user" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
               <span style={{ width: 6, height: 6, background: '#F5A0D0', display: 'block', animation: 'liveDot 2s ease-in-out infinite', flexShrink: 0 }} />
@@ -1900,9 +1905,6 @@ export default function TradingTerminal() {
           )}
         </div>
 
-        {/* LIVE FEED TICKER — horizontal scrolling news */}
-        {liveFeedTicker}
-
         {/* MAIN CONTENT */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
@@ -1922,35 +1924,21 @@ export default function TradingTerminal() {
                 {arsenalPanel}
                 {defensePanel}
               </div>
-              {/* Bottom: Camera / Stream */}
-              <div style={{ flexShrink: 0, borderTop: '1px solid #1A1A1A' }}>
-                {cameraOn ? (
-                  <div style={{ position: 'relative', background: '#000' }}>
-                    <video ref={cameraRef} autoPlay playsInline muted style={{ width: '100%', height: 'auto', display: 'block', transform: 'scaleX(-1)' }} />
-                    <div style={{ position: 'absolute', top: 6, left: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ width: 8, height: 8, background: '#FF3333', borderRadius: '50%', animation: 'liveDot 1.5s ease-in-out infinite' }} />
-                      <span style={{ ...B, fontSize: 10, color: '#FFF', textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>LIVE</span>
-                    </div>
-                    <button
-                      onClick={() => setCameraOn(false)}
-                      style={{ position: 'absolute', top: 6, right: 8, ...B, fontSize: 9, color: '#FF3333', background: 'rgba(0,0,0,0.6)', border: '1px solid #FF3333', padding: '2px 8px', cursor: 'pointer' }}
-                    >STOP</button>
+              {/* Bottom: Live Feed */}
+              <div style={{ flexShrink: 0, borderTop: '1px solid #1A1A1A', maxHeight: 160, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: '#333 transparent' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderBottom: '1px solid #111' }}>
+                  <span style={{ width: 5, height: 5, background: '#F5A0D0', borderRadius: '50%', animation: 'pulse 2s infinite' }} />
+                  <span style={{ ...B, fontSize: 11, color: '#F5A0D0' }}>LIVE FEED</span>
+                </div>
+                {feedItems.length === 0 ? (
+                  <div style={{ padding: '12px 10px', ...S, fontSize: 11, color: '#333', fontStyle: 'italic' }}>Waiting for action...</div>
+                ) : feedItems.slice(0, 8).map(f => (
+                  <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderBottom: '1px solid #0D0D0D' }}>
+                    <span style={{ fontSize: 12 }}>{f.icon}</span>
+                    <span style={{ ...S, fontSize: 11, color: f.color, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.text}</span>
+                    <span style={{ ...M, fontSize: 9, color: '#555', flexShrink: 0 }}>{Math.floor((Date.now() - f.time) / 1000)}s</span>
                   </div>
-                ) : (
-                  <button
-                    onClick={() => setCameraOn(true)}
-                    style={{
-                      width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                      padding: '12px 16px', background: '#111', border: 'none', cursor: 'pointer',
-                      ...B, fontSize: 12, color: '#555', transition: 'all 200ms',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.color = '#F5A0D0'; e.currentTarget.style.background = 'rgba(245,160,208,0.06)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.color = '#555'; e.currentTarget.style.background = '#111'; }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m23 7-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-                    <span>START CAMERA</span>
-                  </button>
-                )}
+                ))}
               </div>
             </div>
 
