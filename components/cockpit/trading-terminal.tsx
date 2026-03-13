@@ -8,7 +8,7 @@ import { PYTH_FEEDS, MARKET_TYPES, getFeedsByMarket, type MarketType } from '@/l
 import { ATTACKS, DEFENSES } from '@/lib/weapons';
 import { OverlayManager } from './overlays';
 import BattleEndOverlay from '@/components/battle-end-overlay';
-import StreakBadge from '@/components/streak-badge';
+
 import { CREDIT_PACKAGES, totalCredits, type CreditPackage, type PaymentMethod } from '@/lib/payments';
 import { getLiquidationPrice } from '@/lib/liquidation';
 import { useToastStore } from '@/lib/toast-store';
@@ -126,9 +126,7 @@ export default function TradingTerminal() {
   const [showTutorial, setShowTutorial] = useState(0); // increment to re-trigger
   const [globalRank, setGlobalRank] = useState<number | null>(null);
   const [totalPlayers, setTotalPlayers] = useState<number | null>(null);
-  const [cameraOn, setCameraOn] = useState(false);
-  const cameraRef = useRef<HTMLVideoElement>(null);
-  const cameraStreamRef = useRef<MediaStream | null>(null);
+
   const [tradeFlashId, setTradeFlashId] = useState<string | null>(null);
   const prevRpRef = useRef(0);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -325,35 +323,6 @@ export default function TradingTerminal() {
     })();
   }, [lookupTrader, fetchInitialData, lobbyId]);
 
-  // Camera auto-display (preview only, no recording)
-  useEffect(() => {
-    let cancelled = false;
-    if (cameraOn) {
-      navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, facingMode: 'user' }, audio: false })
-        .then(stream => {
-          if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
-          cameraStreamRef.current = stream;
-          if (cameraRef.current) {
-            cameraRef.current.srcObject = stream;
-            cameraRef.current.play().catch(() => {});
-          }
-        })
-        .catch(() => { if (!cancelled) setCameraOn(false); });
-    } else {
-      if (cameraStreamRef.current) {
-        cameraStreamRef.current.getTracks().forEach(t => t.stop());
-        cameraStreamRef.current = null;
-      }
-      if (cameraRef.current) cameraRef.current.srcObject = null;
-    }
-    return () => {
-      cancelled = true;
-      if (cameraStreamRef.current) {
-        cameraStreamRef.current.getTracks().forEach(t => t.stop());
-        cameraStreamRef.current = null;
-      }
-    };
-  }, [cameraOn]);
 
   // ── Auto-admin tick loop (drives bot trading + round transitions for practice lobbies) ──
   useEffect(() => {
@@ -1630,11 +1599,13 @@ export default function TradingTerminal() {
         .trade-flash { animation: tradePopIn 400ms ease-out; }
         .price-ticker-scroll::-webkit-scrollbar { display: none; }
         @media (max-width: 767px) {
-          .top-bar { padding: 0 8px !important; }
-          .top-bar-logo { height: 40px !important; }
+          .top-bar { padding: 0 6px !important; min-height: 36px !important; }
+          .top-bar-logo { height: 28px !important; }
           .top-bar-lobby-name { display: none !important; }
-          .top-bar-user { max-width: 60px !important; }
-          .top-bar-pnl { font-size: 11px !important; }
+          .top-bar-user { display: none !important; }
+          .top-bar-pnl { font-size: 10px !important; }
+          .price-hero { padding: 6px 12px !important; }
+          .price-hero-value { font-size: 28px !important; }
         }
       `}</style>
 
@@ -1691,14 +1662,7 @@ export default function TradingTerminal() {
           </div>
         )}
 
-        {/* EVENT ALERT BANNER — only shows during active market events */}
-        {eventAlert && (
-          <div style={{ height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #FF333360', background: 'rgba(255,51,51,0.1)', flexShrink: 0, animation: 'urgentPulse 1.5s infinite' }}>
-            <span style={{ ...B, fontSize: 13, color: '#FF8866', animation: 'pulse 2s infinite' }}>
-              {eventAlert.headline}
-            </span>
-          </div>
-        )}
+
 
         {/* TOP BAR */}
         <div className="top-bar" style={{ minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 10px', borderBottom: '2px solid #1A1A1A', background: 'linear-gradient(180deg, #111, #0D0D0D)', flexShrink: 0, gap: 6, flexWrap: 'nowrap', overflow: 'hidden' }}>
@@ -1747,29 +1711,27 @@ export default function TradingTerminal() {
         </div>
 
         {/* ASSET DROPDOWN — mobile only, desktop version inside center column */}
-        <div ref={assetDropdownRef} className="md:hidden" style={{ position: 'relative', minHeight: 44, borderBottom: '1px solid #1A1A1A', flexShrink: 0, background: '#0D0D0D' }}>
+        <div ref={assetDropdownRef} className="md:hidden" style={{ position: 'relative', minHeight: 36, borderBottom: '1px solid #1A1A1A', flexShrink: 0, background: '#0D0D0D' }}>
           {/* Trigger — asset selector + scrollable price ticker */}
-          <div style={{ display: 'flex', alignItems: 'center', minHeight: 44 }}>
+          <div style={{ display: 'flex', alignItems: 'center', minHeight: 36 }}>
             <button
               onClick={() => { setShowMoreAssets(!showMoreAssets); setAssetSearch(''); setAssetTab('all'); setTimeout(() => assetSearchRef.current?.focus(), 50); }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', minHeight: 44, ...B, fontSize: 16, color: '#FFF', background: showMoreAssets ? 'rgba(245,160,208,0.06)' : 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px', minHeight: 36, ...B, fontSize: 14, color: '#FFF', background: showMoreAssets ? 'rgba(245,160,208,0.06)' : 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }}
             >
-              <span style={{ width: 10, height: 10, background: '#F5A0D0', display: 'block', boxShadow: '0 0 8px rgba(245,160,208,0.5)', flexShrink: 0, borderRadius: 2 }} />
-              <span style={{ ...B, fontSize: 18, color: '#FFF' }}>{selectedSymbol}</span>
-              <span style={{ ...M, fontSize: 15, color: '#F5A0D0' }}>${selectedPrice > 100 ? selectedPrice.toLocaleString(undefined, { maximumFractionDigits: 2 }) : fmtP(selectedPrice)}</span>
-              <span style={{ ...S, fontSize: 13, color: '#555', transition: 'transform 150ms', transform: showMoreAssets ? 'rotate(180deg)' : 'none' }}>▼</span>
+              <span style={{ width: 7, height: 7, background: '#F5A0D0', display: 'block', boxShadow: '0 0 6px rgba(245,160,208,0.5)', flexShrink: 0, borderRadius: 2 }} />
+              <span style={{ ...B, fontSize: 15, color: '#FFF' }}>{selectedSymbol}</span>
+              <span style={{ ...M, fontSize: 13, color: '#F5A0D0' }}>${selectedPrice > 100 ? selectedPrice.toLocaleString(undefined, { maximumFractionDigits: 2 }) : fmtP(selectedPrice)}</span>
+              <span style={{ ...S, fontSize: 11, color: '#555', transition: 'transform 150ms', transform: showMoreAssets ? 'rotate(180deg)' : 'none' }}>▼</span>
             </button>
             {/* Horizontal scrollable price ticker for core assets */}
-            <div className="price-ticker-scroll" style={{ flex: 1, display: 'flex', gap: 2, overflowX: 'auto', paddingRight: 8, minWidth: 0, WebkitOverflowScrolling: 'touch', msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
-              {CORE_ASSETS.filter(s => s !== selectedSymbol).map(sym => {
-                const p = prices[`${sym}USDT`] ?? prices[`${sym}USD`] ?? 0;
+            <div className="price-ticker-scroll" style={{ flex: 1, display: 'flex', gap: 0, overflowX: 'auto', paddingRight: 4, minWidth: 0, WebkitOverflowScrolling: 'touch', msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
+              {CORE_ASSETS.filter(s => s !== selectedSymbol).slice(0, 8).map(sym => {
                 const md = marketData[sym];
                 const chg = md?.change24h;
                 return (
-                  <button key={sym} onClick={() => setSelectedSymbol(sym)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0, minHeight: 38 }}>
-                    <span style={{ ...B, fontSize: 14, color: '#888' }}>{sym}</span>
-                    {p > 0 && <span style={{ ...M, fontSize: 12, color: '#666' }}>${p > 100 ? p.toLocaleString(undefined, { maximumFractionDigits: 0 }) : fmtP(p)}</span>}
-                    {chg !== null && chg !== undefined && <span style={{ ...M, fontSize: 11, color: chg >= 0 ? '#00FF88' : '#FF3333' }}>{chg >= 0 ? '+' : ''}{chg.toFixed(1)}%</span>}
+                  <button key={sym} onClick={() => setSelectedSymbol(sym)} style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '3px 8px', background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0, minHeight: 30 }}>
+                    <span style={{ ...B, fontSize: 11, color: '#666' }}>{sym}</span>
+                    {chg !== null && chg !== undefined && <span style={{ ...M, fontSize: 9, color: chg >= 0 ? '#00FF88' : '#FF3333' }}>{chg >= 0 ? '+' : ''}{chg.toFixed(1)}%</span>}
                   </button>
                 );
               })}
@@ -2100,48 +2062,45 @@ export default function TradingTerminal() {
           {/* ═══ MOBILE (< 768px) ═══ */}
           <div className="flex md:hidden" style={{ flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
 
-            {/* Mobile P&L + Rank strip — always visible */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderBottom: '1px solid #1A1A1A', background: '#0D0D0D', flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ ...B, fontSize: 20, color: '#F5A0D0' }}>#{myRank || '—'}</span>
-                <div style={{ width: 1, height: 16, background: '#222' }} />
-                <span style={{ ...M, fontSize: 18, fontWeight: 700, color: rp >= 0 ? '#00FF88' : '#FF3333', textShadow: `0 0 10px ${rp >= 0 ? 'rgba(0,255,136,0.4)' : 'rgba(255,51,51,0.4)'}` }}>{rp >= 0 ? '+' : ''}{rp.toFixed(1)}%</span>
+            {/* Mobile P&L strip + positions — compact always-visible header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 10px', borderBottom: '1px solid #1A1A1A', background: '#0D0D0D', flexShrink: 0, gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <span style={{ ...B, fontSize: 18, color: rankColor, lineHeight: 1 }}>#{myRank || '—'}</span>
+                <span style={{ ...M, fontSize: 16, fontWeight: 700, color: rp >= 0 ? '#00FF88' : '#FF3333' }}>{rp >= 0 ? '+' : ''}{rp.toFixed(1)}%</span>
+                <span style={{ ...M, fontSize: 11, color: '#666' }}>${Math.round(pv).toLocaleString()}</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ ...M, fontSize: 11, color: '#888' }}>${Math.round(pv).toLocaleString()}</span>
-                <button onClick={() => setShowPurchaseModal(true)} style={{ ...M, fontSize: 10, color: '#F5A0D0', padding: '2px 6px', background: 'rgba(245,160,208,0.08)', border: '1px solid rgba(245,160,208,0.2)', cursor: 'pointer' }}>{credits.balance}CR</button>
-              </div>
-            </div>
-
-            {/* Mobile quick positions strip — always visible when positions open */}
-            {openPos.length > 0 && (
-              <div style={{ display: 'flex', gap: 4, padding: '4px 8px', borderBottom: '1px solid #111', background: '#0A0A0A', flexShrink: 0, overflowX: 'auto' }}>
-                {openPos.map(pos => {
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                {/* Inline position pills */}
+                {openPos.slice(0, 3).map(pos => {
                   const cp = prices[pos.symbol] ?? prices[pos.symbol.replace('USDT', 'USD')] ?? 0;
                   const pnl = cp > 0 && pos.entry_price > 0
                     ? pos.direction === 'long'
                       ? ((cp - pos.entry_price) / pos.entry_price) * pos.size * pos.leverage
                       : ((pos.entry_price - cp) / pos.entry_price) * pos.size * pos.leverage
                     : 0;
-                  const pnlPct = pos.size > 0 ? (pnl / pos.size) * 100 : 0;
                   const dc = pos.direction === 'long' ? '#00FF88' : '#FF3333';
                   const sym = pos.symbol.replace('USDT', '').replace('USD', '');
                   return (
-                    <div key={pos.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: `${dc}08`, border: `1px solid ${dc}33`, flexShrink: 0 }}>
-                      <span style={{ ...B, fontSize: 10, color: dc }}>{pos.direction === 'long' ? 'L' : 'S'}</span>
-                      <span style={{ ...M, fontSize: 10, color: '#FFF' }}>{sym}</span>
-                      <span style={{ ...M, fontSize: 10, fontWeight: 700, color: pnl >= 0 ? '#00FF88' : '#FF3333' }}>{pnl >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%</span>
+                    <div key={pos.id} style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '2px 6px', background: `${dc}0A`, border: `1px solid ${dc}30`, borderRadius: 4, flexShrink: 0 }}>
+                      <span style={{ ...B, fontSize: 9, color: dc }}>{pos.direction === 'long' ? 'L' : 'S'}</span>
+                      <span style={{ ...M, fontSize: 9, color: '#AAA' }}>{sym}</span>
+                      <span style={{ ...M, fontSize: 9, fontWeight: 700, color: pnl >= 0 ? '#00FF88' : '#FF3333' }}>{pnl >= 0 ? '+' : ''}{(pos.size > 0 ? (pnl / pos.size) * 100 : 0).toFixed(0)}%</span>
                     </div>
                   );
                 })}
+                <button onClick={() => setShowPurchaseModal(true)} style={{ ...M, fontSize: 9, color: '#F5A0D0', padding: '2px 5px', background: 'rgba(245,160,208,0.08)', border: '1px solid rgba(245,160,208,0.2)', borderRadius: 4, cursor: 'pointer', flexShrink: 0 }}>{credits.balance}CR</button>
               </div>
-            )}
+            </div>
 
             <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, background: '#0A0A0A', WebkitOverflowScrolling: 'touch' }}>
               {mobileTab === 'chart' && (
                 <>
-                  {priceHero}
-                  <div style={{ height: 'calc(100vh - 320px)', minHeight: 280, maxHeight: 500, position: 'relative' }}>
+                  <div style={{ padding: '6px 12px', display: 'flex', alignItems: 'baseline', gap: 8, borderBottom: '1px solid #111', flexShrink: 0 }}>
+                    <span style={{ ...M, fontSize: 28, fontWeight: 700, color: '#FFF', lineHeight: 1, letterSpacing: '-0.02em' }}>${fmtP(selectedPrice)}</span>
+                    <span style={{ ...B, fontSize: 14, color: '#555' }}>{selectedSymbol}/USD</span>
+                    {selectedPrice > 0 && <span style={{ ...M, fontSize: 11, color: '#F5A0D0', marginLeft: 'auto', animation: 'breathe 2s ease-in-out infinite' }}>LIVE</span>}
+                  </div>
+                  <div style={{ height: 'calc(100vh - 300px)', minHeight: 250, maxHeight: 480, position: 'relative' }}>
                     <TradingViewChart symbol={selectedSymbol} />
                   </div>
                   {rightPositions}
@@ -2149,31 +2108,175 @@ export default function TradingTerminal() {
               )}
               {mobileTab === 'trade' && (
                 <>
-                  {priceHero}
-                  {orderPanel}
-                  {rightPositions}
-                  {defensePanel}
+                  {/* Direction — the most important choice, right at top */}
+                  <div style={{ display: 'flex', minHeight: 48, flexShrink: 0 }}>
+                    {(['long', 'spot', 'short'] as const).map(dir => {
+                      const c = dir === 'long' ? '#00FF88' : dir === 'short' ? '#FF3333' : '#00BFFF';
+                      const sel = selectedDirection === dir;
+                      return (
+                        <button key={dir} onClick={() => setSelectedDirection(dir)} style={{ flex: 1, minHeight: 48, ...B, fontSize: 18, background: sel ? c : '#0D0D0D', color: sel ? (dir === 'short' ? '#FFF' : '#0A0A0A') : c, border: 'none', borderBottom: sel ? `3px solid ${c}` : '3px solid #1A1A1A', borderRight: dir !== 'short' ? '1px solid #1A1A1A' : 'none', cursor: 'pointer' }}>{dir.toUpperCase()}</button>
+                      );
+                    })}
+                  </div>
+                  {/* Size + Leverage in one compact section */}
+                  <div style={{ padding: '8px 10px 6px', borderBottom: '1px solid #1A1A1A' }}>
+                    {/* Size as % of balance — single row of pills */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      <span style={{ ...B, fontSize: 10, color: '#555', width: 32, flexShrink: 0 }}>SIZE</span>
+                      <div style={{ display: 'flex', gap: 3, flex: 1 }}>
+                        {[
+                          { label: '$500', val: 500 }, { label: '$1K', val: 1000 },
+                          { label: '$2K', val: 2000 }, { label: '25%', val: Math.floor(pv * 0.25) },
+                          { label: '50%', val: Math.floor(pv * 0.5) }, { label: 'MAX', val: Math.floor(pv) },
+                        ].map(s => (
+                          <button key={s.label} onClick={() => setSelectedSize(s.val)} style={{
+                            flex: 1, minHeight: 32, ...B, fontSize: 11, borderRadius: 6,
+                            background: selectedSize === s.val ? '#1A1A1A' : 'transparent',
+                            color: selectedSize === s.val ? '#FFF' : s.label === 'MAX' ? '#FF3333' : '#555',
+                            border: selectedSize === s.val ? '1px solid #F5A0D0' : '1px solid #1A1A1A',
+                            cursor: 'pointer',
+                          }}>{s.label}</button>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Leverage — inline row, hidden for spot */}
+                    {selectedDirection !== 'spot' ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ ...B, fontSize: 10, color: '#555', width: 32, flexShrink: 0 }}>LEV</span>
+                        <div style={{ display: 'flex', gap: 3, flex: 1 }}>
+                          {leverageTiers.map(v => (
+                            <button key={v} onClick={() => setLeverage(v)} style={{
+                              flex: 1, minHeight: 32, ...B, fontSize: 12, borderRadius: 6,
+                              background: leverage === v ? '#F5A0D0' : 'transparent',
+                              color: leverage === v ? '#0A0A0A' : '#555',
+                              border: leverage === v ? 'none' : '1px solid #1A1A1A',
+                              cursor: 'pointer',
+                            }}>{v}x</button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ ...B, fontSize: 10, color: '#555', width: 32 }}>LEV</span>
+                        <span style={{ ...B, fontSize: 10, color: '#00BFFF' }}>1x SPOT</span>
+                      </div>
+                    )}
+                  </div>
+                  {/* Execute — the big action */}
+                  <div style={{ padding: '8px 10px' }}>
+                    {(() => {
+                      const dc = selectedDirection === 'spot' ? '#00BFFF' : selectedDirection === 'long' ? '#00FF88' : '#FF3333';
+                      return (
+                        <button onClick={() => { if (canTrade && selectedDirection) openPosition(selectedDirection, selectedSize); }} disabled={!canExec || actionLoading === 'trade'}
+                          style={{
+                            width: '100%', minHeight: 50, ...B, fontSize: 17, borderRadius: 10,
+                            background: isLockedOut ? '#0D0D0D' : !selectedDirection ? '#111' : !canExec ? '#1A1A1A' : dc,
+                            color: isLockedOut ? '#FF3333' : !selectedDirection ? '#555' : !canExec ? '#333' : selectedDirection === 'short' ? '#FFF' : '#0A0A0A',
+                            border: isLockedOut ? '2px solid #FF3333' : !selectedDirection ? '2px solid #222' : canExec ? `2px solid ${dc}` : '2px solid #1A1A1A',
+                            cursor: canExec ? 'pointer' : 'not-allowed',
+                            boxShadow: canExec && selectedDirection ? `0 0 16px ${dc}40` : 'none',
+                          }}>
+                          {execLabel}
+                        </button>
+                      );
+                    })()}
+                    {/* Order summary — tiny details */}
+                    {selectedDirection && selectedPrice > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginTop: 4 }}>
+                        <span style={{ ...M, fontSize: 8, color: '#555' }}>${selectedSize.toLocaleString()} · {effectiveLev}x · ${(selectedSize * effectiveLev).toLocaleString()} notional</span>
+                        {liqP > 0 && <span style={{ ...M, fontSize: 8, color: '#FF3333' }}>LIQ ${fmtP(liqP)}</span>}
+                      </div>
+                    )}
+                  </div>
+                  {/* Open positions — always show if any */}
+                  {openPos.length > 0 && (
+                    <div style={{ borderTop: '1px solid #1A1A1A', padding: '6px 10px' }}>
+                      <span style={{ ...B, fontSize: 9, color: '#666', marginBottom: 4, display: 'block' }}>OPEN ({openPos.length}/3)</span>
+                      {openPos.map(pos => {
+                        const cp = prices[pos.symbol] ?? prices[pos.symbol.replace('USDT', 'USD')] ?? 0;
+                        const pnl = cp > 0 && pos.entry_price > 0
+                          ? (pos.direction === 'long' ? 1 : -1) * ((cp - pos.entry_price) / pos.entry_price) * pos.size * pos.leverage
+                          : 0;
+                        const pnlPct = pos.size > 0 ? (pnl / pos.size) * 100 : 0;
+                        const dc = pos.direction === 'long' ? '#00FF88' : '#FF3333';
+                        return (
+                          <div key={pos.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 8px', marginBottom: 3, background: `${dc}06`, border: `1px solid ${dc}20`, borderRadius: 6 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ ...B, fontSize: 10, color: dc }}>{pos.direction === 'long' ? 'L' : 'S'}</span>
+                              <span style={{ ...B, fontSize: 11, color: '#FFF' }}>{pos.symbol.replace('USDT', '')}</span>
+                              <span style={{ ...M, fontSize: 9, color: '#555' }}>${pos.size.toLocaleString()} · {pos.leverage}x</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ ...M, fontSize: 11, fontWeight: 700, color: pnl >= 0 ? '#00FF88' : '#FF3333' }}>{pnl >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%</span>
+                              <button onClick={() => closePosition(pos.id)} style={{ ...B, fontSize: 9, color: '#FF3333', background: 'rgba(255,51,51,0.1)', border: '1px solid #FF333350', padding: '3px 8px', borderRadius: 4, cursor: 'pointer', minHeight: 26 }}>CLOSE</button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {/* Strategy presets — only when no positions, as a scrollable row */}
+                  {canTrade && openPos.length === 0 && (
+                    <div style={{ padding: '6px 10px', borderTop: '1px solid #1A1A1A' }}>
+                      <span style={{ ...B, fontSize: 9, color: '#444', marginBottom: 4, display: 'block' }}>OR ONE-TAP</span>
+                      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+                        {STRATEGY_PRESETS.map(s => (
+                          <button key={s.id} onClick={() => executeStrategy(s.id)} disabled={actionLoading === 'strategy'}
+                            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', minHeight: 36, background: '#0A0A0A', border: `1px solid ${s.color}30`, borderRadius: 20, cursor: actionLoading === 'strategy' ? 'wait' : 'pointer', flexShrink: 0 }}>
+                            <span style={{ fontSize: 14 }}>{s.icon}</span>
+                            <span style={{ ...B, fontSize: 11, color: s.color }}>{actionLoading === 'strategy' ? '...' : s.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {/* Pending orders — compact */}
+                  {pendingPos.length > 0 && (
+                    <div style={{ padding: '6px 10px', borderTop: '1px solid #1A1A1A' }}>
+                      <span style={{ ...B, fontSize: 9, color: '#F5A0D0', marginBottom: 3, display: 'block' }}>PENDING</span>
+                      {pendingPos.map(p => (
+                        <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', marginBottom: 2, background: '#0D0D0D', border: '1px solid #1A1A1A', borderLeft: '3px solid #F5A0D0', borderRadius: 4 }}>
+                          <span style={{ ...B, fontSize: 10, color: p.direction === 'long' ? '#00FF88' : '#FF3333' }}>{p.direction === 'long' ? 'L' : 'S'} {p.symbol.replace('USDT', '')}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <span style={{ ...M, fontSize: 9, color: '#F5A0D0' }}>{p.limit_price ? `@${fmtP(p.limit_price)}` : p.trail_pct ? `${p.trail_pct}%` : ''}</span>
+                            <button onClick={() => closePosition(p.id)} style={{ ...B, fontSize: 8, color: '#FF3333', background: 'none', border: '1px solid #FF3333', padding: '2px 6px', borderRadius: 3, cursor: 'pointer' }}>✕</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
               {mobileTab === 'battle' && (
                 <>
                   {effectsBar}
                   {arsenalPanel}
-                  {liveFeedTicker}
+                  {defensePanel}
                   {roundHistoryPanel}
                 </>
               )}
               {mobileTab === 'rank' && (
                 <>
-                  {pnlHero}
+                  {/* Compact PnL summary for mobile rank tab */}
+                  <div style={{ padding: '8px 12px', borderBottom: '1px solid #1A1A1A', background: `linear-gradient(180deg, ${pnlColor}06, transparent)` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ ...B, fontSize: 32, color: rankColor, lineHeight: 1, textShadow: `0 0 12px ${rankColor}50` }}>#{myRank || '—'}</span>
+                        <div>
+                          <span style={{ ...B, fontSize: 24, color: pnlColor, lineHeight: 1, display: 'block' }}>{rp >= 0 ? '+' : ''}{rp.toFixed(1)}%</span>
+                          <span style={{ ...M, fontSize: 10, color: '#666', display: 'block' }}>${pv.toLocaleString(undefined, { maximumFractionDigits: 0 })} · {openPos.length} open</span>
+                        </div>
+                      </div>
+                      <span style={{ ...M, fontSize: 10, color: '#555' }}>{myRank}/{totalTraders}</span>
+                    </div>
+                  </div>
                   {leaderboardPanel}
-                  {liveFeedTicker}
                 </>
               )}
             </div>
 
-            {/* Mobile nav — bottom tab bar (sticky, touch-friendly) */}
-            <div style={{ minHeight: 64, display: 'flex', borderTop: '2px solid #1A1A1A', background: '#0D0D0D', flexShrink: 0, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+            {/* Mobile nav — bottom tab bar */}
+            <div style={{ display: 'flex', borderTop: '2px solid #1A1A1A', background: '#0D0D0D', flexShrink: 0, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
               {([
                 { key: 'chart' as const, label: 'CHART', icon: '📈' },
                 { key: 'trade' as const, label: 'TRADE', icon: '⚡' },
@@ -2184,11 +2287,11 @@ export default function TradingTerminal() {
                 const hasAlert = t.key === 'battle' && activeEffects.length > 0;
                 const hasPositions = t.key === 'trade' && openPos.length > 0;
                 return (
-                  <button key={t.key} onClick={() => setMobileTab(t.key)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, minHeight: 56, background: isActive ? 'rgba(245,160,208,0.06)' : 'transparent', border: 'none', borderTop: isActive ? '2px solid #F5A0D0' : '2px solid transparent', cursor: 'pointer', position: 'relative', WebkitTapHighlightColor: 'transparent' }}>
-                    <span style={{ fontSize: 20 }}>{t.icon}</span>
-                    <span style={{ ...B, fontSize: 10, color: isActive ? '#F5A0D0' : '#555', letterSpacing: '0.05em' }}>{t.label}</span>
-                    {hasAlert && <span style={{ position: 'absolute', top: 6, right: '20%', width: 8, height: 8, background: '#FF3333', animation: 'pulse 1s infinite' }} />}
-                    {hasPositions && !hasAlert && <span style={{ position: 'absolute', top: 6, right: '20%', width: 8, height: 8, background: '#F5A0D0', animation: 'pulse 2s infinite' }} />}
+                  <button key={t.key} onClick={() => setMobileTab(t.key)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, minHeight: 50, background: isActive ? 'rgba(245,160,208,0.06)' : 'transparent', border: 'none', borderTop: isActive ? '2px solid #F5A0D0' : '2px solid transparent', cursor: 'pointer', position: 'relative', WebkitTapHighlightColor: 'transparent' }}>
+                    <span style={{ fontSize: 18 }}>{t.icon}</span>
+                    <span style={{ ...B, fontSize: 9, color: isActive ? '#F5A0D0' : '#555' }}>{t.label}</span>
+                    {hasAlert && <span style={{ position: 'absolute', top: 4, right: '20%', width: 7, height: 7, background: '#FF3333', borderRadius: '50%', animation: 'pulse 1s infinite' }} />}
+                    {hasPositions && !hasAlert && <span style={{ position: 'absolute', top: 4, right: '20%', width: 7, height: 7, background: '#F5A0D0', borderRadius: '50%', animation: 'pulse 2s infinite' }} />}
                   </button>
                 );
               })}
