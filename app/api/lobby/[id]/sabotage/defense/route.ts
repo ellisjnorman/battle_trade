@@ -17,7 +17,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: lobbyId } = await params;
-  const body = await request.json();
+  let body: { trader_id?: string; type?: string };
+  try { body = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
   const { trader_id, type } = body;
 
   if (!trader_id || !type) {

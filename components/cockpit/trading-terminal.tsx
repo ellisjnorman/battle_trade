@@ -110,7 +110,7 @@ export default function TradingTerminal() {
   const [roundResults, setRoundResults] = useState<RoundResultData[]>([]);
   const [showRoundResult, setShowRoundResult] = useState<RoundResultData | null>(null);
   const [eventAlert, setEventAlert] = useState<EventAlert | null>(null);
-  const [availableSymbols, setAvailableSymbols] = useState<string[]>([]);
+
   const [marketData, setMarketData] = useState<Record<string, { change24h: number | null; volume24h: number | null; longRatio: number | null; shortRatio: number | null }>>({});
   const [fearGreed, setFearGreed] = useState<{ value: number | null; label: string | null }>({ value: null, label: null });
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
@@ -256,8 +256,7 @@ export default function TradingTerminal() {
       setLobbyName(lobby.name);
       const cfg = lobby.config as Record<string, unknown>;
       setStartingBalance((cfg?.starting_balance as number) ?? 10000);
-      const syms = (cfg?.available_symbols as string[]) ?? [];
-      setAvailableSymbols(syms);
+
       const lt = (cfg?.leverage_tiers as number[]);
       if (lt?.length) { setLeverageTiers(lt.sort((a, b) => a - b)); setLeverage(lt[Math.floor(lt.length / 2)] ?? lt[0]); }
     }

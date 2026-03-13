@@ -86,11 +86,16 @@ export async function POST(
   let nextRoundNumber = round.round_number;
 
   if (roundEnded && round.status === 'active') {
-    // ── End round ──
-    await sb.from('rounds').update({
+    // ── End round (optimistic lock: only update if still active) ──
+    const { data: updated } = await sb.from('rounds').update({
       status: 'completed',
       ended_at: new Date().toISOString(),
-    }).eq('id', round.id);
+    }).eq('id', round.id).eq('status', 'active').select('id').maybeSingle();
+
+    // Another tick already completed this round — skip scoring
+    if (!updated) {
+      return NextResponse.json({ auto: true, status: 'active', round: { round_number: round.round_number, status: 'completed', time_remaining: 0 }, eliminated: [], game_over: false, winner: null, prices: {}, standings: [] });
+    }
 
     // Calculate standings
     const standings = await getStandings(lobbyId, round.id, startingBalance);

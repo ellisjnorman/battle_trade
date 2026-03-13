@@ -35,7 +35,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: lobbyId } = await params;
-  const body = await request.json();
+  let body: { attacker_id?: string; target_id?: string; type?: string; payload?: Record<string, unknown> };
+  try { body = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
   const { attacker_id, target_id, type, payload } = body;
 
   if (!attacker_id || !target_id || !type) {

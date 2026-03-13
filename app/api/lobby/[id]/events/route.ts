@@ -50,7 +50,8 @@ export async function POST(
   }
 
   const { id: lobbyId } = await params;
-  const body = await request.json();
+  let body: { type?: string; asset?: string; magnitude?: number; duration_seconds?: number; headline?: string; trigger_mode?: string; created_by?: string; preset_id?: string };
+  try { body = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
   const { type, asset, magnitude, duration_seconds, headline, trigger_mode, created_by, preset_id } = body;
 
   // Preset execution: fire a chain of events with delay support
