@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabase } from '@/lib/supabase-server';
+import { authenticateProfile } from '@/lib/auth-guard';
 import {
   detectMultiAccount,
   detectWashTrading,
@@ -34,6 +35,10 @@ export async function POST(request: NextRequest) {
   if (!profile_id || typeof profile_id !== 'string') {
     return NextResponse.json({ error: 'Missing profile_id' }, { status: 400 });
   }
+
+  // Authenticate caller
+  const auth = await authenticateProfile(request);
+  if (!auth.ok) return auth.response;
 
   if (
     !check_types ||

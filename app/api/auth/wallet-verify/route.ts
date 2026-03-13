@@ -21,10 +21,36 @@ export async function POST(request: NextRequest) {
   // Consume nonce
   nonceStore.delete(key);
 
-  // Note: In production, verify the signature cryptographically here
-  // For EVM: use ethers.verifyMessage()
-  // For Solana: use tweetnacl.sign.detached.verify()
-  // For now, we trust the client-side signature flow
+  // Verify the signature cryptographically
+  const message = `Sign in to Battle Trade\n\nNonce: ${nonce}`;
+  if (type === 'evm' || type === 'ethereum') {
+    try {
+      // Dynamic import to avoid bundling ethers when not needed
+      const { verifyMessage } = await import('ethers');
+      const recoveredAddress = verifyMessage(message, signature);
+      if (recoveredAddress.toLowerCase() !== address.toLowerCase()) {
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+      }
+    } catch {
+      return NextResponse.json({ error: 'Signature verification failed' }, { status: 401 });
+    }
+  } else if (type === 'solana') {
+    try {
+      const nacl = await import('tweetnacl');
+      const bs58 = await import('bs58');
+      const messageBytes = new TextEncoder().encode(message);
+      const signatureBytes = bs58.default.decode(signature);
+      const publicKeyBytes = bs58.default.decode(address);
+      const isValid = nacl.default.sign.detached.verify(messageBytes, signatureBytes, publicKeyBytes);
+      if (!isValid) {
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+      }
+    } catch {
+      return NextResponse.json({ error: 'Signature verification failed' }, { status: 401 });
+    }
+  } else {
+    return NextResponse.json({ error: `Unsupported wallet type: ${type}` }, { status: 400 });
+  }
 
   const sb = getServerSupabase();
 

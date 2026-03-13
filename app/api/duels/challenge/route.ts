@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { authenticateProfile } from '@/lib/auth-guard';
 import {
   createChallenge,
   acceptChallenge,
@@ -31,6 +32,14 @@ export async function POST(request: NextRequest) {
     if (challenger_id === opponent_id) {
       return NextResponse.json({ error: 'Cannot challenge yourself' }, { status: 400 });
     }
+
+    // Authenticate: verify caller owns challenger_id
+    const auth = await authenticateProfile(request);
+    if (!auth.ok) return auth.response;
+    if (auth.profileId !== challenger_id) {
+      return NextResponse.json({ error: 'Cannot challenge as another user' }, { status: 403 });
+    }
+
     if (!VALID_DURATIONS.includes(duration_minutes)) {
       return NextResponse.json(
         { error: `duration_minutes must be one of: ${VALID_DURATIONS.join(', ')}` },
@@ -73,6 +82,13 @@ export async function PATCH(request: NextRequest) {
     }
     if (!profile_id || typeof profile_id !== 'string') {
       return NextResponse.json({ error: 'profile_id is required' }, { status: 400 });
+    }
+
+    // Authenticate: verify caller owns profile_id
+    const patchAuth = await authenticateProfile(request);
+    if (!patchAuth.ok) return patchAuth.response;
+    if (patchAuth.profileId !== profile_id) {
+      return NextResponse.json({ error: 'Cannot respond to challenge as another user' }, { status: 403 });
     }
 
     if (action === 'decline') {

@@ -20,20 +20,35 @@ if (typeof window !== 'undefined') {
   };
 
   // Intercept unhandled rejections from wallet extensions
+  // Use capture phase to run before Next.js dev overlay handler
   window.addEventListener('unhandledrejection', (e) => {
     const msg = e.reason?.message || String(e.reason || '');
-    if (msg.includes('MetaMask') || msg.includes('metamask') || msg.includes('inpage.js')) {
+    if (msg.includes('MetaMask') || msg.includes('metamask') || msg.includes('inpage.js') || msg.includes('Failed to connect')) {
       e.preventDefault();
+      e.stopImmediatePropagation();
     }
-  });
+  }, true);
 
-  // Suppress error events from wallet extensions
+  // Suppress error events from wallet extensions (capture phase)
   window.addEventListener('error', (e) => {
     const msg = e.message || '';
-    if (msg.includes('MetaMask') || msg.includes('Cross-Origin-Opener-Policy')) {
+    const src = e.filename || '';
+    if (msg.includes('MetaMask') || msg.includes('Cross-Origin-Opener-Policy') || msg.includes('Failed to connect') || src.includes('inpage.js')) {
       e.preventDefault();
+      e.stopImmediatePropagation();
     }
-  });
+  }, true);
+
+  // Patch window.onerror to suppress wallet extension errors before Next.js dev overlay
+  const origOnError = window.onerror;
+  window.onerror = function (msg, source, ...rest) {
+    const m = typeof msg === 'string' ? msg : '';
+    const s = typeof source === 'string' ? source : '';
+    if (m.includes('MetaMask') || m.includes('Failed to connect') || s.includes('inpage.js')) {
+      return true; // swallow error
+    }
+    return origOnError ? origOnError.call(this, msg, source, ...rest) : false;
+  };
 }
 
 export default function Providers({ children }: { children: React.ReactNode }) {

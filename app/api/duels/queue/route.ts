@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabase } from '@/lib/supabase-server';
+import { authenticateProfile } from '@/lib/auth-guard';
 import {
   enterQueue,
   leaveQueue,
@@ -26,6 +27,13 @@ export async function POST(request: NextRequest) {
 
     if (!profile_id || typeof profile_id !== 'string') {
       return NextResponse.json({ error: 'profile_id is required' }, { status: 400 });
+    }
+
+    // Authenticate: verify caller owns this profile
+    const auth = await authenticateProfile(request);
+    if (!auth.ok) return auth.response;
+    if (auth.profileId !== profile_id) {
+      return NextResponse.json({ error: 'Cannot queue as another user' }, { status: 403 });
     }
 
     if (!VALID_DURATIONS.includes(duration_minutes)) {
@@ -92,6 +100,13 @@ export async function DELETE(request: NextRequest) {
 
     if (!profile_id || typeof profile_id !== 'string') {
       return NextResponse.json({ error: 'profile_id is required' }, { status: 400 });
+    }
+
+    // Authenticate: verify caller owns this profile
+    const auth = await authenticateProfile(request);
+    if (!auth.ok) return auth.response;
+    if (auth.profileId !== profile_id) {
+      return NextResponse.json({ error: 'Cannot leave queue as another user' }, { status: 403 });
     }
 
     await leaveQueue(profile_id);

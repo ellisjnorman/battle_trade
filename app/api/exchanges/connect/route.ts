@@ -84,6 +84,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Authenticate: verify caller owns this profile
+  const privyUserId = request.headers.get('x-privy-user-id');
+  if (!privyUserId) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  }
+  const { data: callerProfile } = await getServerSupabase()
+    .from('profiles')
+    .select('id')
+    .eq('auth_user_id', privyUserId)
+    .single();
+  if (!callerProfile || callerProfile.id !== profile_id) {
+    return NextResponse.json({ error: 'Not authorized for this profile' }, { status: 403 });
+  }
+
   // Get the adapter (throws if exchange not supported)
   let adapter;
   try {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { validateTraderInLobby } from '@/lib/validate-trader';
+import { authenticateTrader } from '@/lib/auth-guard';
 import {
   DEFENSE_DEFS,
   DEFENSE_TYPES,
@@ -22,6 +23,10 @@ export async function POST(
   if (!trader_id || !type) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
+
+  // Authenticate: verify caller owns this trader
+  const auth = await authenticateTrader(request, lobbyId, trader_id);
+  if (!auth.ok) return auth.response;
 
   // Verify trader belongs to this lobby
   const trader = await validateTraderInLobby(trader_id, lobbyId);

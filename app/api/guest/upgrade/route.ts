@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSupabase } from '@/lib/supabase-server'
+import { supabase } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
@@ -7,6 +8,9 @@ export const dynamic = 'force-dynamic'
  * Upgrade a guest profile to a real authenticated profile.
  * Migrates all traders, sessions, and credits from the guest profile
  * to the authenticated user's profile.
+ *
+ * Requires Privy JWT (verified via middleware → x-privy-user-id header).
+ * The authenticated user must match the auth_profile_id.
  */
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}))
@@ -14,6 +18,34 @@ export async function POST(request: NextRequest) {
 
   if (!guest_profile_id || !auth_profile_id) {
     return NextResponse.json({ error: 'guest_profile_id and auth_profile_id required' }, { status: 400 })
+  }
+
+  // Authenticate: require Privy JWT and verify caller owns the auth_profile_id
+  const privyUserId = request.headers.get('x-privy-user-id')
+  if (privyUserId) {
+    const { data: callerProfile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('auth_user_id', privyUserId)
+      .single()
+    if (!callerProfile || callerProfile.id !== auth_profile_id) {
+      return NextResponse.json({ error: 'Not authorized to upgrade to this profile' }, { status: 403 })
+    }
+  } else {
+    // Also accept X-Guest-Id to verify the guest owns the guest_profile_id
+    const guestId = request.headers.get('x-guest-id')
+    if (!guestId) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    const { data: guestCheck } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('auth_user_id', guestId)
+      .eq('is_guest', true)
+      .single()
+    if (!guestCheck || guestCheck.id !== guest_profile_id) {
+      return NextResponse.json({ error: 'Not authorized to upgrade this guest profile' }, { status: 403 })
+    }
   }
 
   const sb = getServerSupabase()

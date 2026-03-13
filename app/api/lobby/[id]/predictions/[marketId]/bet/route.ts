@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getProvider } from '@/lib/prediction-markets';
+import { authenticateTrader } from '@/lib/auth-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +10,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; marketId: string }> },
 ) {
-  const { marketId } = await params;
+  const { id: lobbyId, marketId } = await params;
 
   let body: { bettor_id: string; outcome_id: string; amount_credits: number };
   try {
@@ -26,6 +27,10 @@ export async function POST(
       { status: 400 },
     );
   }
+
+  // Authenticate: verify caller owns the bettor identity
+  const auth = await authenticateTrader(request, lobbyId, bettor_id);
+  if (!auth.ok) return auth.response;
 
   if (typeof amount_credits !== 'number' || amount_credits <= 0) {
     return NextResponse.json(
@@ -71,7 +76,8 @@ export async function GET(
     .order('created_at', { ascending: false });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('[bet/GET]', error.message);
+    return NextResponse.json({ error: 'Failed to load bets' }, { status: 500 });
   }
 
   return NextResponse.json({ bets: bets ?? [] });

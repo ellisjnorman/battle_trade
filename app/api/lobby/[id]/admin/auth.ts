@@ -48,18 +48,25 @@ export async function checkAuthWithLobby(request: NextRequest, lobbyId: string):
       .eq('id', lobbyId)
       .single();
 
-    // Creator owns their lobby
+    // Creator owns their lobby — verify via Privy JWT (set by middleware)
     if (lobby?.created_by) {
-      // Direct profile ID match (client sends raw profile UUID)
-      if (safeEqual(authHeader, lobby.created_by)) return true;
+      // Check x-privy-user-id header (set by middleware after JWT verification)
+      const privyUserId = request.headers.get('x-privy-user-id');
+      if (privyUserId) {
+        const { data: profile } = await sb
+          .from('profiles')
+          .select('id')
+          .eq('auth_user_id', privyUserId)
+          .single();
+        if (profile && profile.id === lobby.created_by) return true;
+      }
 
-      // Try Supabase Auth token (Bearer <jwt>)
+      // Fallback: Supabase Auth Bearer token
       const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
       if (token) {
         try {
           const { data: { user } } = await sb.auth.getUser(token);
           if (user) {
-            // Look up profile for this auth user
             const { data: profile } = await sb
               .from('profiles')
               .select('id')

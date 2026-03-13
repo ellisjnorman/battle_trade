@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { authenticateProfile } from '@/lib/auth-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,7 +38,8 @@ export async function GET(request: NextRequest) {
     const { data, error, count } = await query;
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error('[strategies/GET]', error.message);
+      return NextResponse.json({ error: 'Failed to load strategies' }, { status: 500 });
     }
 
     // Flatten the joined author info
@@ -75,6 +77,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'author_id is required' }, { status: 400 });
     }
 
+    // Authenticate: verify caller owns this profile
+    const auth = await authenticateProfile(request);
+    if (!auth.ok) return auth.response;
+    if (auth.profileId !== author_id) {
+      return NextResponse.json({ error: 'Cannot create strategies for another user' }, { status: 403 });
+    }
+
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
       return NextResponse.json({ error: 'title is required' }, { status: 400 });
     }
@@ -110,7 +119,8 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error('[strategies/POST]', error.message);
+      return NextResponse.json({ error: 'Failed to create strategy' }, { status: 500 });
     }
 
     return NextResponse.json(data, { status: 201 });

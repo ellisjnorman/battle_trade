@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { subscribe, unsubscribe } from '@/lib/copy-trading';
+import { authenticateProfile } from '@/lib/auth-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,6 +29,13 @@ export async function POST(request: NextRequest) {
 
     if (budget_usd > 1_000_000) {
       return NextResponse.json({ error: 'budget_usd cannot exceed $1,000,000' }, { status: 400 });
+    }
+
+    // Authenticate: verify caller owns follower_id
+    const auth = await authenticateProfile(request);
+    if (!auth.ok) return auth.response;
+    if (auth.profileId !== follower_id) {
+      return NextResponse.json({ error: 'Cannot subscribe as another user' }, { status: 403 });
     }
 
     if (leverage_multiplier != null) {
@@ -71,6 +79,10 @@ export async function DELETE(request: NextRequest) {
     if (!subscription_id || typeof subscription_id !== 'string') {
       return NextResponse.json({ error: 'subscription_id is required' }, { status: 400 });
     }
+
+    // Authenticate caller
+    const auth = await authenticateProfile(request);
+    if (!auth.ok) return auth.response;
 
     const result = await unsubscribe(subscription_id);
 

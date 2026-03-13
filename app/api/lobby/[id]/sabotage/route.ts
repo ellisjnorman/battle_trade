@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { validateTraderInLobby } from '@/lib/validate-trader';
+import { authenticateTrader } from '@/lib/auth-guard';
 import {
   SABOTAGES,
   SABOTAGE_TYPES,
@@ -44,6 +45,10 @@ export async function POST(
   if (attacker_id === target_id) {
     return NextResponse.json({ error: 'Cannot sabotage yourself' }, { status: 400 });
   }
+
+  // Authenticate: verify caller owns the attacker identity
+  const auth = await authenticateTrader(request, lobbyId, attacker_id);
+  if (!auth.ok) return auth.response;
 
   // Verify attacker belongs to this lobby
   const attacker = await validateTraderInLobby(attacker_id, lobbyId);

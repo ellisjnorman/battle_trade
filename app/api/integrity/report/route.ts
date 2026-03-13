@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabase } from '@/lib/supabase-server';
+import { authenticateProfile } from '@/lib/auth-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,6 +44,13 @@ export async function POST(request: NextRequest) {
       { error: `Invalid reason. Valid: ${VALID_REASONS.join(', ')}` },
       { status: 400 },
     );
+  }
+
+  // Authenticate: verify caller owns reporter_id
+  const auth = await authenticateProfile(request);
+  if (!auth.ok) return auth.response;
+  if (auth.profileId !== reporter_id) {
+    return NextResponse.json({ error: 'Cannot report as another user' }, { status: 403 });
   }
 
   if (reporter_id === suspect_id) {
@@ -120,8 +128,9 @@ export async function POST(request: NextRequest) {
     });
 
   if (insertError) {
+    console.error('[integrity/report]', insertError.message);
     return NextResponse.json(
-      { error: 'Failed to create report', detail: insertError.message },
+      { error: 'Failed to create report' },
       { status: 500 },
     );
   }

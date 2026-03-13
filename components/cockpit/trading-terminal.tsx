@@ -36,6 +36,18 @@ interface FeedItem { id: string; text: string; color: string; icon: string; time
 interface RoundResultData { round_number: number; winner_name: string | null; winner_return: number | null; eliminated_name: string | null }
 interface EventAlert { id: string; headline: string; type: string; asset: string | null; expiresAt: number }
 
+/** Build auth headers for API calls — sends trader code or guest ID */
+function getAuthHeaders(traderCode?: string | null): Record<string, string> {
+  const h: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (traderCode) h['X-Trader-Code'] = traderCode;
+  // Also send guest ID if available
+  const guestRaw = typeof window !== 'undefined' ? localStorage.getItem('bt_guest') : null;
+  if (guestRaw) {
+    try { const g = JSON.parse(guestRaw); if (g?.guest_id) h['X-Guest-Id'] = g.guest_id; } catch {}
+  }
+  return h;
+}
+
 const CORE_ASSETS = ['BTC', 'ETH', 'SOL', 'DOGE', 'AVAX', 'LINK', 'XRP'];
 const SIZES = [500, 1000, 2000, 5000];
 const LEVS = [2, 5, 10, 20, 50];
@@ -488,7 +500,7 @@ export default function TradingTerminal() {
       if (orderType === 'limit') payload.limit_price = parseFloat(limitPrice);
       if (orderType === 'stop_limit') { payload.stop_price = parseFloat(stopPrice); payload.limit_price = limitPrice ? parseFloat(limitPrice) : undefined; }
       if (orderType === 'trailing_stop') payload.trail_pct = parseFloat(trailPct);
-      const r = await fetch(`/api/lobby/${lobbyId}/positions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const r = await fetch(`/api/lobby/${lobbyId}/positions`, { method: 'POST', headers: getAuthHeaders(trader?.code), body: JSON.stringify(payload) });
       if (r.ok) {
         flash(dir === 'long' ? '#00FF88' : '#FF3333');
         const otLabel = orderType === 'market' ? '' : ` [${orderType.replace('_', ' ').toUpperCase()}]`;
@@ -512,7 +524,7 @@ export default function TradingTerminal() {
   const closePosition = async (pid: string) => {
     setActionLoading(pid);
     try {
-      const r = await fetch(`/api/lobby/${lobbyId}/positions`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ position_id: pid }) });
+      const r = await fetch(`/api/lobby/${lobbyId}/positions`, { method: 'DELETE', headers: getAuthHeaders(trader?.code), body: JSON.stringify({ position_id: pid }) });
       if (r.ok) {
         const closed = await r.json();
         const pnl = closed?.realized_pnl ?? 0;
@@ -540,7 +552,7 @@ export default function TradingTerminal() {
     const weapon = ATTACKS.find(a => a.id === attackId);
     setActionLoading(attackId);
     try {
-      const r = await fetch(`/api/lobby/${lobbyId}/sabotage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attacker_id: trader.id, target_id: targetId, type: attackId }) });
+      const r = await fetch(`/api/lobby/${lobbyId}/sabotage`, { method: 'POST', headers: getAuthHeaders(trader?.code), body: JSON.stringify({ attacker_id: trader.id, target_id: targetId, type: attackId }) });
       const d = await r.json();
       if (r.ok) {
         flash('#F5A0D0');
@@ -575,7 +587,7 @@ export default function TradingTerminal() {
     const def = DEFENSES.find(x => x.id === defId);
     setActionLoading(defId);
     try {
-      const r = await fetch(`/api/lobby/${lobbyId}/sabotage/defense`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trader_id: trader.id, type: defId }) });
+      const r = await fetch(`/api/lobby/${lobbyId}/sabotage/defense`, { method: 'POST', headers: getAuthHeaders(trader?.code), body: JSON.stringify({ trader_id: trader.id, type: defId }) });
       if (r.ok) {
         const d = await r.json();
         flash('#00BFFF');
@@ -717,7 +729,7 @@ export default function TradingTerminal() {
       try {
         const r = await fetch(`/api/lobby/${lobbyId}/positions`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(trader.code),
           body: JSON.stringify({ trader_id: trader.id, round_id: round.id, symbol: `${trade.symbol}USDT`, direction: trade.direction, size: tradeSize, leverage: tradeLev, order_type: 'market' }),
         });
         if (r.ok) {

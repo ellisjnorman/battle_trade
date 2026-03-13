@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { recalcAndSave } from '@/lib/reputation';
+import { authenticateProfile } from '@/lib/auth-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,13 @@ export async function POST(
 
     if (!voter_id) {
       return NextResponse.json({ error: 'voter_id is required' }, { status: 400 });
+    }
+
+    // Authenticate: verify caller owns this profile
+    const auth = await authenticateProfile(request);
+    if (!auth.ok) return auth.response;
+    if (auth.profileId !== voter_id) {
+      return NextResponse.json({ error: 'Cannot vote as another user' }, { status: 403 });
     }
 
     // Check if vote already exists
@@ -37,7 +45,8 @@ export async function POST(
         .eq('voter_id', voter_id);
 
       if (deleteErr) {
-        return NextResponse.json({ error: deleteErr.message }, { status: 500 });
+        console.error('[vote/DELETE]', deleteErr.message);
+        return NextResponse.json({ error: 'Failed to remove vote' }, { status: 500 });
       }
       voted = false;
     } else {
@@ -47,7 +56,8 @@ export async function POST(
         .insert({ strategy_id: strategyId, voter_id });
 
       if (insertErr) {
-        return NextResponse.json({ error: insertErr.message }, { status: 500 });
+        console.error('[vote/INSERT]', insertErr.message);
+        return NextResponse.json({ error: 'Failed to record vote' }, { status: 500 });
       }
       voted = true;
     }
@@ -66,7 +76,8 @@ export async function POST(
       .eq('id', strategyId);
 
     if (updateErr) {
-      return NextResponse.json({ error: updateErr.message }, { status: 500 });
+      console.error('[vote/UPDATE]', updateErr.message);
+      return NextResponse.json({ error: 'Failed to update vote count' }, { status: 500 });
     }
 
     // Creator rewards: award 5 credits per upvote to strategy author

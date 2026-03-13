@@ -18,6 +18,21 @@ const nextConfig: NextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=()',
           },
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://auth.privy.io https://js.stripe.com https://*.posthog.com https://*.sentry.io",
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              "font-src 'self' https://fonts.gstatic.com data:",
+              "img-src 'self' data: blob: https: http:",
+              "connect-src 'self' https://*.supabase.co wss://*.supabase.co wss://stream.binance.com https://api.binance.com https://auth.privy.io https://*.privy.io https://api.hyperliquid.xyz https://js.stripe.com https://*.posthog.com https://*.sentry.io",
+              "frame-src 'self' https://auth.privy.io https://js.stripe.com https://verify.walletconnect.com https://verify.walletconnect.org",
+              "frame-ancestors 'self'",
+              "base-uri 'self'",
+              "form-action 'self'",
+            ].join('; '),
+          },
         ],
       },
     ];

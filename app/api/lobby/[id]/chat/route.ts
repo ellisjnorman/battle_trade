@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabase } from '@/lib/supabase-server';
 import { supabase } from '@/lib/supabase';
 import { chatChannel, filterMessage, canSendMessage, type ChatMessage } from '@/lib/chat';
+import { authenticateTrader } from '@/lib/auth-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,6 +76,10 @@ export async function POST(
     return NextResponse.json({ error: 'Missing sender_id or content' }, { status: 400 });
   }
 
+  // Authenticate caller owns this trader identity
+  const auth = await authenticateTrader(request, lobbyId, senderId);
+  if (!auth.ok) return auth.response;
+
   const content = rawContent.trim();
 
   if (content.length > 500) {
@@ -88,19 +93,7 @@ export async function POST(
 
   const db = getServerSupabase();
 
-  // Always look up sender info from the traders table (ignore body sender_role to prevent spoofing)
-  const { data: trader } = await db
-    .from('traders')
-    .select('name')
-    .eq('id', senderId)
-    .eq('lobby_id', lobbyId)
-    .single();
-
-  if (!trader) {
-    return NextResponse.json({ error: 'Invalid sender' }, { status: 403 });
-  }
-
-  const senderName: string = body.sender_name || trader.name;
+  const senderName: string = body.sender_name || auth.trader.name;
   // is_competitor defaults to true; removed from SELECT due to PostgREST schema cache issue
   const senderRole: string = 'competitor';
 

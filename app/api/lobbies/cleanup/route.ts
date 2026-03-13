@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabase } from '@/lib/supabase-server';
+import { authenticateProfile } from '@/lib/auth-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,13 @@ export async function DELETE(request: NextRequest) {
   const profileId = request.nextUrl.searchParams.get('profile_id');
   if (!profileId) {
     return NextResponse.json({ error: 'Missing profile_id' }, { status: 400 });
+  }
+
+  // Authenticate: verify caller owns this profile
+  const auth = await authenticateProfile(request);
+  if (!auth.ok) return auth.response;
+  if (auth.profileId !== profileId) {
+    return NextResponse.json({ error: 'Cannot clean up lobbies for another user' }, { status: 403 });
   }
 
   const sb = getServerSupabase();

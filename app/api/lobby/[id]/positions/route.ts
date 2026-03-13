@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { calcUnrealizedPnl } from '@/lib/pnl';
 import { getLobbyConfig } from '@/lib/lobby';
 import { getExecutor } from '@/lib/trade-executor';
-import { validateTraderInLobby } from '@/lib/validate-trader';
+import { authenticateTrader } from '@/lib/auth-guard';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { parseBody, OpenPositionSchema } from '@/lib/validation';
@@ -28,15 +28,14 @@ export async function POST(
 
   const { trader_id, round_id, symbol, direction, size, leverage, order_type, limit_price, stop_price, trail_pct } = parsed.data;
 
-  // Verify trader + lobby config in parallel
-  const [trader, config] = await Promise.all([
-    validateTraderInLobby(trader_id, lobbyId),
+  // Authenticate: verify caller owns this trader
+  const [auth, config] = await Promise.all([
+    authenticateTrader(request, lobbyId, trader_id),
     getLobbyConfig(lobbyId),
   ]);
 
-  if (!trader) {
-    return NextResponse.json({ error: 'Invalid trader for this lobby' }, { status: 403 });
-  }
+  if (!auth.ok) return auth.response;
+  const trader = auth.trader;
 
   if (!config) {
     return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
@@ -188,6 +187,10 @@ export async function DELETE(
   if (!posCheck || (posCheck.traders as unknown as { lobby_id: string })?.lobby_id !== lobbyId) {
     return NextResponse.json({ error: 'Position not found in this lobby' }, { status: 404 });
   }
+
+  // Authenticate: verify caller owns this position's trader
+  const auth = await authenticateTrader(request, lobbyId, posCheck.trader_id);
+  if (!auth.ok) return auth.response;
 
   // Check if this is a pending limit order — cancel it directly
   let isPending = false;

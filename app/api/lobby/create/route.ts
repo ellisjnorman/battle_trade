@@ -3,6 +3,7 @@ import { getServerSupabase } from '@/lib/supabase-server';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { parseBody, CreateLobbySchema } from '@/lib/validation';
+import { authenticateProfile } from '@/lib/auth-guard';
 import crypto from 'crypto';
 
 export async function POST(req: NextRequest) {
@@ -19,6 +20,11 @@ export async function POST(req: NextRequest) {
     const { name: safeName, format: safeFormat, config } = parsed.data;
     const { is_public, admin_password, creator_id } = body;
 
+    // Authenticate: verify caller identity (use profile if available, allow guest)
+    const auth = await authenticateProfile(req);
+    // Use authenticated profile ID if available, fallback to creator_id for backward compat
+    const resolvedCreatorId = auth.ok ? auth.profileId : creator_id;
+
     // Generate a 6-char invite code
     const invite_code = crypto.randomBytes(4).toString('base64url').slice(0, 6).toUpperCase();
 
@@ -34,7 +40,7 @@ export async function POST(req: NextRequest) {
         format: safeFormat,
         is_public: is_public ?? true,
         invite_code,
-        created_by: creator_id || null,
+        created_by: resolvedCreatorId || null,
         config: {
           ...config,
           admin_password: finalAdminPassword,
@@ -45,7 +51,8 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      logger.error('Lobby insert failed', { route: '/api/lobby/create' }, error);
+      return NextResponse.json({ error: 'Failed to create lobby' }, { status: 500 });
     }
 
     return NextResponse.json({ id: lobby.id, invite_code: lobby.invite_code });

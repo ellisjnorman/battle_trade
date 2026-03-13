@@ -2,24 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 /**
- * Centralized middleware: rate limiting + Privy auth for mutations.
+ * Centralized middleware: rate limiting + Privy JWT identity extraction.
  *
  * Auth strategy:
- * - POST/PUT/DELETE on /api/lobby/** require a valid Privy JWT
- * - GET requests pass through (lobby data is public during games)
- * - Public routes (/api/health, /api/market-data, /api/lobbies/active, /api/guest/) skip auth
- * - Webhooks have their own auth and skip everything
- * - Verified Privy user ID is attached as `x-privy-user-id` header
+ * - For ALL /api/* requests, if a Bearer JWT is present, verify it and attach
+ *   `x-privy-user-id` header for downstream route handlers.
+ * - Route handlers use `authenticateTrader()` or `authenticateProfile()` from
+ *   lib/auth-guard.ts to enforce authorization.
+ * - Webhooks skip everything (they have their own signature verification).
+ *
+ * This middleware does NOT block requests without JWTs — it enriches them.
+ * Auth enforcement happens in individual route handlers via auth-guard.ts.
  */
 
 // ---------------------------------------------------------------------------
-// Rate limiting (unchanged)
+// Rate limiting
 // ---------------------------------------------------------------------------
 
 const windowMs = 60_000;
 const hits: Map<string, { count: number; resetAt: number }> = new Map();
 
-// Cleanup stale entries every 5 minutes
 if (typeof setInterval !== 'undefined') {
   setInterval(() => {
     const now = Date.now();
@@ -49,16 +51,10 @@ function getIp(req: NextRequest): string {
   );
 }
 
-// Route pattern → max requests per minute
-// More restrictive for mutations, lenient for reads
 interface RateRule { pattern: RegExp; method?: string; limit: number }
 
 const rules: RateRule[] = [
-  // Already rate-limited in route handlers — skip (handled there for backwards compat)
-  // POST /api/lobby/create → 5/min (in route)
-  // POST /api/lobby/[id]/positions → 30/min (in route)
-
-  // Admin mutations — 20/min (generous but prevents runaway scripts)
+  // Admin mutations
   { pattern: /^\/api\/lobby\/[^/]+\/admin\/round\/(start|freeze|eliminate|next)/, method: 'POST', limit: 20 },
   { pattern: /^\/api\/lobby\/[^/]+\/admin\/(liquidate|reset|distribute)/, method: 'POST', limit: 10 },
   { pattern: /^\/api\/lobby\/[^/]+\/admin$/, method: 'POST', limit: 20 },
@@ -73,13 +69,33 @@ const rules: RateRule[] = [
   { pattern: /^\/api\/lobby\/[^/]+\/markets$/, method: 'POST', limit: 10 },
   { pattern: /^\/api\/lobby\/[^/]+\/credits\/purchase/, method: 'POST', limit: 10 },
   { pattern: /^\/api\/lobby\/[^/]+\/positions\/fill/, method: 'POST', limit: 60 },
+  { pattern: /^\/api\/lobby\/[^/]+\/positions$/, method: 'POST', limit: 30 },
+  { pattern: /^\/api\/lobby\/[^/]+\/positions$/, method: 'DELETE', limit: 30 },
+  { pattern: /^\/api\/lobby\/[^/]+\/chat/, method: 'POST', limit: 60 },
+  { pattern: /^\/api\/lobby\/[^/]+\/spectate-join/, method: 'POST', limit: 10 },
+  { pattern: /^\/api\/lobby\/[^/]+\/predictions/, method: 'POST', limit: 30 },
+
+  // Profile mutations
+  { pattern: /^\/api\/profile\/[^/]+\/follow/, method: 'POST', limit: 20 },
+  { pattern: /^\/api\/strategies/, method: 'POST', limit: 10 },
+  { pattern: /^\/api\/strategies\/[^/]+\/vote/, method: 'POST', limit: 20 },
+  { pattern: /^\/api\/duels/, method: 'POST', limit: 10 },
+  { pattern: /^\/api\/copy-trading/, method: 'POST', limit: 10 },
+  { pattern: /^\/api\/exchanges\/connect/, method: 'POST', limit: 5 },
+  { pattern: /^\/api\/guest\/upgrade/, method: 'POST', limit: 5 },
+  { pattern: /^\/api\/guest\/join/, method: 'POST', limit: 10 },
+  { pattern: /^\/api\/integrity/, method: 'POST', limit: 5 },
+  { pattern: /^\/api\/reputation/, method: 'POST', limit: 10 },
+  { pattern: /^\/api\/lobby\/create/, method: 'POST', limit: 5 },
+  { pattern: /^\/api\/lobbies\/practice/, method: 'POST', limit: 5 },
+  { pattern: /^\/api\/lobbies\/cleanup/, method: 'POST', limit: 5 },
 
   // Legacy admin
   { pattern: /^\/api\/admin/, method: 'POST', limit: 20 },
   { pattern: /^\/api\/positions/, method: 'POST', limit: 30 },
   { pattern: /^\/api\/positions/, method: 'DELETE', limit: 30 },
 
-  // Read endpoints — 120/min (2 per second)
+  // Read endpoints
   { pattern: /^\/api\/lobby\/[^/]+\/leaderboard/, limit: 120 },
   { pattern: /^\/api\/lobby\/[^/]+\/info/, limit: 120 },
   { pattern: /^\/api\/lobby\/[^/]+\/admin\/status/, limit: 120 },
@@ -97,66 +113,15 @@ const rules: RateRule[] = [
 
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
-// Cache the JWKS fetcher — jose handles key rotation/caching internally
 let _jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 
 function getJWKS() {
   if (_jwks) return _jwks;
-  if (!PRIVY_APP_ID) {
-    throw new Error('NEXT_PUBLIC_PRIVY_APP_ID is not set');
-  }
+  if (!PRIVY_APP_ID) return null; // Privy not configured — skip JWT verification
   _jwks = createRemoteJWKSet(
     new URL(`https://auth.privy.io/api/v1/apps/${PRIVY_APP_ID}/jwks.json`),
   );
   return _jwks;
-}
-
-/**
- * Routes that never require authentication, even for mutations.
- */
-const PUBLIC_ROUTE_PREFIXES = [
-  '/api/health',
-  '/api/market-data',
-  '/api/lobbies/active',
-  '/api/lobby/create',
-  '/api/guest/',
-  '/api/webhooks/',
-  '/api/og/',
-];
-
-const MUTATION_METHODS = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
-
-function isPublicRoute(path: string): boolean {
-  return PUBLIC_ROUTE_PREFIXES.some(prefix => path.startsWith(prefix));
-}
-
-function requiresAuth(req: NextRequest): boolean {
-  // Only mutations under /api/lobby/ require auth
-  if (!MUTATION_METHODS.has(req.method)) return false;
-  if (isPublicRoute(req.nextUrl.pathname)) return false;
-  if (!req.nextUrl.pathname.startsWith('/api/lobby/')) return false;
-
-  // Skip Privy JWT auth for routes that use their own auth (admin password, trader codes, etc.)
-  // These routes validate credentials internally — middleware JWT would block them
-  const path = req.nextUrl.pathname;
-  const selfAuthPatterns = [
-    /\/admin\//,          // admin routes use password-based auth
-    /\/register$/,        // player registration
-    /\/positions/,        // trading (uses trader code)
-    /\/sabotage/,         // market events (uses trader/spectator id)
-    /\/events/,           // volatility events
-    /\/markets/,          // prediction markets
-    /\/credits\//,        // credit purchases
-    /\/backfill-bots$/,   // bot backfill (uses admin_id)
-    /\/spectate-join$/,   // spectator join
-    /\/stream/,           // broadcast streaming
-    /\/chat/,             // chat messages
-    /\/manage$/,          // lobby management
-    /\/predictions/,      // predictions
-  ];
-  if (selfAuthPatterns.some(p => p.test(path))) return false;
-
-  return true;
 }
 
 async function verifyPrivyToken(
@@ -164,15 +129,13 @@ async function verifyPrivyToken(
 ): Promise<{ userId: string } | null> {
   try {
     const jwks = getJWKS();
+    if (!jwks) return null;
     const { payload } = await jwtVerify(token, jwks, {
       issuer: 'privy.io',
       audience: PRIVY_APP_ID,
     });
-
-    // Privy puts the user ID in the `sub` claim
     const userId = payload.sub;
     if (!userId) return null;
-
     return { userId };
   } catch {
     return null;
@@ -191,7 +154,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // --- Rate limiting (runs first, before auth) ---
+  // --- Rate limiting ---
   const ip = getIp(req);
   const method = req.method;
 
@@ -206,41 +169,13 @@ export async function middleware(req: NextRequest) {
         { status: 429, headers: { 'Retry-After': '60' } },
       );
     }
-    break; // first match wins
+    break;
   }
 
-  // --- Privy auth (only for mutations on /api/lobby/*) ---
-  if (requiresAuth(req)) {
-    const authHeader = req.headers.get('authorization');
-    const token = authHeader?.startsWith('Bearer ')
-      ? authHeader.slice(7)
-      : null;
-
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Authorization header required' },
-        { status: 401 },
-      );
-    }
-
-    const result = await verifyPrivyToken(token);
-    if (!result) {
-      return NextResponse.json(
-        { error: 'Invalid or expired token' },
-        { status: 401 },
-      );
-    }
-
-    // Forward verified user ID to downstream route handlers
-    const headers = new Headers(req.headers);
-    headers.set('x-privy-user-id', result.userId);
-
-    return NextResponse.next({
-      request: { headers },
-    });
-  }
-
-  // --- Optional: attach user ID for GET requests if token is present ---
+  // --- Privy JWT identity extraction (non-blocking) ---
+  // If a Bearer token is present, verify it and attach the user ID.
+  // This does NOT reject requests without tokens — auth enforcement
+  // is handled by individual route handlers via auth-guard.ts.
   const authHeader = req.headers.get('authorization');
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
@@ -248,9 +183,7 @@ export async function middleware(req: NextRequest) {
     if (result) {
       const headers = new Headers(req.headers);
       headers.set('x-privy-user-id', result.userId);
-      return NextResponse.next({
-        request: { headers },
-      });
+      return NextResponse.next({ request: { headers } });
     }
   }
 
