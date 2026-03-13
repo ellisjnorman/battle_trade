@@ -94,7 +94,7 @@ function getPersonality(botName: string): BotConfig {
 
 const executor = new PaperOnlyExecutor();
 
-export async function tickBots(lobbyId: string, roundId: string): Promise<void> {
+export async function tickBots(lobbyId: string, roundId: string, gameSpeed: number = 1): Promise<void> {
   const sb = getServerSupabase();
 
   // Get all alive bot traders (profile_id IS NULL = NPC)
@@ -140,7 +140,7 @@ export async function tickBots(lobbyId: string, roundId: string): Promise<void> 
   // Process each bot concurrently
   await Promise.all(bots.map(bot => tickSingleBot(
     bot.id, bot.name, lobbyId, roundId,
-    tradableSymbols, priceMap, leverageTiers,
+    tradableSymbols, priceMap, leverageTiers, gameSpeed,
   )));
 }
 
@@ -152,9 +152,14 @@ async function tickSingleBot(
   symbols: string[],
   priceMap: Record<string, number>,
   leverageTiers: number[],
+  gameSpeed: number = 1,
 ): Promise<void> {
   const sb = getServerSupabase();
   const botConfig = getPersonality(traderName);
+  // Scale probabilities by game speed (capped at 1.0)
+  const tradeChance = Math.min(1, botConfig.tradeChance * gameSpeed);
+  const closeChance = Math.min(1, botConfig.closeChance * gameSpeed);
+  const sabotageChance = Math.min(1, botConfig.sabotageChance * gameSpeed);
 
   // Get bot's current open positions
   const { data: openPositions } = await sb
@@ -176,7 +181,7 @@ async function tickSingleBot(
     const returnPct = (pnl / pos.size) * 100;
 
     // Close if: profitable and random chance, or loss exceeds -8%
-    const shouldClose = (returnPct > 2 && Math.random() < botConfig.closeChance)
+    const shouldClose = (returnPct > 2 && Math.random() < closeChance)
       || returnPct < -8;
 
     if (shouldClose) {
@@ -195,7 +200,7 @@ async function tickSingleBot(
   const openCount = positions.length;
 
   // --- Open new position ---
-  if (openCount < 3 && Math.random() < botConfig.tradeChance) {
+  if (openCount < 3 && Math.random() < tradeChance) {
     const symbol = symbols[Math.floor(Math.random() * symbols.length)];
     const price = priceMap[symbol];
     if (price) {
@@ -229,7 +234,7 @@ async function tickSingleBot(
   }
 
   // --- Sabotage usage ---
-  if (Math.random() < botConfig.sabotageChance) {
+  if (Math.random() < sabotageChance) {
     await botUseSabotage(traderId, lobbyId).catch(() => {/* best effort */});
   }
 }

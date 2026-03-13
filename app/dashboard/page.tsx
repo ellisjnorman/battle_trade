@@ -200,6 +200,7 @@ export default function DashboardPage() {
   const [practiceNumRounds, setPracticeNumRounds] = useState(1)
   const [practiceRoundDuration, setPracticeRoundDuration] = useState(300)
   const [practiceGameMode, setPracticeGameMode] = useState('classic')
+  const [practiceSpeed, setPracticeSpeed] = useState(1)
   const [saving, setSaving] = useState(false)
   const [selectedLobby, setSelectedLobby] = useState<string | null>(null)
   const [editingLobby, setEditingLobby] = useState<string | null>(null)
@@ -337,7 +338,7 @@ export default function DashboardPage() {
   }, [authReady, lbPeriod])
 
   // ─── Play Actions ─────────────────────────────────────────
-  const play = useCallback(async (mode: string, opts?: { difficulty?: string; botCount?: number; numRounds?: number; roundDuration?: number; gameMode?: string }) => {
+  const play = useCallback(async (mode: string, opts?: { difficulty?: string; botCount?: number; numRounds?: number; roundDuration?: number; gameMode?: string; speed?: number }) => {
     setPlayLoading(mode)
     let pid = localStorage.getItem('bt_profile_id')
     if (!pid) {
@@ -356,6 +357,7 @@ export default function DashboardPage() {
             num_rounds: opts?.numRounds ?? practiceNumRounds,
             round_duration: opts?.roundDuration ?? practiceRoundDuration,
             game_mode: opts?.gameMode ?? practiceGameMode,
+            game_speed: opts?.speed ?? practiceSpeed,
           }),
         })
         if (r.ok) { const d = await r.json(); router.push(`/lobby/${d.lobby_id}/trade?code=${d.code}`) }
@@ -375,7 +377,7 @@ export default function DashboardPage() {
         router.push('/create')
       }
     } catch {} finally { setPlayLoading(null) }
-  }, [router, profile, practiceDifficulty, practiceBotCount, practiceNumRounds, practiceRoundDuration, practiceGameMode])
+  }, [router, profile, practiceDifficulty, practiceBotCount, practiceNumRounds, practiceRoundDuration, practiceGameMode, practiceSpeed])
 
   const deleteLobby = useCallback(async (lobbyId: string) => {
     setSaving(true)
@@ -1474,10 +1476,34 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            {/* Speed toggle */}
+            <div style={{ marginBottom: 14 }}>
+              <span style={{ fontFamily: font.sans, fontSize: 11, fontWeight: 600, color: c.text2, display: 'block', marginBottom: 6 }}>Speed</span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {([
+                  { val: 1, label: 'Normal', desc: 'Realistic pace', color: c.text2 },
+                  { val: 2, label: 'Fast', desc: '2x events & volatility', color: '#FFD700' },
+                  { val: 5, label: 'Chaos', desc: '5x everything', color: c.red },
+                ] as const).map(s => {
+                  const sel = practiceSpeed === s.val
+                  return (
+                    <button key={s.val} onClick={() => setPracticeSpeed(s.val)} style={{
+                      flex: 1, padding: '8px 6px', textAlign: 'center', cursor: 'pointer', transition: 'all .15s',
+                      border: sel ? `2px solid ${s.color}` : `1px solid ${c.border}`,
+                      borderRadius: radius.sm, background: sel ? `${s.color}10` : c.surface,
+                    }}>
+                      <div style={{ fontFamily: font.sans, fontSize: 12, fontWeight: 700, color: sel ? c.text : c.text3 }}>{s.label}</div>
+                      <div style={{ fontFamily: font.sans, fontSize: 9, color: c.text4 }}>{s.desc}</div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
             {/* Launch button */}
             <button
               className={playLoading === 'practice' ? 'loading' : ''}
-              onClick={() => { setShowPracticeModal(false); play('practice', { difficulty: practiceDifficulty, botCount: practiceBotCount, numRounds: practiceNumRounds, roundDuration: practiceRoundDuration, gameMode: practiceGameMode }) }}
+              onClick={() => { setShowPracticeModal(false); play('practice', { difficulty: practiceDifficulty, botCount: practiceBotCount, numRounds: practiceNumRounds, roundDuration: practiceRoundDuration, gameMode: practiceGameMode, speed: practiceSpeed }) }}
               disabled={!!playLoading}
               style={{
                 width: '100%', padding: '14px 0', fontFamily: font.display, fontSize: 20,

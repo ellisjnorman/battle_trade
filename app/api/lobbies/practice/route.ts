@@ -68,7 +68,7 @@ const GAME_MODES: Record<string, { label: string; scoring_mode: string; eliminat
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { profile_id, display_name, bot_count: rawBotCount, difficulty: rawDifficulty, num_rounds: rawNumRounds, round_duration: rawRoundDuration, game_mode: rawGameMode } = body;
+    const { profile_id, display_name, bot_count: rawBotCount, difficulty: rawDifficulty, num_rounds: rawNumRounds, round_duration: rawRoundDuration, game_mode: rawGameMode, game_speed: rawGameSpeed } = body;
 
     if (!profile_id || !display_name) {
       return NextResponse.json({ error: 'profile_id and display_name required' }, { status: 400 });
@@ -81,6 +81,7 @@ export async function POST(request: NextRequest) {
     const roundDuration = rawRoundDuration != null ? Math.min(Math.max(Math.round(rawRoundDuration), 30), 900) : preset.round_duration;
     const gameMode = rawGameMode && GAME_MODES[rawGameMode] ? rawGameMode : 'classic';
     const gameModeConfig = GAME_MODES[gameMode];
+    const gameSpeed = [1, 2, 5].includes(Number(rawGameSpeed)) ? Number(rawGameSpeed) : 1;
     const sb = getServerSupabase();
     const inviteCode = crypto.randomBytes(4).toString('base64url').slice(0, 6).toUpperCase();
 
@@ -112,6 +113,7 @@ export async function POST(request: NextRequest) {
         elimination_pct: gameModeConfig.elimination_pct_override ?? preset.elimination_pct,
         rank_multiplier: difficulty === 'easy' ? 0.5 : difficulty === 'medium' ? 0.75 : difficulty === 'hard' ? 1.0 : 1.25,
         practice_rank_cap: 100,
+        game_speed: gameSpeed,
       },
     };
 

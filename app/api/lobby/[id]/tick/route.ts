@@ -40,6 +40,7 @@ export async function POST(
   const config = (lobby.config as Record<string, unknown>) ?? {};
   const isAuto = config.auto_admin || config.is_practice;
   if (!isAuto) return NextResponse.json({ auto: false });
+  const gameSpeed = Number(config.game_speed ?? 1) || 1;
 
   if (lobby.status === 'completed') {
     return NextResponse.json({ status: 'completed', auto: true });
@@ -160,8 +161,8 @@ export async function POST(
     try {
       const { data: prices } = await sb.from('prices').select('symbol, price');
       for (const p of prices ?? []) {
-        // Random walk: +-1.5% per tick for visible PnL in practice
-        const drift = 1 + (Math.random() - 0.5) * 0.03;
+        // Random walk: +-1.5% per tick, multiplied by game speed
+        const drift = 1 + (Math.random() - 0.5) * 0.03 * gameSpeed;
         const newPrice = Math.round(p.price * drift * 100) / 100;
         await sb.from('prices').update({ price: newPrice, updated_at: new Date().toISOString() }).eq('symbol', p.symbol);
       }
@@ -174,7 +175,7 @@ export async function POST(
       const { tickBots } = await import('@/lib/bots');
       const activeRoundId = roundEnded ? undefined : round.id;
       if (activeRoundId) {
-        await tickBots(lobbyId, activeRoundId);
+        await tickBots(lobbyId, activeRoundId, gameSpeed);
       }
     } catch (err) {
       console.error('[tick] bot tick error:', err);
