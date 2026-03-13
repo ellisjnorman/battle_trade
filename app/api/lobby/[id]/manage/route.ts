@@ -78,9 +78,72 @@ export async function PATCH(
 }
 
 /**
+ * POST /api/lobby/[id]/manage — Cancel an active/waiting lobby
+ * Only the creator or admin can cancel.
+ * Sets status to 'cancelled', closes all open positions, ends active rounds.
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id: lobbyId } = await params;
+  const authed = await checkAuthWithLobby(request, lobbyId);
+  if (!authed) return unauthorized();
+
+  const body = await request.json().catch(() => ({}));
+  if (body.action !== 'cancel') {
+    return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
+  }
+
+  const sb = getServerSupabase();
+
+  const { data: lobby } = await sb
+    .from('lobbies')
+    .select('id, status')
+    .eq('id', lobbyId)
+    .single();
+
+  if (!lobby) {
+    return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
+  }
+
+  if (lobby.status === 'completed' || lobby.status === 'cancelled') {
+    return NextResponse.json({ error: 'Lobby is already finished' }, { status: 400 });
+  }
+
+  // End any active rounds
+  await sb
+    .from('rounds')
+    .update({ status: 'completed' })
+    .eq('lobby_id', lobbyId)
+    .in('status', ['active', 'pending', 'frozen']);
+
+  // Close all open positions at current price
+  await sb
+    .from('positions')
+    .update({ status: 'closed', closed_at: new Date().toISOString() })
+    .eq('lobby_id', lobbyId)
+    .eq('status', 'open');
+
+  // Set lobby status to cancelled
+  const { data, error } = await sb
+    .from('lobbies')
+    .update({ status: 'cancelled' })
+    .eq('id', lobbyId)
+    .select('id, name, status')
+    .single();
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ lobby: data, cancelled: true });
+}
+
+/**
  * DELETE /api/lobby/[id]/manage — Delete a lobby
  * Only the creator or admin can delete.
- * Can only delete lobbies in 'waiting' status (not started yet).
+ * Can only delete lobbies in 'waiting' or 'cancelled' status.
  * Deletes associated sessions too.
  */
 export async function DELETE(
@@ -104,9 +167,9 @@ export async function DELETE(
     return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
   }
 
-  if (lobby.status !== 'waiting') {
+  if (lobby.status !== 'waiting' && lobby.status !== 'cancelled') {
     return NextResponse.json(
-      { error: 'Can only delete lobbies that haven\'t started. Use the admin panel to end active lobbies.' },
+      { error: 'Cancel the lobby first before deleting, or delete lobbies that haven\'t started.' },
       { status: 400 },
     );
   }

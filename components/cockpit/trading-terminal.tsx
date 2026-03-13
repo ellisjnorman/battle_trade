@@ -13,7 +13,7 @@ import { CREDIT_PACKAGES, totalCredits, type CreditPackage, type PaymentMethod }
 import { getLiquidationPrice } from '@/lib/liquidation';
 import { useToastStore } from '@/lib/toast-store';
 import { SectionErrorBoundary } from '@/components/error-boundary';
-import LobbyChat from '@/components/lobby-chat';
+import LobbyChat, { type ChatCommand } from '@/components/lobby-chat';
 import TutorialOverlay, { TutorialTrigger, resetTutorial } from '@/components/tutorial-overlay';
 import type { Position } from '@/types';
 
@@ -653,6 +653,55 @@ export default function TradingTerminal() {
   const effectiveLev = selectedDirection === 'spot' ? 1 : leverage;
   const liqP = selectedPrice > 0 && selectedDirection && selectedDirection !== 'spot' ? (selectedDirection === 'long' ? selectedPrice * (1 - 1/leverage) : selectedPrice * (1 + 1/leverage)) : 0;
 
+  // ── Chat slash command handler ──
+  const handleChatCommand = useCallback((cmd: ChatCommand) => {
+    const symbol = (cmd.args[0] || selectedSymbol).toUpperCase();
+    const size = cmd.args[1] ? parseInt(cmd.args[1], 10) : selectedSize;
+
+    switch (cmd.command) {
+      case 'buy':
+      case 'spot':
+        setSelectedSymbol(symbol);
+        openPosition('spot', size);
+        addToast(`Spot buying ${symbol} — $${size}`, 'info', '💰');
+        break;
+      case 'long':
+        setSelectedSymbol(symbol);
+        openPosition('long', size);
+        addToast(`Opening LONG ${symbol} — $${size}`, 'info', '📈');
+        break;
+      case 'short':
+        setSelectedSymbol(symbol);
+        openPosition('short', size);
+        addToast(`Opening SHORT ${symbol} — $${size}`, 'info', '📉');
+        break;
+      case 'close':
+        if (cmd.args[0]?.toLowerCase() === 'all') {
+          for (const p of openPos) closePosition(p.id);
+          addToast('Closing all positions', 'info', '✕');
+        } else {
+          const target = openPos.find(p => p.symbol.replace('USDT', '').replace('USD', '') === symbol);
+          if (target) { closePosition(target.id); addToast(`Closing ${symbol}`, 'info', '✕'); }
+          else addToast(`No open ${symbol} position`, 'error');
+        }
+        break;
+      case 'balance':
+        addToast(`Balance: $${Math.round(pv).toLocaleString()} · ${credits.balance} CR`, 'info', '💰');
+        break;
+      case 'rank':
+        addToast(`Rank: #${myRank || '—'} · ${rp >= 0 ? '+' : ''}${rp.toFixed(1)}%`, 'info', '🏆');
+        break;
+      case 'positions':
+      case 'pos':
+        if (openPos.length === 0) { addToast('No open positions', 'info'); }
+        else { openPos.forEach(p => addToast(`${p.direction.toUpperCase()} ${p.symbol.replace('USDT', '')} $${p.size} @ ${p.leverage}x`, 'info')); }
+        break;
+      default:
+        addToast(`Unknown command: /${cmd.command}`, 'error');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSymbol, selectedSize, openPos, pv, credits.balance, myRank, rp, addToast]);
+
   // ── P&L milestone celebrations ──
   useEffect(() => {
     const absRp = Math.abs(rp);
@@ -1192,30 +1241,28 @@ export default function TradingTerminal() {
   );
 
   const pnlColor = rp >= 0 ? '#00FF88' : '#FF3333';
-  const pnlGlow = rp !== 0 ? `0 0 20px ${pnlColor}40, 0 0 40px ${pnlColor}20` : 'none';
+  const _rankColor2 = myRank === 1 ? '#FFD700' : myRank === 2 ? '#C0C0C0' : myRank === 3 ? '#CD7F32' : '#F5A0D0';
   const pnlHero = (
-    <div style={{ padding: '16px 14px', borderBottom: '1px solid #1A1A1A', background: `linear-gradient(180deg, ${pnlColor}08, transparent)`, animation: rankFlash === 'up' ? 'rankUpFlash 1.5s ease-out' : rankFlash === 'down' ? 'rankDownFlash 1.5s ease-out' : 'none' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-        <span style={{ ...B, fontSize: 10, color: '#666' }}>YOUR P&L</span>
+    <div style={{ padding: '10px 14px', borderBottom: '1px solid #1A1A1A', background: `linear-gradient(180deg, ${pnlColor}06, transparent)`, animation: rankFlash === 'up' ? 'rankUpFlash 1.5s ease-out' : rankFlash === 'down' ? 'rankDownFlash 1.5s ease-out' : 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        {/* Rank + PnL combined */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ ...B, fontSize: 36, color: _rankColor2, lineHeight: 1, textShadow: `0 0 16px ${_rankColor2}50`, animation: myRank === 1 ? 'glowPulse 3s ease-in-out infinite' : 'none' }}>#{myRank || '—'}</span>
+          <div>
+            <span style={{ ...B, fontSize: 28, color: pnlColor, lineHeight: 1, display: 'block', textShadow: rp !== 0 ? `0 0 12px ${pnlColor}40` : 'none' }}>{rp >= 0 ? '+' : ''}{rp.toFixed(1)}%</span>
+            <span style={{ ...M, fontSize: 10, color: '#666', marginTop: 2, display: 'block' }}>${pv.toLocaleString(undefined, { maximumFractionDigits: 0 })} · {openPos.length} open</span>
+          </div>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {winStreak >= 2 && <StreakBadge streak={winStreak} />}
-          <span style={{ ...M, fontSize: 12, color: '#999' }}>${pv.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+          <span style={{ ...M, fontSize: 9, color: '#555' }}>{myRank}/{totalTraders}</span>
         </div>
       </div>
-      <span style={{ ...B, fontSize: 48, color: pnlColor, lineHeight: 1, display: 'block', transition: 'color 300ms, text-shadow 300ms', textShadow: pnlGlow, animation: rp !== 0 ? 'glowPulse 3s ease-in-out infinite' : 'none' }}>{rp >= 0 ? '+' : ''}{rp.toFixed(1)}%</span>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-        <span style={{ ...B, fontSize: 11, color: myRank > 0 ? '#F5A0D0' : '#333', animation: rankFlash === 'up' ? 'heartbeat 0.8s ease' : 'none' }}>RANK #{myRank || '-'}</span>
-        <span style={{ ...M, fontSize: 10, color: '#555' }}>{openPos.length} OPEN</span>
-      </div>
-      {/* Proximity alert — close to overtaking */}
       {proximityGap !== null && proximityGap < 2 && myRank > 1 && (
         <div style={{ marginTop: 6, padding: '3px 8px', background: 'rgba(245,160,208,0.08)', border: '1px solid rgba(245,160,208,0.3)', animation: 'proximityPulse 1.5s infinite' }}>
           <span style={{ ...B, fontSize: 10, color: '#F5A0D0' }}>{proximityGap.toFixed(1)}% FROM #{myRank - 1}</span>
         </div>
       )}
-      <div style={{ width: '100%', height: 4, background: '#111', marginTop: 6, overflow: 'hidden' }}>
-        <div style={{ width: `${Math.min(Math.abs(rp) * 3, 100)}%`, height: '100%', background: `linear-gradient(90deg, ${pnlColor}, ${pnlColor}88)`, boxShadow: rp !== 0 ? `0 0 8px ${pnlColor}60` : 'none', transition: 'width 500ms' }} />
-      </div>
     </div>
   );
 
@@ -1765,12 +1812,7 @@ export default function TradingTerminal() {
                 {liveFeed}
                 {roundHistoryPanel}
                 {arsenalPanel}
-                {/* Inline chat */}
-                {trader && (
-                  <div style={{ borderBottom: '1px solid #1A1A1A' }}>
-                    <LobbyChat lobbyId={lobbyId} userId={trader.id} userName={trader.name} userRole="competitor" embedded />
-                  </div>
-                )}
+                {/* Chat moved to bottom center panel */}
               </div>
             </div>
 
@@ -1847,7 +1889,45 @@ export default function TradingTerminal() {
                   </div>
                 )}
               </div>
-              {bottomPositionStrip}
+              {/* Bottom: Open Positions + Chat */}
+              <div style={{ flexShrink: 0, borderTop: '2px solid #333', display: 'flex', flexDirection: 'column', maxHeight: 280, minHeight: 160 }}>
+                {/* Compact positions row */}
+                {openPos.length > 0 && (
+                  <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #1A1A1A', flexShrink: 0, overflowX: 'auto', background: '#0D0D0D' }}>
+                    <div style={{ padding: '4px 12px', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, borderRight: '1px solid #1A1A1A' }}>
+                      <span style={{ ...B, fontSize: 10, color: '#555' }}>POSITIONS</span>
+                      <span style={{ ...M, fontSize: 9, color: openPos.length >= 3 ? '#FF3333' : '#F5A0D0' }}>{openPos.length}/3</span>
+                    </div>
+                    {openPos.map(p => {
+                      const cp = prices[p.symbol] ?? 0;
+                      const pnl = cp > 0 && p.entry_price > 0 ? (p.direction === 'long' ? (cp - p.entry_price) / p.entry_price * p.size * p.leverage : (p.entry_price - cp) / p.entry_price * p.size * p.leverage) : 0;
+                      const pct = p.size > 0 ? (pnl / p.size) * 100 : 0;
+                      const dc = p.direction === 'long' ? '#00FF88' : '#FF3333';
+                      const sym = p.symbol.replace('USDT', '').replace('USD', '');
+                      const isClosing = actionLoading === p.id;
+                      return (
+                        <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderRight: '1px solid #111', flexShrink: 0 }}>
+                          <span style={{ ...B, fontSize: 10, color: dc }}>{p.direction === 'long' ? 'L' : 'S'}</span>
+                          <span style={{ ...M, fontSize: 11, color: '#FFF' }}>{sym}</span>
+                          <span style={{ ...M, fontSize: 11, fontWeight: 700, color: pnl >= 0 ? '#00FF88' : '#FF3333' }}>{pnl >= 0 ? '+' : ''}{pct.toFixed(1)}%</span>
+                          <span style={{ ...M, fontSize: 9, color: '#666' }}>${p.size} @ {p.leverage}x</span>
+                          <button onClick={() => closePosition(p.id)} disabled={isClosing} style={{ ...B, fontSize: 9, color: '#FF3333', background: 'none', border: '1px solid #FF333333', padding: '2px 6px', cursor: isClosing ? 'not-allowed' : 'pointer', opacity: isClosing ? 0.4 : 1 }}>{isClosing ? '...' : '✕'}</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {/* Chat */}
+                <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                  {trader ? (
+                    <LobbyChat lobbyId={lobbyId} userId={trader.id} userName={trader.name} userRole="competitor" bottomPanel onCommand={handleChatCommand} />
+                  ) : (
+                    <div style={{ padding: '20px', textAlign: 'center' }}>
+                      <span style={{ ...S, fontSize: 12, color: '#333' }}>Join to chat</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* RIGHT: Quick Positions + Order Entry + Defense */}
@@ -2016,7 +2096,7 @@ export default function TradingTerminal() {
       {/* Tutorial */}
       <TutorialOverlay key={showTutorial} role="player" lobbyId={lobbyId} />
 
-      {/* Chat — now embedded in left sidebar on desktop */}
+      {/* Chat — now in bottom center panel on desktop */}
     </>
   );
 }

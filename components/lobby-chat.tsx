@@ -9,6 +9,13 @@ import { font, c, radius } from '@/app/design';
 // Types
 // ---------------------------------------------------------------------------
 
+/** Slash command parsed from chat input */
+export interface ChatCommand {
+  command: string;   // e.g. 'buy', 'long', 'short', 'close', 'balance', 'rank', 'help'
+  args: string[];    // remaining tokens
+  raw: string;       // full input string
+}
+
 interface LobbyChatProps {
   lobbyId: string;
   userId: string;
@@ -17,6 +24,10 @@ interface LobbyChatProps {
   collapsed?: boolean;
   /** Render inline (not floating) — for embedding in sidebars */
   embedded?: boolean;
+  /** Render as bottom panel (full-width, no collapse) */
+  bottomPanel?: boolean;
+  /** Called when user enters a /command */
+  onCommand?: (cmd: ChatCommand) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -50,7 +61,26 @@ function relativeTime(iso: string): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function LobbyChat({ lobbyId, userId, userName, userRole, collapsed: initialCollapsed, embedded }: LobbyChatProps) {
+const SLASH_COMMANDS: Record<string, string> = {
+  '/buy': 'Spot buy an asset — /buy BTC 1000',
+  '/long': 'Open long position — /long ETH 2000',
+  '/short': 'Open short position — /short SOL 500',
+  '/close': 'Close position — /close all or /close BTC',
+  '/balance': 'Show your current balance',
+  '/rank': 'Show your current rank',
+  '/positions': 'List your open positions',
+  '/help': 'Show available commands',
+};
+
+function parseCommand(input: string): ChatCommand | null {
+  const trimmed = input.trim();
+  if (!trimmed.startsWith('/')) return null;
+  const parts = trimmed.split(/\s+/);
+  const command = parts[0].slice(1).toLowerCase(); // remove '/'
+  return { command, args: parts.slice(1), raw: trimmed };
+}
+
+export default function LobbyChat({ lobbyId, userId, userName, userRole, collapsed: initialCollapsed, embedded, bottomPanel, onCommand }: LobbyChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [collapsed, setCollapsed] = useState(initialCollapsed ?? true);
@@ -143,9 +173,46 @@ export default function LobbyChat({ lobbyId, userId, userName, userRole, collaps
     setSending(false);
   }, [lobbyId, userId, userName, userRole, sending]);
 
+  const [commandHint, setCommandHint] = useState<string | null>(null);
+
+  // Show command hint while typing
+  useEffect(() => {
+    if (input.startsWith('/')) {
+      const parts = input.split(/\s+/);
+      const cmd = parts[0].toLowerCase();
+      const match = Object.entries(SLASH_COMMANDS).find(([k]) => k.startsWith(cmd));
+      setCommandHint(match ? match[1] : null);
+    } else {
+      setCommandHint(null);
+    }
+  }, [input]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
+
+    // Check for slash commands
+    const cmd = parseCommand(input);
+    if (cmd && onCommand) {
+      if (cmd.command === 'help') {
+        // Show help as a local system message
+        const helpText = Object.entries(SLASH_COMMANDS).map(([k, v]) => `${k} — ${v}`).join('\n');
+        setMessages(prev => [...prev, {
+          id: `help-${Date.now()}`,
+          sender_id: 'system',
+          sender_name: 'SYSTEM',
+          sender_role: 'system',
+          text: helpText,
+          timestamp: new Date().toISOString(),
+          lobby_id: lobbyId,
+        }]);
+      } else {
+        onCommand(cmd);
+      }
+      setInput('');
+      return;
+    }
+
     sendMessage(input);
     setInput('');
   };
@@ -153,6 +220,70 @@ export default function LobbyChat({ lobbyId, userId, userName, userRole, collaps
   const handleReaction = (emoji: string) => {
     sendMessage(emoji);
   };
+
+  // ─── Bottom panel mode: full-width, always visible ───
+  if (bottomPanel) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#0D0D0D' }}>
+        <div style={{ padding: '6px 20px', borderBottom: '1px solid #1A1A1A', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontFamily: "var(--font-bebas, 'Bebas Neue'), sans-serif", fontSize: 14, color: '#777', letterSpacing: '0.05em' }}>CHAT</span>
+            <span style={{ fontFamily: "var(--font-jetbrains, 'JetBrains Mono'), monospace", fontSize: 10, color: '#555', background: '#111', padding: '1px 6px', borderRadius: 3 }}>{messages.length}</span>
+          </div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {QUICK_REACTIONS.map((emoji) => (
+              <button
+                key={emoji}
+                onClick={() => handleReaction(emoji)}
+                style={{ background: 'none', border: '1px solid #1A1A1A', borderRadius: 4, width: 28, height: 24, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 100ms' }}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '4px 0', minHeight: 0 }}>
+          {messages.length === 0 && (
+            <div style={{ padding: '16px 20px', textAlign: 'center' }}>
+              <span style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), sans-serif", fontSize: 12, color: '#333' }}>No messages yet — type /help for commands</span>
+            </div>
+          )}
+          {messages.map((msg) => {
+            const isCmd = msg.sender_role === 'system';
+            const roleColor = ROLE_COLORS[msg.sender_role] ?? '#FFF';
+            const badge = ROLE_BADGES[msg.sender_role] ?? undefined;
+            return (
+              <div key={msg.id} style={{ padding: '3px 20px', display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                <span style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), sans-serif", fontSize: 12, fontWeight: 600, color: roleColor, flexShrink: 0 }}>
+                  {badge && <span style={{ marginRight: 2 }}>{badge}</span>}
+                  {msg.sender_name}
+                </span>
+                <span style={{ fontFamily: "var(--font-jetbrains, 'JetBrains Mono'), monospace", fontSize: 9, color: '#444', flexShrink: 0 }}>{relativeTime(msg.timestamp)}</span>
+                <span style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), sans-serif", fontSize: 13, color: isCmd ? '#00DC82' : '#CCC', lineHeight: 1.4, wordBreak: 'break-word', whiteSpace: isCmd ? 'pre-wrap' : undefined }}>{msg.text}</span>
+              </div>
+            );
+          })}
+          <div ref={bottomRef} />
+        </div>
+        {/* Command hint */}
+        {commandHint && (
+          <div style={{ padding: '4px 20px', background: '#111', borderTop: '1px solid #1A1A1A', flexShrink: 0 }}>
+            <span style={{ fontFamily: "var(--font-jetbrains, 'JetBrains Mono'), monospace", fontSize: 10, color: '#F5A0D0' }}>{commandHint}</span>
+          </div>
+        )}
+        <form onSubmit={handleSubmit} style={{ display: 'flex', padding: '6px 16px 8px', borderTop: '1px solid #1A1A1A', gap: 0, flexShrink: 0 }}>
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Message or /command..."
+            maxLength={500}
+            style={{ flex: 1, fontFamily: "var(--font-dm-sans, 'DM Sans'), sans-serif", fontSize: 13, color: '#FFF', background: '#0A0A0A', border: '1px solid #222', borderRight: 'none', borderRadius: '4px 0 0 4px', padding: '8px 12px', outline: 'none', height: 36 }}
+          />
+          <button type="submit" disabled={!input.trim() || sending} style={{ fontFamily: "var(--font-bebas, 'Bebas Neue'), sans-serif", fontSize: 13, color: input.trim() ? '#0A0A0A' : '#333', background: input.trim() ? '#F5A0D0' : '#1A1A1A', border: 'none', borderRadius: '0 4px 4px 0', padding: '0 16px', cursor: input.trim() ? 'pointer' : 'default', height: 36, transition: 'all 150ms', letterSpacing: '0.05em' }}>SEND</button>
+        </form>
+      </div>
+    );
+  }
 
   // ─── Embedded mode: inline in sidebar ───
   if (embedded) {

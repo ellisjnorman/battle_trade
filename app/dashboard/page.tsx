@@ -17,7 +17,7 @@ interface UserProfile {
   badges?: { id: string; name: string; icon: string; earned_at: string }[]
 }
 interface Lobby {
-  id: string; name: string; format: string; status: 'waiting' | 'active'
+  id: string; name: string; format: string; status: 'waiting' | 'active' | 'completed' | 'cancelled'
   player_count: number; spectator_count: number
   config: Record<string, unknown>
   created_by?: string | null
@@ -88,6 +88,7 @@ export default function DashboardPage() {
   useAuthPersist() // Keep localStorage profile_id in sync with Privy session
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [lobbies, setLobbies] = useState<Lobby[]>([])
+  const [myLobbies, setMyLobbies] = useState<Lobby[]>([])
   const [authReady, setAuthReady] = useState(false)
   const [profileLoading, setProfileLoading] = useState(true)
   const [pastBattles, setPastBattles] = useState<PastBattle[]>([])
@@ -102,6 +103,9 @@ export default function DashboardPage() {
   const [practiceBotCount, setPracticeBotCount] = useState(4)
   const [saving, setSaving] = useState(false)
   const [selectedLobby, setSelectedLobby] = useState<string | null>(null)
+  const [editingLobby, setEditingLobby] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [showMyBattles, setShowMyBattles] = useState(false)
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
   const targetPnl = useRef(0)
   const animFrame = useRef<number>(0)
@@ -159,10 +163,11 @@ export default function DashboardPage() {
         } catch {}
       }
 
-      const [profileRes, lobbiesRes, lbRes] = await Promise.allSettled([
+      const [profileRes, lobbiesRes, lbRes, mineRes] = await Promise.allSettled([
         pid ? fetch(`/api/profile/${pid}`) : Promise.resolve(null),
         fetch('/api/lobbies/active'),
         fetch('/api/leaderboard'),
+        pid ? fetch(`/api/lobbies/mine?profile_id=${pid}`) : Promise.resolve(null),
       ])
 
       if (!cancelled) {
@@ -178,6 +183,10 @@ export default function DashboardPage() {
         if (lbRes.status === 'fulfilled' && (lbRes.value as Response).ok) {
           const d = await (lbRes.value as Response).json()
           setLeaderboard((d.leaderboard ?? d.profiles ?? []).slice(0, 5))
+        }
+        if (mineRes.status === 'fulfilled' && mineRes.value && (mineRes.value as Response).ok) {
+          const d = await (mineRes.value as Response).json()
+          setMyLobbies(d.lobbies ?? [])
         }
         setProfileLoading(false)
       }
@@ -234,7 +243,42 @@ export default function DashboardPage() {
       const r = await fetch(`/api/lobby/${lobbyId}/manage`, {
         method: 'DELETE', headers: { Authorization: localStorage.getItem('bt_profile_id') || '' },
       })
-      if (r.ok) { setLobbies(prev => prev.filter(l => l.id !== lobbyId)); setSelectedLobby(null) }
+      if (r.ok) {
+        setLobbies(prev => prev.filter(l => l.id !== lobbyId))
+        setMyLobbies(prev => prev.filter(l => l.id !== lobbyId))
+        setSelectedLobby(null)
+      }
+    } catch {} finally { setSaving(false) }
+  }, [])
+
+  const cancelLobby = useCallback(async (lobbyId: string) => {
+    setSaving(true)
+    try {
+      const r = await fetch(`/api/lobby/${lobbyId}/manage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: localStorage.getItem('bt_profile_id') || '' },
+        body: JSON.stringify({ action: 'cancel' }),
+      })
+      if (r.ok) {
+        setMyLobbies(prev => prev.map(l => l.id === lobbyId ? { ...l, status: 'cancelled' as Lobby['status'] } : l))
+        setLobbies(prev => prev.filter(l => l.id !== lobbyId))
+      }
+    } catch {} finally { setSaving(false) }
+  }, [])
+
+  const editLobby = useCallback(async (lobbyId: string, name: string) => {
+    setSaving(true)
+    try {
+      const r = await fetch(`/api/lobby/${lobbyId}/manage`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: localStorage.getItem('bt_profile_id') || '' },
+        body: JSON.stringify({ name }),
+      })
+      if (r.ok) {
+        setMyLobbies(prev => prev.map(l => l.id === lobbyId ? { ...l, name } : l))
+        setLobbies(prev => prev.map(l => l.id === lobbyId ? { ...l, name } : l))
+        setEditingLobby(null)
+      }
     } catch {} finally { setSaving(false) }
   }, [])
 
@@ -792,6 +836,130 @@ export default function DashboardPage() {
                     background: c.surface, padding: '12px 20px', borderRadius: radius.md,
                     border: `1px solid ${c.border}`, textDecoration: 'none',
                   }}>Host a Battle</Link>
+                </div>
+              )}
+
+              {/* ═══ MY BATTLES — Admin management for created lobbies ═══ */}
+              {myLobbies.length > 0 && (
+                <div className="fu fu4" style={{
+                  border: `1px solid ${c.border}`, borderRadius: radius.lg, background: c.surface,
+                  overflow: 'hidden', marginTop: 16,
+                }}>
+                  <button onClick={() => setShowMyBattles(!showMyBattles)} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%',
+                    padding: '14px 18px', background: 'none', border: 'none', cursor: 'pointer',
+                    borderBottom: showMyBattles ? `1px solid ${c.border}` : 'none',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontFamily: font.display, fontSize: 18, color: c.pink, letterSpacing: '.06em' }}>MY BATTLES</span>
+                      <span style={{
+                        fontFamily: font.mono, fontSize: 10, fontWeight: 700, color: c.bg,
+                        background: c.pink, padding: '2px 7px', borderRadius: 4,
+                      }}>{myLobbies.length}</span>
+                    </div>
+                    <span style={{ fontFamily: font.mono, fontSize: 14, color: c.text3, transition: 'transform .2s', transform: showMyBattles ? 'rotate(180deg)' : 'none' }}>▾</span>
+                  </button>
+
+                  {showMyBattles && (
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      {myLobbies.map(l => {
+                        const isEditing = editingLobby === l.id
+                        const statusColor = l.status === 'active' ? c.green : l.status === 'waiting' ? '#FFD700' : l.status === 'cancelled' ? c.red : c.text4
+                        const statusLabel = l.status === 'active' ? 'LIVE' : l.status === 'waiting' ? 'OPEN' : l.status === 'cancelled' ? 'CANCELLED' : 'ENDED'
+                        return (
+                          <div key={l.id} style={{ borderBottom: `1px solid ${c.border}`, padding: '12px 18px' }}>
+                            {/* Row 1: Name + Status */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                              {isEditing ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+                                  <input
+                                    value={editName}
+                                    onChange={e => setEditName(e.target.value)}
+                                    maxLength={64}
+                                    autoFocus
+                                    style={{
+                                      fontFamily: font.sans, fontSize: 13, fontWeight: 600, color: c.text,
+                                      background: c.bg, border: `1px solid ${c.pink}`, borderRadius: 4,
+                                      padding: '4px 8px', flex: 1, outline: 'none',
+                                    }}
+                                    onKeyDown={e => { if (e.key === 'Enter') editLobby(l.id, editName); if (e.key === 'Escape') setEditingLobby(null) }}
+                                  />
+                                  <button onClick={() => editLobby(l.id, editName)} disabled={saving || !editName.trim()} style={{
+                                    fontFamily: font.mono, fontSize: 10, fontWeight: 700, color: c.bg, background: c.green,
+                                    border: 'none', padding: '5px 10px', borderRadius: 4, cursor: 'pointer',
+                                  }}>SAVE</button>
+                                  <button onClick={() => setEditingLobby(null)} style={{
+                                    fontFamily: font.mono, fontSize: 10, fontWeight: 700, color: c.text3, background: 'none',
+                                    border: `1px solid ${c.border}`, padding: '5px 8px', borderRadius: 4, cursor: 'pointer',
+                                  }}>ESC</button>
+                                </div>
+                              ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+                                  <span style={{ fontFamily: font.sans, fontSize: 13, fontWeight: 600, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</span>
+                                  <span style={{
+                                    fontFamily: font.mono, fontSize: 8, fontWeight: 700, color: statusColor,
+                                    background: `${statusColor}15`, border: `1px solid ${statusColor}33`,
+                                    padding: '1px 6px', borderRadius: 3, flexShrink: 0,
+                                  }}>{statusLabel}</span>
+                                </div>
+                              )}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, marginLeft: 8 }}>
+                                <span style={{ fontFamily: font.mono, fontSize: 10, color: c.text4 }}>{l.player_count ?? 0} players</span>
+                              </div>
+                            </div>
+
+                            {/* Row 2: Actions */}
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                              {/* Admin panel link */}
+                              {(l.status === 'active' || l.status === 'waiting') && (
+                                <Link href={`/lobby/${l.id}/admin`} style={{
+                                  fontFamily: font.mono, fontSize: 10, fontWeight: 700, color: c.pink,
+                                  background: c.pinkDim, border: `1px solid ${c.pinkBorder}`,
+                                  padding: '5px 12px', borderRadius: 4, textDecoration: 'none',
+                                }}>ADMIN PANEL</Link>
+                              )}
+                              {/* View lobby */}
+                              <Link href={`/lobby/${l.id}`} style={{
+                                fontFamily: font.mono, fontSize: 10, fontWeight: 700, color: c.text2,
+                                background: c.hover, border: `1px solid ${c.border}`,
+                                padding: '5px 12px', borderRadius: 4, textDecoration: 'none',
+                              }}>VIEW</Link>
+                              {/* Edit name */}
+                              {(l.status === 'active' || l.status === 'waiting') && !isEditing && (
+                                <button onClick={() => { setEditingLobby(l.id); setEditName(l.name) }} style={{
+                                  fontFamily: font.mono, fontSize: 10, fontWeight: 700, color: c.text3,
+                                  background: 'none', border: `1px solid ${c.border}`,
+                                  padding: '5px 10px', borderRadius: 4, cursor: 'pointer',
+                                }}>EDIT</button>
+                              )}
+                              {/* Cancel (active/waiting) */}
+                              {(l.status === 'active' || l.status === 'waiting') && (
+                                <button onClick={() => { if (confirm(`Cancel "${l.name}"? This will end all rounds and close all positions.`)) cancelLobby(l.id) }} disabled={saving} style={{
+                                  fontFamily: font.mono, fontSize: 10, fontWeight: 700, color: '#FF9900',
+                                  background: 'rgba(255,153,0,.06)', border: '1px solid rgba(255,153,0,.2)',
+                                  padding: '5px 10px', borderRadius: 4, cursor: 'pointer',
+                                }}>CANCEL</button>
+                              )}
+                              {/* Delete (waiting or cancelled only) */}
+                              {(l.status === 'waiting' || l.status === 'cancelled') && (
+                                <button onClick={() => { if (confirm(`Permanently delete "${l.name}"? This cannot be undone.`)) deleteLobby(l.id) }} disabled={saving} style={{
+                                  fontFamily: font.mono, fontSize: 10, fontWeight: 700, color: c.red,
+                                  background: c.redDim, border: `1px solid rgba(255,68,102,.15)`,
+                                  padding: '5px 10px', borderRadius: 4, cursor: 'pointer',
+                                }}>DELETE</button>
+                              )}
+                            </div>
+
+                            {/* Row 3: Meta */}
+                            <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
+                              <span style={{ fontFamily: font.sans, fontSize: 9, color: c.text4 }}>{l.format ?? 'elimination'}</span>
+                              {l.created_at && <span style={{ fontFamily: font.sans, fontSize: 9, color: c.text4 }}>Created {timeAgo(l.created_at)}</span>}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
