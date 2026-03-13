@@ -299,7 +299,7 @@ function NarrativeFeed({ lobbyState }: { lobbyState: LobbyState }) {
   // Generate narrative from current state
   const leader = lobbyState.traders.find(t => t.rank === 1)
   const narrativePrompt = leader
-    ? `${leader.name} leads with ${leader.return >= 0 ? '+' : ''}${leader.return.toFixed(1)}% return. ${leader.positions.length} open position${leader.positions.length !== 1 ? 's' : ''}. ${lobbyState.sabotageEvents.length > 0 ? 'Market events are flying.' : 'The arena is quiet... for now.'}`
+    ? `${leader.name} leads with ${leader.return >= 0 ? '+' : ''}${leader.return.toFixed(1)}% return. ${leader.positions.length} open position${leader.positions.length !== 1 ? 's' : ''}. ${lobbyState.sabotageEvents.length > 0 ? 'Market events are flying.' : 'The lobby is quiet... for now.'}`
     : 'Waiting for the round to begin...'
 
   return (

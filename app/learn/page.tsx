@@ -104,7 +104,7 @@ export default function LearnPage() {
 
       <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px' }}>
         <h1 style={{ fontFamily: B, fontSize: 48, color: 'white', letterSpacing: '0.05em', marginBottom: 8 }}>TRADING ACADEMY</h1>
-        <p style={{ fontFamily: S, fontSize: 14, color: '#888', marginBottom: 32 }}>Learn to trade. Sharpen your strategy. Dominate the arena.</p>
+        <p style={{ fontFamily: S, fontSize: 14, color: '#888', marginBottom: 32 }}>Learn to trade. Sharpen your strategy. Build your edge.</p>
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 32, borderBottom: '1px solid #1A1A1A', paddingBottom: 0 }}>

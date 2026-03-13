@@ -152,7 +152,7 @@ const ROLE_TITLES: Record<TutorialRole, string> = {
 };
 
 const ROLE_SUBTITLES: Record<TutorialRole, string> = {
-  player: 'Everything you need to dominate the arena',
+  player: 'Everything you need to compete and win',
   spectator: 'How to watch, bet, and cause chaos',
   admin: 'Your command center walkthrough',
 };

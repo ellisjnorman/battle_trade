@@ -238,7 +238,7 @@ export default function LandingPage() {
               <span style={{fontFamily:M,fontSize:11,color:'#00DC82'}}>{total} live</span>
             </div>
           )}
-          <Link href="/markets" className="desk-only" style={{fontFamily:S,fontSize:14,fontWeight:500,color:'#666',textDecoration:'none',transition:'color .15s'}}>Arenas</Link>
+          <Link href="/markets" className="desk-only" style={{fontFamily:S,fontSize:14,fontWeight:500,color:'#666',textDecoration:'none',transition:'color .15s'}}>Battles</Link>
           <Link href="/learn" className="desk-only" style={{fontFamily:S,fontSize:14,fontWeight:500,color:'#666',textDecoration:'none',transition:'color .15s'}}>Learn</Link>
           <button onClick={login} className="btn-primary" style={{fontSize:14,padding:'10px 24px'}}>
             Sign In
@@ -255,7 +255,7 @@ export default function LandingPage() {
         <div className="hero-grid" style={{maxWidth:1200,width:'100%',margin:'0 auto',padding:'100px 32px 60px',display:'flex',alignItems:'center',gap:80}}>
           <div className="hero-left" style={{flex:1,maxWidth:560}}>
             <div className="anim-up" style={{animationDelay:'.1s',marginBottom:20}}>
-              <span style={{fontFamily:M,fontSize:12,color:'#F5A0D0',letterSpacing:'.08em',fontWeight:500}}>THE CREDIT SCORE FOR TRADERS</span>
+              <span style={{fontFamily:M,fontSize:12,color:'#F5A0D0',letterSpacing:'.08em',fontWeight:500}}>YOUR RANK IS YOUR REPUTATION</span>
             </div>
 
             <h1 className="anim-up h1-size" style={{
@@ -307,7 +307,7 @@ export default function LandingPage() {
               <div style={{padding:'12px 20px',borderBottom:'1px solid rgba(255,255,255,.05)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
                   <div className="live-dot" style={{width:5,height:5}} />
-                  <span style={{fontFamily:M,fontSize:10,fontWeight:600,color:'#888',letterSpacing:'.06em'}}>LIVE ARENA · RANKS UPDATING</span>
+                  <span style={{fontFamily:M,fontSize:10,fontWeight:600,color:'#888',letterSpacing:'.06em'}}>LIVE BATTLE · RANKS UPDATING</span>
                 </div>
                 <span style={{fontFamily:M,fontSize:14,fontWeight:700,color:battleTimer < 30 ? '#FF4466' : '#FFF',animation:battleTimer < 30 ? 'timerGlow 1s ease infinite' : 'none',letterSpacing:'.04em'}}>{timerMin}:{timerSec.toString().padStart(2, '0')}</span>
               </div>
@@ -420,7 +420,7 @@ export default function LandingPage() {
           <Reveal delay={.25}>
             <div style={{marginTop:32,padding:'20px 28px',background:'rgba(245,160,208,.04)',border:'1px solid rgba(245,160,208,.08)',borderRadius:12,textAlign:'center'}}>
               <span style={{fontFamily:S,fontSize:15,color:'#999',lineHeight:1.7}}>
-                The market needs a <span style={{color:'#F5A0D0',fontWeight:700}}>credit score for traders</span> — verified, portable, and impossible to fake.
+                The market needs a <span style={{color:'#F5A0D0',fontWeight:700}}>reputation system for traders</span> — verified, portable, and impossible to fake.
               </span>
             </div>
           </Reveal>
@@ -440,7 +440,7 @@ export default function LandingPage() {
           </Reveal>
           <div className="steps-grid" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:20}}>
             {[
-              { n: '01', t: 'Compete', d: 'Join a live arena. Trade 60+ assets with real market prices. Free to start.', c: '#F5A0D0' },
+              { n: '01', t: 'Compete', d: 'Join a live battle. Trade 60+ assets with real market prices. Free to start.', c: '#F5A0D0' },
               { n: '02', t: 'Survive', d: 'Market events stress-test your strategy. Exchange outages, flash crashes, margin calls.', c: '#FF4466' },
               { n: '03', t: 'Rank Up', d: '5-pillar composite score. Performance, risk, consistency, adaptability, community.', c: '#00DC82' },
               { n: '04', t: 'Get Copied', d: 'Top 20 unlock copy trading. Followers mirror your trades. Earn 15% of their profits.', c: '#FFD700' },
@@ -544,7 +544,7 @@ export default function LandingPage() {
               TOP 20 BECOME INVESTABLE
             </h2>
             <p style={{fontFamily:S,fontSize:15,color:'#555',maxWidth:520,lineHeight:1.7,marginBottom:56}}>
-              Prove yourself in the arena. Reach the top 20 by rank. Followers mirror your trades across any exchange. You earn 15% of every profitable trade they copy.
+              Prove yourself in competition. Reach the top 20 by rank. Followers mirror your trades across any exchange. You earn 15% of every profitable trade they copy.
             </p>
           </Reveal>
 
@@ -604,12 +604,12 @@ export default function LandingPage() {
       </section>
 
       {/* ================================================================== */}
-      {/* THE ARENA — Game mechanics (compressed)                            */}
+      {/* THE GAME — Game mechanics (compressed)                              */}
       {/* ================================================================== */}
       <section className="section-pad" style={{padding:'100px 32px'}}>
         <div style={{maxWidth:1000,margin:'0 auto'}}>
           <Reveal>
-            <p style={{fontFamily:S,fontSize:14,fontWeight:500,color:'#F5A0D0',marginBottom:12}}>The arena</p>
+            <p style={{fontFamily:S,fontSize:14,fontWeight:500,color:'#F5A0D0',marginBottom:12}}>The game</p>
             <h2 style={{fontFamily:B,fontSize:'clamp(32px,5vw,56px)',lineHeight:.92,letterSpacing:'-.01em',marginBottom:20}}>
               THE GAME IS THE EXAM
             </h2>
@@ -668,7 +668,7 @@ export default function LandingPage() {
                 {/* Live battles */}
                 <div className="card" style={{padding:0}}>
                   <div style={{padding:'14px 24px',borderBottom:'1px solid rgba(255,255,255,.05)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                    <span style={{fontFamily:M,fontSize:10,fontWeight:600,color:'#888',letterSpacing:'.06em'}}>LIVE ARENAS</span>
+                    <span style={{fontFamily:M,fontSize:10,fontWeight:600,color:'#888',letterSpacing:'.06em'}}>LIVE BATTLES</span>
                     <Link href="/markets" style={{fontFamily:S,fontSize:11,color:'#F5A0D0',textDecoration:'none'}}>View all</Link>
                   </div>
                   {loaded && battles.length > 0 ? battles.slice(0, 4).map(b => (
@@ -682,8 +682,8 @@ export default function LandingPage() {
                     </div>
                   )) : (
                     <div style={{padding:'32px 24px',textAlign:'center'}}>
-                      <div style={{fontFamily:S,fontSize:14,fontWeight:600,color:'#333',marginBottom:8}}>No arenas live</div>
-                      <button onClick={login} className="btn-primary" style={{fontSize:12,padding:'8px 20px'}}>Create Arena</button>
+                      <div style={{fontFamily:S,fontSize:14,fontWeight:600,color:'#333',marginBottom:8}}>No battles live</div>
+                      <button onClick={login} className="btn-primary" style={{fontSize:12,padding:'8px 20px'}}>Start Battle</button>
                     </div>
                   )}
                 </div>
@@ -737,10 +737,10 @@ export default function LandingPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/brand/logo-main.png" alt="" style={{height:20,width:'auto',opacity:.2}} onError={e=>{(e.target as HTMLImageElement).style.display='none'}} />
           <span style={{fontFamily:S,fontSize:11,color:'#222',maxWidth:440,lineHeight:1.5}}>
-            Battle Trade builds verified trader identity through live competition. The arena is the verification engine. Copy trading is the business.
+            Battle Trade builds verified trader identity through live competition. The game is the verification engine. Copy trading is the business.
           </span>
           <div style={{display:'flex',gap:20}}>
-            <Link href="/markets" style={{fontFamily:S,fontSize:12,color:'#333',textDecoration:'none'}}>Arenas</Link>
+            <Link href="/markets" style={{fontFamily:S,fontSize:12,color:'#333',textDecoration:'none'}}>Battles</Link>
             <Link href="/learn" style={{fontFamily:S,fontSize:12,color:'#333',textDecoration:'none'}}>Learn</Link>
           </div>
         </div>

@@ -496,7 +496,7 @@ export default function DuelPage() {
                   MATCH FOUND
                 </div>
                 <div style={{ fontSize: 14, color: c.text2, marginTop: 8 }}>
-                  Entering arena...
+                  Entering battle...
                 </div>
                 <div style={{
                   width: 120, height: 4, borderRadius: 2,

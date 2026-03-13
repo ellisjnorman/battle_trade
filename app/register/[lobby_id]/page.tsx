@@ -243,7 +243,7 @@ export default function RegisterPage() {
                   cursor: submitting ? 'not-allowed' : 'pointer',
                 }}
               >
-                {submitting ? 'LOCKING IN...' : (entryFee > 0 ? `ENTER THE ARENA · ${entryFee.toLocaleString()} CR` : 'ENTER THE ARENA')}
+                {submitting ? 'LOCKING IN...' : (entryFee > 0 ? `JOIN THE BATTLE · ${entryFee.toLocaleString()} CR` : 'JOIN THE BATTLE')}
               </button>
               <button
                 onClick={() => { setIsCompetitor(false); handleSubmit(false); }}

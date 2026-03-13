@@ -7,7 +7,7 @@ const API_DOCS = {
   info: {
     title: 'Battle Trade API',
     version: '1.0.0',
-    description: 'Competitive trading arena API — lobbies, positions, sabotage, events, prediction markets',
+    description: 'Competitive trading platform API — lobbies, positions, sabotage, events, prediction markets',
   },
   servers: [
     { url: '/api', description: 'Relative' },
