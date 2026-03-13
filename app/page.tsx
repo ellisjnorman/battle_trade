@@ -198,7 +198,7 @@ export default function LandingPage() {
         @media(min-width:769px){.mob-only{display:none!important}}
         @media(max-width:768px){
           .desk-only{display:none!important}
-          .hero-grid{flex-direction:column!important;gap:40px!important;padding-top:100px!important}
+          .hero-grid{flex-direction:column!important;gap:24px!important;padding-top:80px!important;padding-bottom:20px!important}
           .hero-left{max-width:100%!important}
           .hero-right{max-width:100%!important;min-width:0!important}
           .h1-size{font-size:clamp(44px,14vw,72px)!important}
@@ -253,16 +253,16 @@ export default function LandingPage() {
       <section style={{minHeight:'100dvh',display:'flex',flexDirection:'column',justifyContent:'center',position:'relative'}}>
         <div style={{position:'absolute',top:'20%',left:'50%',transform:'translateX(-50%)',width:'80vw',height:'50vh',background:'radial-gradient(ellipse at center,rgba(245,160,208,.04) 0%,transparent 70%)',pointerEvents:'none'}} />
 
-        <div className="hero-grid" style={{maxWidth:1200,width:'100%',margin:'0 auto',padding:'100px 32px 60px',display:'flex',alignItems:'center',gap:80}}>
+        <div className="hero-grid" style={{maxWidth:1200,width:'100%',margin:'0 auto',padding:'80px 32px 32px',display:'flex',alignItems:'center',gap:60}}>
           <div className="hero-left" style={{flex:1,maxWidth:560}}>
-            <div className="anim-up" style={{animationDelay:'.1s',marginBottom:20}}>
-              <span style={{fontFamily:M,fontSize:12,color:'#F5A0D0',letterSpacing:'.08em',fontWeight:500}}>LEARN TO TRADE · COMPETE TO PROVE IT</span>
+            <div className="anim-up" style={{animationDelay:'.1s',marginBottom:14}}>
+              <span style={{fontFamily:M,fontSize:11,color:'#F5A0D0',letterSpacing:'.08em',fontWeight:500}}>LEARN TO TRADE · COMPETE TO PROVE IT</span>
             </div>
 
             <h1 className="anim-up h1-size" style={{
               animationDelay:'.2s',fontFamily:B,
-              fontSize:'clamp(48px,6.5vw,96px)',lineHeight:.95,letterSpacing:'-.02em',
-              marginBottom:28,
+              fontSize:'clamp(44px,5.5vw,80px)',lineHeight:.93,letterSpacing:'-.02em',
+              marginBottom:20,
             }}>
               <span style={{display:'block'}}>PROVE YOU</span>
               <span style={{display:'block'}}>TRADE BETTER</span>
@@ -272,89 +272,120 @@ export default function LandingPage() {
               </span>
             </h1>
 
-            <p className="anim-up" style={{animationDelay:'.4s',fontFamily:S,fontSize:17,color:'#666',lineHeight:1.7,marginBottom:36,maxWidth:440}}>
-              Learn to trade by actually trading — risk-free. Compete in live battles with real market data, build real skills through play, and earn a verified rank that proves what you know.
+            <p className="anim-up" style={{animationDelay:'.4s',fontFamily:S,fontSize:15,color:'#666',lineHeight:1.6,marginBottom:24,maxWidth:420}}>
+              Learn to trade by actually trading — risk-free. Battle with real market data, build real skills, and earn a rank that proves what you know.
             </p>
 
-            <div className="anim-up cta-stack" style={{animationDelay:'.55s',display:'flex',gap:12,marginBottom:48}}>
-              <button onClick={login} className="btn-primary" style={{fontSize:17,padding:'16px 44px'}}>
+            <div className="anim-up cta-stack" style={{animationDelay:'.55s',display:'flex',gap:12,marginBottom:24}}>
+              <button onClick={login} className="btn-primary" style={{fontSize:16,padding:'14px 40px'}}>
                 Build Your Rank
               </button>
-              <Link href="#how-it-works" className="btn-secondary" style={{fontSize:15,padding:'16px 32px',textDecoration:'none',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>
+              <Link href="#how-it-works" className="btn-secondary" style={{fontSize:14,padding:'14px 28px',textDecoration:'none',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>
                 How It Works
               </Link>
             </div>
 
-            <div className="anim-up" style={{animationDelay:'.7s',display:'flex',gap:36,flexWrap:'wrap'}}>
+            <div className="anim-up" style={{animationDelay:'.7s',display:'flex',gap:28,flexWrap:'wrap'}}>
               {[
                 { v: '$0', l: 'risk to start' },
                 { v: '60+', l: 'real assets' },
                 { v: 'Top 20', l: 'earn income' },
               ].map(s => (
                 <div key={s.l}>
-                  <span style={{fontFamily:S,fontSize:20,fontWeight:700,color:'#FFF'}}>{s.v}</span>
-                  <span style={{fontFamily:S,fontSize:13,color:'#444',marginLeft:6}}>{s.l}</span>
+                  <span style={{fontFamily:S,fontSize:18,fontWeight:700,color:'#FFF'}}>{s.v}</span>
+                  <span style={{fontFamily:S,fontSize:12,color:'#444',marginLeft:5}}>{s.l}</span>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Live Rank Builder — animated widget */}
-          <div className="anim-up hero-right" style={{animationDelay:'.4s',flex:0,minWidth:340,maxWidth:420}}>
-            <div className="card" style={{overflow:'hidden',position:'relative'}}>
+          <div className="anim-up hero-right" style={{animationDelay:'.4s',flex:0,minWidth:380,maxWidth:460}}>
+            <div style={{overflow:'hidden',position:'relative',background:'#0D0D0D',border:'1px solid rgba(255,255,255,.06)',borderRadius:0}}>
               <div style={{position:'absolute',left:0,right:0,height:1,background:'linear-gradient(90deg,transparent,rgba(245,160,208,.06),transparent)',animation:'scanline 4s linear infinite',pointerEvents:'none',zIndex:1}} />
 
-              {/* Header */}
-              <div style={{padding:'12px 20px',borderBottom:'1px solid rgba(255,255,255,.05)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                <div style={{display:'flex',alignItems:'center',gap:8}}>
-                  <div className="live-dot" style={{width:5,height:5}} />
-                  <span style={{fontFamily:M,fontSize:10,fontWeight:600,color:'#888',letterSpacing:'.06em'}}>LIVE BATTLE · RANKS UPDATING</span>
+              {/* Header — broadcast style */}
+              <div style={{padding:'14px 24px',borderBottom:'1px solid #1A1A1A',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  <div className="live-dot" style={{width:7,height:7}} />
+                  <span style={{fontFamily:S,fontSize:12,fontWeight:500,color:'#555',letterSpacing:'.2em'}}>STANDINGS</span>
+                  <span style={{fontFamily:M,fontSize:10,color:'#333'}}>4 ACTIVE</span>
                 </div>
-                <span style={{fontFamily:M,fontSize:14,fontWeight:700,color:battleTimer < 30 ? '#FF4466' : '#FFF',animation:battleTimer < 30 ? 'timerGlow 1s ease infinite' : 'none',letterSpacing:'.04em'}}>{timerMin}:{timerSec.toString().padStart(2, '0')}</span>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{fontFamily:M,fontSize:10,color:'#333',letterSpacing:'.1em'}}>RD 2</span>
+                  <span style={{fontFamily:M,fontSize:20,fontWeight:700,color:battleTimer < 30 ? '#FF3333' : '#FFF',animation:battleTimer < 30 ? 'timerGlow 1s ease infinite' : 'none',letterSpacing:'.04em'}}>{timerMin}:{timerSec.toString().padStart(2, '0')}</span>
+                </div>
               </div>
 
-              {/* Leaderboard with ranks */}
-              <div style={{padding:'14px 20px 10px'}}>
+              {/* Leaderboard rows — broadcast style */}
+              <div style={{padding:0}}>
                 {sorted.map((p, i) => {
-                  const barW = Math.max(5, Math.min(95, 50 + p.pnl))
                   const isPositive = p.pnl >= 0
+                  const isFirst = i === 0
+                  const isTop3 = i < 3
                   return (
-                    <div key={p.name} style={{marginBottom:i < 3 ? 10 : 0}}>
-                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
-                        <div style={{display:'flex',alignItems:'center',gap:6}}>
-                          <div style={{width:20,height:20,borderRadius:6,background:p.grad,border:`1.5px solid ${p.tierCol}50`,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:M,fontSize:9,fontWeight:700,color:'#FFF',textShadow:'0 1px 2px rgba(0,0,0,.4)'}}>{p.name[0].toUpperCase()}</div>
-                          <span style={{fontFamily:S,fontSize:12,fontWeight:i===0?700:500,color:i===0?'#FFF':'#999'}}>{p.name}</span>
-                          <span style={{fontFamily:M,fontSize:9,color:p.tierCol,opacity:.7}}>{p.rank}</span>
-                        </div>
-                        <span style={{fontFamily:M,fontSize:13,fontWeight:700,color:isPositive?'#00DC82':'#FF4466',transition:'all .3s'}}>
-                          {isPositive?'+':''}{p.pnl.toFixed(1)}%
-                        </span>
+                    <div key={p.name} style={{
+                      height:56,display:'flex',alignItems:'center',padding:'0 16px',gap:12,
+                      borderBottom:'1px solid rgba(34,34,34,.6)',
+                      background: isFirst ? 'linear-gradient(90deg, rgba(245,160,208,.08) 0%, transparent 100%)' : 'transparent',
+                      transition:'all .5s',
+                    }}>
+                      {/* Rank badge */}
+                      <div style={{
+                        width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',
+                        fontFamily:B,fontSize:22,
+                        background: isFirst ? '#F5A0D0' : isTop3 ? 'rgba(255,255,255,.08)' : 'transparent',
+                        color: isFirst ? '#0A0A0A' : isTop3 ? '#FFF' : '#444',
+                        borderRadius: isFirst ? 0 : 0,
+                        boxShadow: isFirst ? '0 0 12px rgba(245,160,208,.3)' : 'none',
+                      }}>
+                        {i + 1}
                       </div>
-                      <div style={{height:3,background:'rgba(255,255,255,.04)',borderRadius:99,overflow:'hidden'}}>
-                        <div style={{height:'100%',borderRadius:99,background:isPositive?'linear-gradient(90deg,rgba(0,220,130,.3),rgba(0,220,130,.6))':'linear-gradient(90deg,rgba(255,68,102,.3),rgba(255,68,102,.6))',width:`${barW}%`,transition:'width .8s cubic-bezier(.4,0,.2,1)',animation:'barPulse 2s ease infinite'}} />
-                      </div>
+
+                      {/* Name */}
+                      <span style={{
+                        fontFamily:S,fontSize:18,flex:1,letterSpacing:'.05em',fontWeight:500,
+                        color: isFirst ? '#F5A0D0' : '#FFF',
+                      }}>{p.name}</span>
+
+                      {/* Return with glow */}
+                      <span style={{
+                        fontFamily:M,fontSize:20,fontWeight:700,
+                        color: isPositive ? '#00FF88' : '#FF3333',
+                        textShadow: isPositive ? '0 0 15px rgba(0,255,136,.5)' : '0 0 15px rgba(255,51,51,.5)',
+                        transition:'all .3s',
+                      }}>
+                        {isPositive?'+':''}{p.pnl.toFixed(1)}%
+                      </span>
+
+                      {/* Activity dot */}
+                      <div style={{
+                        width:6,height:6,
+                        background: isPositive ? '#00FF88' : '#FF3333',
+                        boxShadow: isPositive ? '0 0 8px #00FF88' : '0 0 8px #FF3333',
+                      }} />
                     </div>
                   )
                 })}
               </div>
 
-              {/* Rank event feed */}
-              <div style={{borderTop:'1px solid rgba(255,255,255,.04)',padding:'8px 0',maxHeight:120,overflow:'hidden'}}>
+              {/* Event feed */}
+              <div style={{borderTop:'1px solid #1A1A1A',padding:'8px 0',maxHeight:110,overflow:'hidden'}}>
                 {battleEvents.length > 0 ? battleEvents.map((e, i) => (
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 20px',animation:'eventSlide .3s ease both'}}>
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 24px',animation:'eventSlide .3s ease both'}}>
                     <span style={{fontSize:11,flexShrink:0}}>{e.icon}</span>
                     <span style={{fontFamily:M,fontSize:10,color:e.col,fontWeight:500,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.text}</span>
                   </div>
                 )) : (
-                  <div style={{padding:'8px 20px'}}>
+                  <div style={{padding:'8px 24px'}}>
                     <span style={{fontFamily:M,fontSize:10,color:'#222'}}>Waiting for trades...</span>
                   </div>
                 )}
               </div>
 
-              <div style={{padding:'8px 20px',borderTop:'1px solid rgba(255,255,255,.04)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                <span style={{fontFamily:M,fontSize:9,color:'#444'}}>Learn by competing — every trade builds your rank</span>
-                <button onClick={login} style={{fontFamily:S,fontSize:11,fontWeight:600,color:'#0A0A0A',background:'#F5A0D0',border:'none',padding:'6px 16px',borderRadius:6,cursor:'pointer',transition:'all .15s'}}>Start Now</button>
+              <div style={{padding:'12px 24px',borderTop:'1px solid #1A1A1A',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <span style={{fontFamily:S,fontSize:11,color:'#444'}}>Every trade builds your rank</span>
+                <button onClick={login} style={{fontFamily:S,fontSize:12,fontWeight:600,color:'#0A0A0A',background:'#F5A0D0',border:'none',padding:'8px 20px',cursor:'pointer',transition:'all .15s'}}>Start Now</button>
               </div>
             </div>
           </div>

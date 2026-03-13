@@ -118,12 +118,18 @@ export async function POST(
     .eq('lobby_id', lobbyId)
     .in('status', ['active', 'pending', 'frozen']);
 
-  // Close all open positions at current price
-  await sb
-    .from('positions')
-    .update({ status: 'closed', closed_at: new Date().toISOString() })
-    .eq('lobby_id', lobbyId)
-    .eq('status', 'open');
+  // Close all open positions via rounds belonging to this lobby
+  const { data: lobbyRounds } = await sb
+    .from('rounds')
+    .select('id')
+    .eq('lobby_id', lobbyId);
+  if (lobbyRounds && lobbyRounds.length > 0) {
+    await sb
+      .from('positions')
+      .update({ status: 'closed', closed_at: new Date().toISOString() })
+      .in('round_id', lobbyRounds.map(r => r.id))
+      .is('closed_at', null);
+  }
 
   // Set lobby status to cancelled
   const { data, error } = await sb

@@ -1038,7 +1038,7 @@ export default function DashboardPage() {
                           <div style={{ minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                               <span style={{ fontSize: 12, fontWeight: 600, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</span>
-                              {isOwner && <span style={{ fontSize: 7, fontWeight: 700, color: c.pink, background: c.pinkDim, padding: '1px 4px', borderRadius: 2 }}>YOU</span>}
+                              {isOwner && <span style={{ fontSize: 7, fontWeight: 700, color: c.pink, background: c.pinkDim, padding: '1px 4px', borderRadius: 2 }}>HOST</span>}
                             </div>
                             <div style={{ fontSize: 9, color: c.text4 }}>{l.format ?? 'elim'}</div>
                           </div>
@@ -1163,6 +1163,10 @@ export default function DashboardPage() {
                               ) : (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
                                   <span style={{ fontFamily: font.sans, fontSize: 13, fontWeight: 600, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</span>
+                                  <span style={{
+                                    fontFamily: font.mono, fontSize: 7, fontWeight: 700, color: c.pink,
+                                    background: c.pinkDim, padding: '1px 4px', borderRadius: 2, flexShrink: 0,
+                                  }}>HOST</span>
                                   <span style={{
                                     fontFamily: font.mono, fontSize: 8, fontWeight: 700, color: statusColor,
                                     background: `${statusColor}15`, border: `1px solid ${statusColor}33`,
