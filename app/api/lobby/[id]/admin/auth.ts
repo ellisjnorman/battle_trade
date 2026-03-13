@@ -48,8 +48,11 @@ export async function checkAuthWithLobby(request: NextRequest, lobbyId: string):
       .eq('id', lobbyId)
       .single();
 
-    // Creator owns their lobby — verify via Privy JWT (set by middleware)
+    // Creator owns their lobby
     if (lobby?.created_by) {
+      // Direct profile ID match (sent from admin panel as Authorization header)
+      if (safeEqual(authHeader, lobby.created_by)) return true;
+
       // Check x-privy-user-id header (set by middleware after JWT verification)
       const privyUserId = request.headers.get('x-privy-user-id');
       if (privyUserId) {

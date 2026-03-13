@@ -910,16 +910,14 @@ export default function DashboardPage() {
 
                             {/* Row 2: Actions */}
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                              {/* Admin panel link */}
-                              {(l.status === 'active' || l.status === 'waiting') && (
-                                <Link href={`/lobby/${l.id}/admin`} style={{
-                                  fontFamily: font.mono, fontSize: 10, fontWeight: 700, color: c.pink,
-                                  background: c.pinkDim, border: `1px solid ${c.pinkBorder}`,
-                                  padding: '5px 12px', borderRadius: 4, textDecoration: 'none',
-                                }}>ADMIN PANEL</Link>
-                              )}
-                              {/* View lobby */}
-                              <Link href={`/lobby/${l.id}`} style={{
+                              {/* Admin panel link — always available for your lobbies */}
+                              <Link href={`/lobby/${l.id}/admin`} style={{
+                                fontFamily: font.mono, fontSize: 10, fontWeight: 700, color: c.pink,
+                                background: c.pinkDim, border: `1px solid ${c.pinkBorder}`,
+                                padding: '5px 12px', borderRadius: 4, textDecoration: 'none',
+                              }}>ADMIN PANEL</Link>
+                              {/* View lobby — spectate for cancelled/completed, join for active/waiting */}
+                              <Link href={l.status === 'active' || l.status === 'waiting' ? `/lobby/${l.id}` : `/lobby/${l.id}/spectate`} style={{
                                 fontFamily: font.mono, fontSize: 10, fontWeight: 700, color: c.text2,
                                 background: c.hover, border: `1px solid ${c.border}`,
                                 padding: '5px 12px', borderRadius: 4, textDecoration: 'none',
