@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     // Check if already registered in this lobby
     const { data: existingTrader } = await supabase
       .from('traders')
-      .select('id, is_competitor, code')
+      .select('id, code')
       .eq('profile_id', profileId)
       .eq('lobby_id', realLobbyId)
       .maybeSingle();

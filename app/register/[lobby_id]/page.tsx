@@ -257,7 +257,7 @@ export default function RegisterPage() {
                   cursor: submitting ? 'not-allowed' : 'pointer',
                 }}
               >
-                SPECTATE + SABOTAGE
+                SPECTATE + EVENTS
               </button>
             </div>
 

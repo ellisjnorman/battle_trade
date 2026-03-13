@@ -29,10 +29,24 @@ export async function GET(
   }
 
   // Get traders, positions, prices, and profiles in parallel
-  const { data: traders } = await supabase
-    .from('traders')
-    .select('id, name, lobby_id, team_id, is_eliminated, is_competitor, profile_id')
-    .eq('lobby_id', lobbyId);
+  // Try with profile_id, fall back without if column doesn't exist
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let traders: any[] | null = null;
+  {
+    const res = await supabase
+      .from('traders')
+      .select('id, name, lobby_id, team_id, is_eliminated, profile_id')
+      .eq('lobby_id', lobbyId);
+    if (res.error?.message?.includes('profile_id')) {
+      const retry = await supabase
+        .from('traders')
+        .select('id, name, lobby_id, team_id, is_eliminated')
+        .eq('lobby_id', lobbyId);
+      traders = retry.data;
+    } else {
+      traders = res.data;
+    }
+  }
 
   if (!traders || traders.length === 0) {
     return NextResponse.json({ round, traders: [] });

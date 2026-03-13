@@ -26,7 +26,7 @@ const LESSONS = [
   { id: 'risk', title: 'RISK MANAGEMENT', desc: 'Never risk more than 2% of your balance on a single trade. Set stops. Position sizing > entry timing.', icon: '🛡', tag: 'ESSENTIAL', duration: '4 min' },
   { id: 'shorts', title: 'SHORTING EXPLAINED', desc: 'You borrow, sell high, buy back low. Profit from price drops. Unlimited risk if price goes up.', icon: '📉', tag: 'INTERMEDIATE', duration: '3 min' },
   { id: 'stops', title: 'STOP LOSSES', desc: 'A stop-loss automatically closes your position at a set price. Prevents catastrophic losses. Always use one.', icon: '🛑', tag: 'ESSENTIAL', duration: '2 min' },
-  { id: 'sabotage', title: 'SABOTAGE META', desc: 'Save credits early. Attack the leader in round 3+. Shield before you take the lead. Timing > brute force.', icon: '⚡', tag: 'STRATEGY', duration: '5 min' },
+  { id: 'events', title: 'MARKET EVENTS', desc: 'Save credits early. Trigger events on the leader in round 3+. Shield before you take the lead. Timing > brute force.', icon: '⚡', tag: 'STRATEGY', duration: '5 min' },
   { id: 'psychology', title: 'TRADING PSYCHOLOGY', desc: 'Fear and greed are your real opponents. Stick to your plan. Don\'t revenge trade after a loss.', icon: '🧠', tag: 'ADVANCED', duration: '4 min' },
   { id: 'correlation', title: 'ASSET CORRELATION', desc: 'BTC leads the market. When BTC dumps, alts dump harder. Diversify across uncorrelated assets.', icon: '🔗', tag: 'INTERMEDIATE', duration: '3 min' },
 ]
@@ -34,8 +34,8 @@ const LESSONS = [
 const CHALLENGES = [
   { id: 'c1', title: 'THE MINIMALIST', desc: 'Win a round with only 1 trade.', reward: '200 CR', badge: 'DISCIPLINE', difficulty: 'MEDIUM' },
   { id: 'c2', title: 'DIVERSIFIER', desc: 'Trade 5 different assets in one round.', reward: '150 CR', badge: null, difficulty: 'EASY' },
-  { id: 'c3', title: 'SURVIVOR', desc: 'Survive 3 sabotages in a single round.', reward: '300 CR', badge: 'TANK', difficulty: 'HARD' },
-  { id: 'c4', title: 'PACIFIST', desc: 'Win a round without attacking anyone.', reward: '250 CR', badge: 'PACIFIST', difficulty: 'HARD' },
+  { id: 'c3', title: 'SURVIVOR', desc: 'Survive 3 market events in a single round.', reward: '300 CR', badge: 'TANK', difficulty: 'HARD' },
+  { id: 'c4', title: 'PACIFIST', desc: 'Win a round without triggering any events.', reward: '250 CR', badge: 'PACIFIST', difficulty: 'HARD' },
   { id: 'c5', title: 'NO LEVERAGE', desc: 'Win with 1x leverage only.', reward: '200 CR', badge: null, difficulty: 'MEDIUM' },
   { id: 'c6', title: 'SPEED RUN', desc: 'Open and close 5 profitable trades in 2 minutes.', reward: '400 CR', badge: 'SCALPER', difficulty: 'EXPERT' },
 ]

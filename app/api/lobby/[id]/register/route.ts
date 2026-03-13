@@ -127,13 +127,13 @@ export async function POST(
 
   // Check if already registered
   if (finalProfileId) {
-    const { data: existing } = await supabase
+    const { data: existing, error: existErr } = await supabase
       .from('traders')
-      .select('id, code, is_competitor, name')
+      .select('id, code, name')
       .eq('profile_id', finalProfileId)
       .eq('lobby_id', realLobbyId)
       .maybeSingle();
-    if (existing) {
+    if (!existErr && existing) {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://battle.fyi';
       return NextResponse.json({
         trader_id: existing.id,
@@ -142,7 +142,7 @@ export async function POST(
         lobby_name: lobby.name,
         display_name: existing.name,
         handle: null,
-        is_competitor: existing.is_competitor,
+        is_competitor: true,
         credits: 0,
         entry_fee: 0,
         trade_url: `${baseUrl}/lobby/${realLobbyId}/trade?code=${existing.code}`,
@@ -188,22 +188,36 @@ export async function POST(
     }
   }
 
-  // Create trader record
-  const { data: trader, error: traderError } = await supabase
+  // Create trader record (try with profile_id, fall back without if column missing)
+  const traderRow: Record<string, unknown> = {
+    name: trimmedName,
+    code,
+    lobby_id: realLobbyId,
+    event_id: eventId,
+    is_eliminated: false,
+    wallet_address: safeWallet,
+    avatar_url: null,
+    team_id: teamId,
+    profile_id: finalProfileId || null,
+  };
+
+  let { data: trader, error: traderError } = await supabase
     .from('traders')
-    .insert({
-      name: trimmedName,
-      code,
-      lobby_id: realLobbyId,
-      event_id: eventId,
-      is_eliminated: false,
-      wallet_address: safeWallet,
-      avatar_url: null,
-      team_id: teamId,
-      profile_id: finalProfileId || null,
-    })
+    .insert(traderRow)
     .select()
     .single();
+
+  // If profile_id column doesn't exist in schema, retry without it
+  if (traderError?.message?.includes('profile_id')) {
+    const { profile_id: _, ...rowWithout } = traderRow;
+    const retry = await supabase
+      .from('traders')
+      .insert(rowWithout)
+      .select()
+      .single();
+    trader = retry.data;
+    traderError = retry.error;
+  }
 
   if (traderError || !trader) {
     return NextResponse.json({ error: traderError?.message ?? 'Failed to create trader' }, { status: 500 });

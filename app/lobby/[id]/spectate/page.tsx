@@ -10,6 +10,7 @@ import LobbyChat from '@/components/lobby-chat';
 import { StreamPlayer } from '@/components/stream-player';
 import PredictionPanel from '@/components/prediction-panel';
 import type { BetConfirmation } from '@/components/prediction-panel';
+import TutorialOverlay, { resetTutorial } from '@/components/tutorial-overlay';
 
 // ---------------------------------------------------------------------------
 // Fonts
@@ -23,7 +24,7 @@ const sans = "var(--font-dm-sans, 'DM Sans'), sans-serif";
 // Types
 // ---------------------------------------------------------------------------
 
-type Tab = 'watch' | 'attack' | 'predict';
+type Tab = 'watch' | 'events' | 'predict';
 
 interface TraderInfo {
   trader_id: string;
@@ -123,6 +124,7 @@ function SpectatePageInner() {
   const addToast = useToastStore((s) => s.addToast);
   const [betStreak, setBetStreak] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [tutorialKey, setTutorialKey] = useState(0);
 
   // Round
   const [round, setRound] = useState<RoundData | null>(null);
@@ -625,7 +627,7 @@ function SpectatePageInner() {
         setCooldownEnd(Date.now() + 45_000); // 45s cooldown
         setSelectedWeapon(null);
         fetchCredits();
-        addToast(`${weapon.icon} ${weapon.name} launched at ${targetName}!`, 'attack', weapon.icon);
+        addToast(`${weapon.icon} ${weapon.name} triggered on ${targetName}!`, 'attack', weapon.icon);
       } else {
         addToast(data?.error || 'Attack failed', 'error');
       }
@@ -752,7 +754,7 @@ function SpectatePageInner() {
           </button>
 
           <div style={{ fontFamily: mono, fontSize: 11, color: '#555', textAlign: 'center' }}>
-            You&apos;ll get 500CR free · Enough for {Math.floor(500 / cheapestWeapon)} attacks
+            You&apos;ll get 500CR free · Enough for {Math.floor(500 / cheapestWeapon)} events
           </div>
         </div>
       </>
@@ -789,32 +791,7 @@ function SpectatePageInner() {
         {/* ============================================================= */}
         {/* ONBOARDING OVERLAY — FIX #8                                   */}
         {/* ============================================================= */}
-        {showOnboarding && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, maxWidth: 375, margin: '0 auto' }}>
-            <div style={{ fontFamily: bebas, fontSize: 36, color: '#FFF', textAlign: 'center', marginBottom: 24 }}>HOW IT WORKS</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
-              {[
-                { icon: '👁', tab: 'WATCH', desc: 'See live trades, attacks, and market events in real-time' },
-                { icon: '⚡', tab: 'ATTACK', desc: 'Spend credits to sabotage traders — lock them out, force trades, squeeze their margins' },
-                { icon: '🎲', tab: 'PREDICT', desc: 'Bet on who wins the round — earn credits if you call it right' },
-              ].map((item) => (
-                <div key={item.tab} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                  <div style={{ fontSize: 28, width: 36, textAlign: 'center', flexShrink: 0 }}>{item.icon}</div>
-                  <div>
-                    <div style={{ fontFamily: bebas, fontSize: 18, color: '#F5A0D0' }}>{item.tab}</div>
-                    <div style={{ fontFamily: sans, fontSize: 13, color: '#999', lineHeight: 1.4 }}>{item.desc}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button
-              onClick={() => setShowOnboarding(false)}
-              style={{ marginTop: 32, width: '100%', height: 56, background: '#F5A0D0', color: '#0A0A0A', border: 'none', fontFamily: bebas, fontSize: 24, letterSpacing: '0.08em', cursor: 'pointer' }}
-            >
-              GOT IT — LET&apos;S GO
-            </button>
-          </div>
-        )}
+        <TutorialOverlay key={tutorialKey} role="spectator" lobbyId={lobbyId} />
 
         {/* ============================================================= */}
         {/* ATTACK OVERLAY                                                */}
@@ -822,7 +799,7 @@ function SpectatePageInner() {
         {attackOverlay && (
           <div style={{ position: 'fixed', inset: 0, background: '#0A0A0A', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '2px solid #F5A0D0', maxWidth: 375, margin: '0 auto' }}>
             <div style={{ fontSize: 64, marginBottom: 16 }}>⚡</div>
-            <div style={{ fontFamily: bebas, fontSize: 64, color: '#FFF', textAlign: 'center', lineHeight: 1 }}>ATTACK LAUNCHED</div>
+            <div style={{ fontFamily: bebas, fontSize: 64, color: '#FFF', textAlign: 'center', lineHeight: 1 }}>EVENT TRIGGERED</div>
             <div style={{ fontFamily: bebas, fontSize: 28, color: '#F5A0D0', marginTop: 12, letterSpacing: '0.05em' }}>
               {attackOverlay.weapon} → {attackOverlay.target}
             </div>
@@ -906,7 +883,7 @@ function SpectatePageInner() {
                 <div style={{ padding: 32, textAlign: 'center' }}>
                   <div style={{ fontFamily: bebas, fontSize: 24, color: '#666' }}>WAITING FOR ACTION...</div>
                   <div style={{ fontFamily: sans, fontSize: 12, color: '#666', marginTop: 8 }}>
-                    {round?.status === 'active' ? 'Trades, attacks, and events will appear here' : 'The round hasn\'t started yet — hang tight'}
+                    {round?.status === 'active' ? 'Trades and market events will appear here' : 'The round hasn\'t started yet — hang tight'}
                   </div>
                 </div>
               )}
@@ -945,7 +922,7 @@ function SpectatePageInner() {
                 {activeTraders.map((t) => (
                   <button
                     key={t.trader_id}
-                    onClick={() => { setSelectedTarget(t.trader_id); setTab('attack'); }}
+                    onClick={() => { setSelectedTarget(t.trader_id); setTab('events'); }}
                     style={{
                       flexShrink: 0, padding: '6px 12px',
                       background: currentBet?.team_name === t.name ? 'rgba(245,160,208,0.15)' : '#111',
@@ -967,7 +944,7 @@ function SpectatePageInner() {
           {/* =========================================================== */}
           {/* ATTACK TAB                                                   */}
           {/* =========================================================== */}
-          <div style={{ display: tab === 'attack' ? 'flex' : 'none', flexDirection: 'column', gap: 0 }}>
+          <div style={{ display: tab === 'events' ? 'flex' : 'none', flexDirection: 'column', gap: 0 }}>
             {/* Credits with explanation — FIX #3 */}
             <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid #1A1A1A' }}>
               <div style={{ fontFamily: sans, fontSize: 9, color: '#999', textTransform: 'uppercase', letterSpacing: '0.1em' }}>YOUR CREDITS</div>
@@ -976,7 +953,7 @@ function SpectatePageInner() {
                 <button onClick={() => setShowPurchaseModal(true)} style={{ fontFamily: bebas, fontSize: 14, color: '#0A0A0A', background: '#F5A0D0', border: 'none', padding: '6px 14px', cursor: 'pointer', letterSpacing: '0.08em', marginTop: 4 }}>BUY MORE</button>
               </div>
               <div style={{ fontFamily: mono, fontSize: 10, color: '#555', marginTop: 6 }}>
-                {credits >= cheapestWeapon ? `${Math.floor(credits / cheapestWeapon)} attacks remaining · Cheapest: ${cheapestWeapon}CR` : 'Not enough for an attack — buy more credits'}
+                {credits >= cheapestWeapon ? `${Math.floor(credits / cheapestWeapon)} events remaining · Cheapest: ${cheapestWeapon}CR` : 'Not enough credits — buy more'}
               </div>
             </div>
 
@@ -984,7 +961,7 @@ function SpectatePageInner() {
             {cooldownEnd && cooldownRemaining > 0 && (
               <div style={{ padding: '10px 16px', background: 'rgba(255,51,51,0.08)', borderBottom: '1px solid #1A1A1A' }}>
                 <div style={{ fontFamily: bebas, fontSize: 16, color: '#FF3333' }}>
-                  ⏳ COOLDOWN · NEXT ATTACK IN {cooldownRemaining}s
+                  ⏳ COOLDOWN · NEXT EVENT IN {cooldownRemaining}s
                 </div>
               </div>
             )}
@@ -1037,7 +1014,7 @@ function SpectatePageInner() {
               <div className="slideUp" style={{ display: 'flex', flexDirection: 'column' }}>
                 <div style={{ padding: '12px 16px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ fontFamily: bebas, fontSize: 20, color: '#FFF', letterSpacing: '0.03em' }}>
-                    ATTACK {traders.find((t) => t.trader_id === selectedTarget)?.name ?? '???'}
+                    TARGET: {traders.find((t) => t.trader_id === selectedTarget)?.name ?? '???'}
                   </div>
                   <button onClick={() => { setSelectedTarget(null); setSelectedWeapon(null); setConfirmAttack(false); }} style={{ fontFamily: sans, fontSize: 10, color: '#999', background: 'transparent', border: 'none', cursor: 'pointer' }}>← BACK</button>
                 </div>
@@ -1087,7 +1064,7 @@ function SpectatePageInner() {
                         cursor: (cooldownEnd && cooldownRemaining > 0) ? 'not-allowed' : 'pointer',
                       }}
                     >
-                      {confirmAttack ? '⚡ CONFIRM ATTACK' : '⚡ LAUNCH ATTACK'}
+                      {confirmAttack ? '⚡ CONFIRM EVENT' : '⚡ TRIGGER EVENT'}
                     </button>
                   </div>
                 )}
@@ -1147,9 +1124,16 @@ function SpectatePageInner() {
         <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 375, display: 'flex', borderTop: '1px solid #1A1A1A', background: '#0D0D0D', zIndex: 50 }}>
           {([
             { key: 'watch', icon: '👁', label: 'WATCH' },
-            { key: 'attack', icon: '⚡', label: 'ATTACK' },
+            { key: 'events', icon: '⚡', label: 'EVENTS' },
             { key: 'predict', icon: '🎲', label: 'PREDICT' },
+            { key: '_tutorial', icon: '?', label: 'HELP' },
           ] as const).map((t) => (
+            t.key === '_tutorial' ? (
+              <button key={t.key} onClick={() => { resetTutorial('spectator', lobbyId); setTutorialKey(k => k + 1); }} style={{ width: 48, padding: '8px 0 6px', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <span style={{ fontFamily: mono, fontSize: 16, color: '#555' }}>?</span>
+                <span style={{ fontFamily: bebas, fontSize: 9, color: '#444', letterSpacing: '0.1em' }}>HELP</span>
+              </button>
+            ) :
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
@@ -1190,7 +1174,7 @@ function SpectatePageInner() {
                     </div>
                     {/* FIX #3: Show what credits buy */}
                     <div style={{ fontFamily: mono, fontSize: 10, color: '#555', marginBottom: 8 }}>
-                      = {attackCount} attacks or {Math.floor(tc / 50)} bets
+                      = {attackCount} events or {Math.floor(tc / 50)} bets
                     </div>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button onClick={() => handlePurchase(pkg, 'stripe')} disabled={purchaseLoading !== null} style={{ flex: 1, fontFamily: bebas, fontSize: 12, color: '#FFF', background: '#1A1A1A', border: '1px solid #333', padding: '7px 0', cursor: purchaseLoading ? 'wait' : 'pointer' }}>

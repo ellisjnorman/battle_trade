@@ -218,12 +218,18 @@ export default function RecapPage() {
             </div>
           </div>
 
-          {/* Share button */}
-          <div style={{ textAlign: 'center', marginTop: 16 }}>
+          {/* Action buttons */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 24, alignItems: 'center' }}>
+            <button
+              onClick={() => { window.location.href = '/dashboard'; }}
+              style={{ width: '100%', maxWidth: 320, height: 56, ...B, fontSize: 22, color: '#0A0A0A', background: '#F5A0D0', border: 'none', cursor: 'pointer', boxShadow: '0 0 20px rgba(245,160,208,0.3)', transition: 'all 150ms' }}
+            >
+              BACK TO LOBBY
+            </button>
             <button
               onClick={() => {
                 const url = window.location.href;
-                const text = `🏆 ${champion?.name ?? 'Champion'} won ${lobbyName} with +${champion?.returnPct.toFixed(1)}%!\n\nBattle Trade — Trading as a Spectator Sport`;
+                const text = `${champion?.name ?? 'Champion'} won ${lobbyName} with +${champion?.returnPct.toFixed(1)}%!\n\nBattle Trade — Trading as a Spectator Sport`;
                 if (navigator.share) {
                   navigator.share({ title: `${lobbyName} Results`, text, url });
                 } else {
@@ -232,7 +238,7 @@ export default function RecapPage() {
                   setTimeout(() => setShowShare(false), 2000);
                 }
               }}
-              style={{ height: 56, padding: '0 40px', ...B, fontSize: 22, color: '#0A0A0A', background: '#F5A0D0', border: 'none', cursor: 'pointer', boxShadow: '0 0 20px rgba(245,160,208,0.3)' }}
+              style={{ width: '100%', maxWidth: 320, height: 48, ...B, fontSize: 16, color: '#888', background: 'transparent', border: '1px solid #333', cursor: 'pointer', transition: 'all 150ms' }}
             >
               {showShare ? 'COPIED!' : 'SHARE RESULTS'}
             </button>

@@ -48,8 +48,11 @@ export async function checkAuthWithLobby(request: NextRequest, lobbyId: string):
       .eq('id', lobbyId)
       .single();
 
-    // Creator owns their lobby — verify via Supabase Auth session
+    // Creator owns their lobby
     if (lobby?.created_by) {
+      // Direct profile ID match (client sends raw profile UUID)
+      if (safeEqual(authHeader, lobby.created_by)) return true;
+
       // Try Supabase Auth token (Bearer <jwt>)
       const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
       if (token) {

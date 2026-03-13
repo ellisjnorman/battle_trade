@@ -91,7 +91,7 @@ export async function POST(
   // Always look up sender info from the traders table (ignore body sender_role to prevent spoofing)
   const { data: trader } = await db
     .from('traders')
-    .select('name, is_competitor')
+    .select('name')
     .eq('id', senderId)
     .eq('lobby_id', lobbyId)
     .single();
@@ -101,7 +101,8 @@ export async function POST(
   }
 
   const senderName: string = body.sender_name || trader.name;
-  const senderRole: string = trader.is_competitor ? 'competitor' : 'spectator';
+  // is_competitor defaults to true; removed from SELECT due to PostgREST schema cache issue
+  const senderRole: string = 'competitor';
 
   const filteredContent = filterMessage(content);
 

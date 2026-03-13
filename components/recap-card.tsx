@@ -101,7 +101,7 @@ export const RecapCard = forwardRef<HTMLDivElement, RecapCardProps>(function Rec
     const text = [
       `${playerName} placed ${ordinal(rank)} in ${lobbyName}`,
       `Return: ${formatPct(returnPct)} | Trades: ${tradesExecuted}`,
-      `BTR Score: ${btrScore}`,
+      `Rank: ${btrScore}`,
       'battletrade.gg',
     ].join('\n')
 
@@ -308,8 +308,8 @@ export const RecapCard = forwardRef<HTMLDivElement, RecapCardProps>(function Rec
         }}>
           {[
             { label: 'TRADES', value: tradesExecuted },
-            { label: 'LANDED', value: sabotagesLanded },
-            { label: 'DODGED', value: sabotagesDodged },
+            { label: 'EVENTS SENT', value: sabotagesLanded },
+            { label: 'EVENTS DODGED', value: sabotagesDodged },
           ].map(s => (
             <div key={s.label} style={{
               background: c.surface,
@@ -411,7 +411,7 @@ export const RecapCard = forwardRef<HTMLDivElement, RecapCardProps>(function Rec
           </div>
         )}
 
-        {/* ── BTR SCORE + TIER ── */}
+        {/* ── RANK + TIER ── */}
         <div style={{
           padding: '14px 24px 0',
           display: 'flex',
@@ -449,7 +449,7 @@ export const RecapCard = forwardRef<HTMLDivElement, RecapCardProps>(function Rec
             color: c.text4,
             letterSpacing: '.04em',
           }}>
-            BTR SCORE
+            RANK
           </div>
         </div>
 

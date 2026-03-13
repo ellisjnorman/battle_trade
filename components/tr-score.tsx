@@ -49,7 +49,7 @@ function SmallScore({ score, tier }: { score: number; tier: string }) {
         color: '#FFF',
       }}
     >
-      TR {score}
+      RANK {score}
       <span
         style={{
           display: 'inline-block',
@@ -76,10 +76,10 @@ function PillarBars({
 }) {
   const entries: [string, number][] = [
     ['PERFORMANCE', pillars.performance],
-    ['COMBAT', pillars.combat],
-    ['STRATEGY', pillars.strategy],
+    ['RISK MGMT', pillars.combat],
+    ['CONSISTENCY', pillars.strategy],
+    ['ADAPTABILITY', pillars.streak],
     ['COMMUNITY', pillars.community],
-    ['STREAK', pillars.streak],
   ];
 
   return (

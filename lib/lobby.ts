@@ -97,7 +97,7 @@ export async function getLobbyStandings(
       .single(),
     supabase
       .from('traders')
-      .select('id, name, team_id, wallet_address, avatar_url, is_eliminated, eliminated_at, event_id, lobby_id, created_at')
+      .select('id, name, team_id, wallet_address, avatar_url, is_eliminated, eliminated_at, lobby_id, created_at')
       .eq('lobby_id', lobby_id),
     supabase
       .from('positions')

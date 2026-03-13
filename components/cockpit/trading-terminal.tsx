@@ -14,6 +14,7 @@ import { getLiquidationPrice } from '@/lib/liquidation';
 import { useToastStore } from '@/lib/toast-store';
 import { SectionErrorBoundary } from '@/components/error-boundary';
 import LobbyChat from '@/components/lobby-chat';
+import TutorialOverlay, { TutorialTrigger, resetTutorial } from '@/components/tutorial-overlay';
 import type { Position } from '@/types';
 
 // ---------------------------------------------------------------------------
@@ -98,6 +99,10 @@ export default function TradingTerminal() {
   const [winStreak, setWinStreak] = useState(0);
   const [battleEndData, setBattleEndData] = useState<{ rank: number; totalPlayers: number; returnPct: number } | null>(null);
   const [rankFlash, setRankFlash] = useState<'up' | 'down' | null>(null);
+  const [leverageTiers, setLeverageTiers] = useState<number[]>(LEVS);
+  const [orderBook, setOrderBook] = useState<{ bids: { price: number; size: number; total?: number }[]; asks: { price: number; size: number; total?: number }[]; spread: number; spreadPct: number; midPrice: number } | null>(null);
+  const [showOrderBook, setShowOrderBook] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(0); // increment to re-trigger
   const [tradeFlashId, setTradeFlashId] = useState<string | null>(null);
   const prevRpRef = useRef(0);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -229,6 +234,8 @@ export default function TradingTerminal() {
       setStartingBalance((cfg?.starting_balance as number) ?? 10000);
       const syms = (cfg?.available_symbols as string[]) ?? [];
       setAvailableSymbols(syms);
+      const lt = (cfg?.leverage_tiers as number[]);
+      if (lt?.length) { setLeverageTiers(lt.sort((a, b) => a - b)); setLeverage(lt[Math.floor(lt.length / 2)] ?? lt[0]); }
     }
     const { data: trs } = await supabase.from('traders').select('id, name').eq('lobby_id', lobbyId).eq('is_eliminated', false);
     if (trs) { setAllTraders(trs.filter(t => t.id !== td.id)); setTotalTraders(trs.length); }
@@ -268,7 +275,16 @@ export default function TradingTerminal() {
     }
   }, [lobbyId]);
 
-  useEffect(() => { (async () => { const t = await lookupTrader(); if (t) await fetchInitialData(t); })(); }, [lookupTrader, fetchInitialData]);
+  useEffect(() => {
+    (async () => {
+      const t = await lookupTrader();
+      if (t) {
+        await fetchInitialData(t);
+        // Trigger auto-admin for practice/auto lobbies (fire-and-forget)
+        fetch(`/api/lobby/${lobbyId}/auto-start`, { method: 'POST' }).catch(() => {});
+      }
+    })();
+  }, [lookupTrader, fetchInitialData, lobbyId]);
 
   // ── Market data poll (every 60s) ──
   useEffect(() => {
@@ -276,6 +292,21 @@ export default function TradingTerminal() {
     const i = setInterval(poll, 120000);
     return () => clearInterval(i);
   }, []);
+
+  // ── Order book polling ──
+  useEffect(() => {
+    if (!showOrderBook) return;
+    const sym = selectedSymbol;
+    const fetchOB = async () => {
+      try {
+        const r = await fetch(`/api/orderbook?symbol=${sym}&depth=8`);
+        if (r.ok) setOrderBook(await r.json());
+      } catch {}
+    };
+    fetchOB();
+    const i = setInterval(fetchOB, 2000);
+    return () => clearInterval(i);
+  }, [selectedSymbol, showOrderBook]);
 
   // ── Realtime ──
   useEffect(() => {
@@ -287,18 +318,18 @@ export default function TradingTerminal() {
     }).subscribe();
     const sc = supabase.channel(`t-${trader.id}`).on('broadcast', { event: 'sabotage' }, ({ payload }) => {
       const m = payload as Record<string, unknown>; const st = (m.type as string) ?? ''; const sab = m.sabotage as Record<string, unknown> | undefined; const ty = (sab?.type as string) ?? (m.sabotage_type as string) ?? st;
-      if (ty === 'blackout') { setIsLockedOut(true); setLockoutTime(90); setActiveOverlay('locked'); flash('#FF3333'); addToast('YOU\'VE BEEN BLACKED OUT!', 'attack', '🔒'); addFeedItem('You got BLACKED OUT', '#FF3333', '🔒'); }
-      else if (ty === 'fake_news') { setActiveOverlay('fakenews'); flash('#F5A0D0'); addFeedItem('FAKE NEWS incoming!', '#F5A0D0', '📰'); }
-      else if (ty === 'trading_halt') { setFrozenAsset((sab?.payload as Record<string, string>)?.asset ?? 'BTCUSDT'); addEffect('trading_halt', 'attack', 60); flash('#00BFFF'); addToast('TRADING HALTED!', 'attack', '🔀'); addFeedItem('Trading HALTED', '#00BFFF', '🔀'); }
-      else if (ty === 'reveal') { addEffect('reveal', 'attack', 120); flash('#FF3333'); addToast('POSITIONS REVEALED!', 'attack', '🎯'); addFeedItem('Your positions are REVEALED', '#FF3333', '🎯'); }
-      else if (ty === 'glitch') { addEffect('glitch', 'attack', 10); flash('#F5A0D0'); addFeedItem('GLITCH attack!', '#F5A0D0', '🌀'); }
-      else if (ty === 'leverage_cap') { flash('#FF3333'); addToast('LEVERAGE CAPPED! -10% balance', 'attack', '💸'); addFeedItem('LEVERAGE CAPPED -10%', '#FF3333', '💸'); }
-      else if (ty === 'forced_trade') { setActiveOverlay('forced'); flash('#FF3333'); addFeedItem('FORCED TRADE opened!', '#FF3333', '⚡'); }
+      if (ty === 'blackout') { setIsLockedOut(true); setLockoutTime(90); setActiveOverlay('locked'); flash('#FF3333'); addToast('EXCHANGE OUTAGE — trades frozen!', 'attack', '🔒'); addFeedItem('Exchange outage hit you', '#FF3333', '🔒'); }
+      else if (ty === 'fake_news') { setActiveOverlay('fakenews'); flash('#F5A0D0'); addFeedItem('BREAKING NEWS incoming!', '#F5A0D0', '📰'); }
+      else if (ty === 'trading_halt') { setFrozenAsset((sab?.payload as Record<string, string>)?.asset ?? 'BTCUSDT'); addEffect('trading_halt', 'attack', 60); flash('#00BFFF'); addToast('REGULATORY HALT!', 'attack', '🔀'); addFeedItem('Regulatory halt', '#00BFFF', '🔀'); }
+      else if (ty === 'reveal') { addEffect('reveal', 'attack', 120); flash('#FF3333'); addToast('POSITIONS EXPOSED!', 'attack', '🎯'); addFeedItem('Your positions are exposed', '#FF3333', '🎯'); }
+      else if (ty === 'glitch') { addEffect('glitch', 'attack', 10); flash('#F5A0D0'); addFeedItem('FLASH CRASH!', '#F5A0D0', '🌀'); }
+      else if (ty === 'leverage_cap') { flash('#FF3333'); addToast('MARGIN CALL! -10% balance', 'attack', '💸'); addFeedItem('Margin call -10%', '#FF3333', '💸'); }
+      else if (ty === 'forced_trade') { setActiveOverlay('forced'); flash('#FF3333'); addFeedItem('AUTO-LIQUIDATION triggered!', '#FF3333', '⚡'); }
       else if (ty === 'blackout_lifted') { setIsLockedOut(false); setActiveOverlay(null); addToast('Blackout expired — you\'re free!', 'success', '🔓'); }
       if (st === 'defense_result') {
         const result = m.result as string;
-        if (result === 'hedged') { flash('#00BFFF'); addToast('ATTACK HEDGED! 50% refund', 'defense', '🛡'); addFeedItem('Attack was HEDGED', '#00BFFF', '🛡'); }
-        if (result === 'stopped') { flash('#00BFFF'); addToast('ATTACK STOPPED & bounced back!', 'defense', '🔄'); addFeedItem('Attack STOPPED!', '#00BFFF', '🔄'); }
+        if (result === 'hedged') { flash('#00BFFF'); addToast('EVENT HEDGED! 50% refund', 'defense', '🛡'); addFeedItem('Event was HEDGED', '#00BFFF', '🛡'); }
+        if (result === 'stopped') { flash('#00BFFF'); addToast('EVENT BLOCKED & redirected!', 'defense', '🔄'); addFeedItem('Event redirected!', '#00BFFF', '🔄'); }
       }
       if (st === 'defense_activated') {
         const dt = (m.defense_type as string) ?? 'hedge';
@@ -329,8 +360,8 @@ export default function TradingTerminal() {
         const weapon = ATTACKS.find(a => a.id === m.sabotage_type);
         addFeedItem(`${atkName} ${weapon?.icon ?? '⚡'} ${weapon?.name ?? '???'} → ${tgtName}`, '#F5A0D0', weapon?.icon ?? '⚡');
       }
-      if (type === 'sabotage_hedged') { addFeedItem('Attack BLOCKED by hedge!', '#00BFFF', '🛡'); }
-      if (type === 'sabotage_stopped') { addFeedItem('Attack STOPPED!', '#00BFFF', '🔄'); }
+      if (type === 'sabotage_hedged') { addFeedItem('Event BLOCKED by hedge!', '#00BFFF', '🛡'); }
+      if (type === 'sabotage_stopped') { addFeedItem('Event redirected!', '#00BFFF', '🔄'); }
       if (type === 'defense_activated') {
         const tName = allTradersRef.current.find(t => t.id === m.trader_id)?.name ?? (m.trader_id === trader.id ? 'You' : '???');
         const def = DEFENSES.find(d => d.id === m.defense_type);
@@ -522,10 +553,10 @@ export default function TradingTerminal() {
           addToast(`${weapon?.name} was HEDGED! +${d.refund}CR refund`, 'defense', '🛡');
           addFeedItem(`${weapon?.name} HEDGED by ${tgtName}!`, '#00BFFF', '🛡');
         } else if (d.result === 'stopped') {
-          addToast(`${weapon?.name} STOPPED & bounced back at you!`, 'error', '🔄');
-          addFeedItem(`${weapon?.name} STOPPED by ${tgtName}!`, '#00BFFF', '🔄');
+          addToast(`${weapon?.name} BLOCKED & redirected!`, 'error', '🔄');
+          addFeedItem(`${weapon?.name} redirected by ${tgtName}!`, '#00BFFF', '🔄');
         } else {
-          addToast(`${weapon?.icon} ${weapon?.name} launched at ${tgtName}! — ${weapon?.desc}`, 'attack', weapon?.icon);
+          addToast(`${weapon?.icon} ${weapon?.name} triggered on ${tgtName}! — ${weapon?.desc}`, 'attack', weapon?.icon);
           addFeedItem(`${weapon?.icon} ${weapon?.name} → ${tgtName}`, '#F5A0D0', weapon?.icon ?? '⚡');
         }
         setCooldownRemaining(45); // match server cooldown
@@ -533,7 +564,7 @@ export default function TradingTerminal() {
         setCooldownRemaining(d.remainingSeconds ?? 180);
         addToast(`Cooldown: ${Math.ceil((d.remainingSeconds ?? 180) / 60)}m left`, 'error', '⏳');
       } else {
-        addToast(d.error || 'Attack failed', 'error');
+        addToast(d.error || 'Event failed', 'error');
       }
     } catch { addToast('Network error', 'error'); }
     setActionLoading(null);
@@ -649,6 +680,59 @@ export default function TradingTerminal() {
   // PANELS
   // ═══════════════════════════════════════════════════════════════════════════
 
+  // Strategy presets — real trading strategies that auto-configure trades
+  const STRATEGY_PRESETS: { id: string; label: string; desc: string; icon: string; color: string; trades: { symbol: string; direction: 'long' | 'short'; sizePct: number; levMultiplier: number }[] }[] = [
+    { id: 'conservative', label: 'BLUE CHIP', desc: 'Equal-weight BTC+ETH+SOL, low leverage', icon: '🏦', color: '#00BFFF', trades: [
+      { symbol: 'BTC', direction: 'long', sizePct: 33, levMultiplier: 0.25 },
+      { symbol: 'ETH', direction: 'long', sizePct: 33, levMultiplier: 0.25 },
+      { symbol: 'SOL', direction: 'long', sizePct: 34, levMultiplier: 0.25 },
+    ]},
+    { id: 'momentum', label: 'MOMENTUM', desc: 'Concentrated BTC long, high conviction', icon: '🚀', color: '#00FF88', trades: [
+      { symbol: 'BTC', direction: 'long', sizePct: 60, levMultiplier: 0.5 },
+      { symbol: 'ETH', direction: 'long', sizePct: 40, levMultiplier: 0.75 },
+    ]},
+    { id: 'hedge', label: 'HEDGED', desc: 'Long BTC + Short altcoin pair', icon: '🛡', color: '#F5A0D0', trades: [
+      { symbol: 'BTC', direction: 'long', sizePct: 50, levMultiplier: 0.5 },
+      { symbol: 'SOL', direction: 'short', sizePct: 50, levMultiplier: 0.5 },
+    ]},
+    { id: 'degen', label: 'DEGEN', desc: 'Max leverage memes, high risk/reward', icon: '🎰', color: '#FF3333', trades: [
+      { symbol: 'DOGE', direction: 'long', sizePct: 34, levMultiplier: 1.0 },
+      { symbol: 'SOL', direction: 'long', sizePct: 33, levMultiplier: 1.0 },
+      { symbol: 'AVAX', direction: 'long', sizePct: 33, levMultiplier: 1.0 },
+    ]},
+  ];
+
+  const executeStrategy = async (strategyId: string) => {
+    if (!trader || !round || !canTrade || openPos.length > 0) return;
+    const strat = STRATEGY_PRESETS.find(s => s.id === strategyId);
+    if (!strat) return;
+    setActionLoading('strategy');
+    const maxLev = leverageTiers[leverageTiers.length - 1] ?? 50;
+    for (const trade of strat.trades) {
+      const tradeSize = Math.floor(pv * trade.sizePct / 100);
+      if (tradeSize < 100) continue;
+      const tradeLev = leverageTiers.reduce((prev, curr) =>
+        Math.abs(curr - maxLev * trade.levMultiplier) < Math.abs(prev - maxLev * trade.levMultiplier) ? curr : prev
+      );
+      try {
+        const r = await fetch(`/api/lobby/${lobbyId}/positions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trader_id: trader.id, round_id: round.id, symbol: `${trade.symbol}USDT`, direction: trade.direction, size: tradeSize, leverage: tradeLev, order_type: 'market' }),
+        });
+        if (r.ok) {
+          flash(trade.direction === 'long' ? '#00FF88' : '#FF3333');
+          addToast(`${trade.direction.toUpperCase()} ${trade.symbol} · $${tradeSize.toLocaleString()} @ ${tradeLev}x`, 'success', trade.direction === 'long' ? '📈' : '📉');
+        } else {
+          const d = await r.json();
+          if (d.error === 'LOCKED_OUT') { setIsLockedOut(true); break; }
+          addToast(d.error || `Failed: ${trade.symbol}`, 'error');
+        }
+      } catch { addToast(`Network error: ${trade.symbol}`, 'error'); }
+    }
+    setActionLoading(null);
+  };
+
   const ORDER_TYPES: { id: 'market' | 'limit' | 'stop_limit' | 'trailing_stop'; label: string }[] = [
     { id: 'market', label: 'MKT' },
     { id: 'limit', label: 'LIMIT' },
@@ -667,6 +751,22 @@ export default function TradingTerminal() {
         <button onClick={() => setSelectedDirection('long')} style={{ flex: 1, minHeight: 48, ...B, fontSize: 26, background: selectedDirection === 'long' ? '#00FF88' : '#0D0D0D', color: selectedDirection === 'long' ? '#0A0A0A' : '#00FF88', border: 'none', cursor: 'pointer', transition: 'all 150ms' }}>LONG</button>
         <button onClick={() => setSelectedDirection('short')} style={{ flex: 1, minHeight: 48, ...B, fontSize: 26, background: selectedDirection === 'short' ? '#FF3333' : '#0D0D0D', color: selectedDirection === 'short' ? '#FFF' : '#FF3333', border: 'none', cursor: 'pointer', transition: 'all 150ms' }}>SHORT</button>
       </div>
+      {/* Strategy Presets — only show when no positions open */}
+      {openPos.length === 0 && canTrade && (
+        <div style={{ padding: '8px 12px', borderBottom: '1px solid #1A1A1A' }}>
+          <span style={{ ...B, fontSize: 9, color: '#666', display: 'block', marginBottom: 6 }}>QUICK STRATEGIES</span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 3 }}>
+            {STRATEGY_PRESETS.map(s => (
+              <button key={s.id} onClick={() => executeStrategy(s.id)} disabled={actionLoading === 'strategy'}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '6px 2px', minHeight: 52, background: '#0A0A0A', border: '1px solid #1A1A1A', borderTop: `2px solid ${s.color}`, cursor: actionLoading === 'strategy' ? 'wait' : 'pointer', transition: 'all 150ms', gap: 2, textAlign: 'center' }}>
+                <span style={{ fontSize: 14 }}>{s.icon}</span>
+                <span style={{ ...B, fontSize: 8, color: '#FFF', lineHeight: 1.1 }}>{actionLoading === 'strategy' ? '...' : s.label}</span>
+                <span style={{ ...S, fontSize: 7, color: '#555', lineHeight: 1.1 }}>{s.trades.length} trades</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {/* Order type tabs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', borderBottom: '1px solid #1A1A1A' }}>
         {ORDER_TYPES.map(ot => (
@@ -730,17 +830,62 @@ export default function TradingTerminal() {
           ))}
         </div>
       </div>
-      {/* Leverage */}
+      {/* Leverage Slider */}
       <div style={{ padding: '12px 16px', borderBottom: '1px solid #1A1A1A' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
           <span style={{ ...B, fontSize: 12, color: '#777' }}>LEVERAGE</span>
-          <span style={{ ...M, fontSize: 15, color: '#F5A0D0' }}>{leverage}x</span>
+          <span style={{ ...M, fontSize: 18, color: '#F5A0D0', textShadow: leverage >= leverageTiers[leverageTiers.length - 1] ? '0 0 12px rgba(245,160,208,0.6)' : 'none' }}>{leverage}x</span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
-          {LEVS.map(l => (
-            <button key={l} onClick={() => setLeverage(l)} style={{ minHeight: 44, ...B, fontSize: 16, background: leverage === l ? '#F5A0D0' : '#0D0D0D', color: leverage === l ? '#0A0A0A' : '#555', border: leverage === l ? 'none' : '1px solid #1A1A1A', cursor: 'pointer', transition: 'all 100ms' }}>{l}X</button>
-          ))}
-        </div>
+        {(() => {
+          const maxLev = leverageTiers[leverageTiers.length - 1] ?? 50;
+          const steps = 4; // 25% increments = 4 steps
+          const stepValues = Array.from({ length: steps + 1 }, (_, i) => {
+            const pct = i / steps;
+            // Snap to nearest tier value
+            const raw = Math.round(maxLev * pct);
+            if (raw === 0) return leverageTiers[0] ?? 1;
+            const nearest = leverageTiers.reduce((prev, curr) => Math.abs(curr - raw) < Math.abs(prev - raw) ? curr : prev);
+            return nearest;
+          });
+          const uniqueSteps = [...new Set(stepValues)].sort((a, b) => a - b);
+          const currentIdx = uniqueSteps.indexOf(leverage);
+          const sliderIdx = currentIdx >= 0 ? currentIdx : uniqueSteps.reduce((prev, curr, i) => Math.abs(curr - leverage) < Math.abs(uniqueSteps[prev] - leverage) ? i : prev, 0);
+          const pct = uniqueSteps.length > 1 ? (sliderIdx / (uniqueSteps.length - 1)) * 100 : 0;
+          const dangerZone = pct > 75;
+          return (
+            <>
+              <div style={{ position: 'relative', height: 36, display: 'flex', alignItems: 'center', padding: '0 2px' }}>
+                {/* Track background */}
+                <div style={{ position: 'absolute', left: 0, right: 0, height: 6, background: '#1A1A1A', overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: dangerZone ? 'linear-gradient(90deg, #F5A0D0, #FF3333)' : 'linear-gradient(90deg, #F5A0D060, #F5A0D0)', transition: 'width 100ms, background 200ms', boxShadow: dangerZone ? '0 0 8px rgba(255,51,51,0.4)' : '0 0 4px rgba(245,160,208,0.3)' }} />
+                </div>
+                {/* Tick marks */}
+                {uniqueSteps.map((_, i) => (
+                  <div key={i} style={{ position: 'absolute', left: `${(i / (uniqueSteps.length - 1)) * 100}%`, top: '50%', transform: 'translate(-50%, -50%)', width: 2, height: 12, background: i <= sliderIdx ? '#F5A0D0' : '#333', transition: 'background 100ms' }} />
+                ))}
+                {/* Range input */}
+                <input
+                  type="range"
+                  min={0}
+                  max={uniqueSteps.length - 1}
+                  step={1}
+                  value={sliderIdx}
+                  onChange={(e) => setLeverage(uniqueSteps[parseInt(e.target.value)])}
+                  style={{ position: 'absolute', left: 0, right: 0, width: '100%', height: 36, opacity: 0, cursor: 'pointer', zIndex: 2, margin: 0 }}
+                />
+                {/* Thumb indicator */}
+                <div style={{ position: 'absolute', left: `${pct}%`, top: '50%', transform: 'translate(-50%, -50%)', width: 20, height: 20, background: dangerZone ? '#FF3333' : '#F5A0D0', border: '2px solid #FFF', boxShadow: `0 0 8px ${dangerZone ? 'rgba(255,51,51,0.6)' : 'rgba(245,160,208,0.6)'}`, transition: 'left 100ms, background 200ms', pointerEvents: 'none' }} />
+              </div>
+              {/* Step labels */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                {uniqueSteps.map((v, i) => (
+                  <button key={v} onClick={() => setLeverage(v)} style={{ ...B, fontSize: 10, color: i === sliderIdx ? '#F5A0D0' : '#444', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', transition: 'color 100ms' }}>{v}x</button>
+                ))}
+              </div>
+              {dangerZone && <div style={{ ...B, fontSize: 9, color: '#FF3333', textAlign: 'center', marginTop: 4, animation: 'pulse 1.5s infinite' }}>HIGH RISK — LIQUIDATION CLOSE</div>}
+            </>
+          );
+        })()}
       </div>
       {/* Summary */}
       {selectedDirection && selectedPrice > 0 && (
@@ -831,13 +976,13 @@ export default function TradingTerminal() {
     </div>
   );
 
-  // Arsenal panel — PINK/RED aggressive theme
+  // Market Events panel
   const arsenalPanel = (
     <div style={{ padding: '10px 14px', borderBottom: '1px solid #1A1A1A' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 3, height: 12, background: '#F5A0D0', display: 'block' }} />
-          <span style={{ ...B, fontSize: 11, color: '#F5A0D0' }}>ARSENAL</span>
+          <span style={{ ...B, fontSize: 11, color: '#F5A0D0' }}>MARKET EVENTS</span>
         </div>
         <span style={{ ...M, fontSize: 10, color: '#F5A0D0' }}>{credits.balance}CR</span>
       </div>
@@ -863,7 +1008,7 @@ export default function TradingTerminal() {
         </div>
       )}
 
-      {/* Attack grid */}
+      {/* Event grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
         {ATTACKS.map(a => {
           const canAfford = credits.balance >= a.cost;
@@ -1293,7 +1438,7 @@ export default function TradingTerminal() {
             window.location.href = `/lobby/${d.lobby_id}/trade?code=${d.code}`;
           }
         }}
-        onViewRecap={() => setBattleEndData(null)}
+        onViewRecap={() => { setBattleEndData(null); window.location.href = `/lobby/${lobbyId}/recap`; }}
         onBackToDashboard={() => { window.location.href = '/dashboard'; }}
       />
 
@@ -1340,6 +1485,7 @@ export default function TradingTerminal() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flexShrink: 1 }}>
             <span className="top-bar-pnl" style={{ ...M, fontSize: 12, color: rp >= 0 ? '#00FF88' : '#FF3333', textShadow: `0 0 8px ${rp >= 0 ? 'rgba(0,255,136,0.3)' : 'rgba(255,51,51,0.3)'}`, whiteSpace: 'nowrap' }}>{rp >= 0 ? '+' : ''}{rp.toFixed(1)}%</span>
             <button onClick={() => setShowPurchaseModal(true)} style={{ ...M, fontSize: 10, color: '#F5A0D0', padding: '3px 6px', background: 'rgba(245,160,208,0.08)', border: '1px solid rgba(245,160,208,0.2)', textShadow: '0 0 8px rgba(245,160,208,0.3)', cursor: 'pointer', transition: 'all 150ms', whiteSpace: 'nowrap', minHeight: 32 }}>{credits.balance}CR</button>
+            <button onClick={() => { resetTutorial('player', lobbyId); setShowTutorial(s => s + 1); }} style={{ ...M, fontSize: 9, color: '#555', background: 'transparent', border: '1px solid #222', padding: '3px 6px', cursor: 'pointer', minHeight: 28, flexShrink: 0 }}>?</button>
             <div className="top-bar-user" style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
               <span style={{ width: 6, height: 6, background: '#F5A0D0', display: 'block', animation: 'liveDot 2s ease-in-out infinite', flexShrink: 0 }} />
               <span style={{ ...B, fontSize: 11, color: '#FFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 80 }}>{trader?.name}</span>
@@ -1519,19 +1665,87 @@ export default function TradingTerminal() {
                 {effectsBar}
               </div>
               {/* Scrollable middle: Standings + Arsenal + Feed + History */}
-              <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+              <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, WebkitOverflowScrolling: 'touch' }}>
                 {leaderboardPanel}
                 {arsenalPanel}
+                {defensePanel}
                 {liveFeed}
                 {roundHistoryPanel}
               </div>
             </div>
 
-            {/* CENTER: Chart + Full Position Strip */}
+            {/* CENTER: Chart + Order Book + Full Position Strip */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: '#0A0A0A', overflow: 'hidden' }}>
-              {priceHero}
-              <div style={{ flex: 1, position: 'relative', minHeight: 300, overflow: 'hidden' }}>
-                <TradingViewChart symbol={selectedSymbol} />
+              <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                <div style={{ flex: 1 }}>{priceHero}</div>
+                <button onClick={() => setShowOrderBook(!showOrderBook)} style={{ ...B, fontSize: 9, color: showOrderBook ? '#F5A0D0' : '#555', background: showOrderBook ? 'rgba(245,160,208,0.08)' : 'transparent', border: '1px solid #1A1A1A', padding: '4px 10px', marginRight: 8, cursor: 'pointer', minHeight: 28, transition: 'all 100ms' }}>
+                  {showOrderBook ? 'HIDE BOOK' : 'BOOK'}
+                </button>
+              </div>
+              <div style={{ flex: 1, display: 'flex', minHeight: 300, overflow: 'hidden' }}>
+                <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+                  <TradingViewChart symbol={selectedSymbol} />
+                </div>
+                {/* Order Book Panel */}
+                {showOrderBook && (
+                  <div style={{ width: 200, flexShrink: 0, borderLeft: '1px solid #1A1A1A', display: 'flex', flexDirection: 'column', background: '#0A0A0A', overflow: 'hidden' }}>
+                    <div style={{ padding: '6px 10px', borderBottom: '1px solid #1A1A1A', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ ...B, fontSize: 10, color: '#777' }}>ORDER BOOK</span>
+                      <span style={{ ...M, fontSize: 8, color: '#555' }}>HYPERLIQUID</span>
+                    </div>
+                    {/* Column headers */}
+                    <div style={{ display: 'flex', padding: '3px 10px', borderBottom: '1px solid #111' }}>
+                      <span style={{ ...S, fontSize: 8, color: '#444', flex: 1 }}>PRICE</span>
+                      <span style={{ ...S, fontSize: 8, color: '#444', width: 50, textAlign: 'right' }}>SIZE</span>
+                      <span style={{ ...S, fontSize: 8, color: '#444', width: 50, textAlign: 'right' }}>TOTAL</span>
+                    </div>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                      {/* Asks (reversed — lowest at bottom) */}
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', overflow: 'hidden' }}>
+                        {orderBook ? (
+                          [...orderBook.asks].reverse().slice(0, 8).map((a, i) => {
+                            const maxTotal = orderBook.asks[orderBook.asks.length - 1]?.total ?? 1;
+                            const depthPct = ((a.total ?? a.size) / maxTotal) * 100;
+                            return (
+                              <div key={`a-${i}`} style={{ display: 'flex', padding: '1px 10px', position: 'relative', minHeight: 18 }}>
+                                <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: `${depthPct}%`, background: 'rgba(255,51,51,0.08)' }} />
+                                <span style={{ ...M, fontSize: 10, color: '#FF3333', flex: 1, position: 'relative' }}>{fmtP(a.price)}</span>
+                                <span style={{ ...M, fontSize: 9, color: '#FF333388', width: 50, textAlign: 'right', position: 'relative' }}>{a.size < 1 ? a.size.toFixed(3) : a.size.toFixed(1)}</span>
+                                <span style={{ ...M, fontSize: 9, color: '#FF333355', width: 50, textAlign: 'right', position: 'relative' }}>{(a.total ?? a.size) < 1 ? (a.total ?? a.size).toFixed(3) : (a.total ?? a.size).toFixed(1)}</span>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div style={{ padding: 12, textAlign: 'center', ...M, fontSize: 10, color: '#333' }}>Loading...</div>
+                        )}
+                      </div>
+                      {/* Spread */}
+                      {orderBook && (
+                        <div style={{ padding: '4px 10px', borderTop: '1px solid #1A1A1A', borderBottom: '1px solid #1A1A1A', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0D0D0D' }}>
+                          <span style={{ ...M, fontSize: 12, fontWeight: 700, color: '#FFF' }}>${fmtP(orderBook.midPrice)}</span>
+                          <span style={{ ...M, fontSize: 9, color: '#F5A0D0' }}>SPR {orderBook.spreadPct.toFixed(3)}%</span>
+                        </div>
+                      )}
+                      {/* Bids */}
+                      <div style={{ flex: 1, overflow: 'hidden' }}>
+                        {orderBook ? (
+                          orderBook.bids.slice(0, 8).map((b, i) => {
+                            const maxTotal = orderBook.bids[Math.min(7, orderBook.bids.length - 1)]?.total ?? 1;
+                            const depthPct = ((b.total ?? b.size) / maxTotal) * 100;
+                            return (
+                              <div key={`b-${i}`} style={{ display: 'flex', padding: '1px 10px', position: 'relative', minHeight: 18 }}>
+                                <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: `${depthPct}%`, background: 'rgba(0,255,136,0.08)' }} />
+                                <span style={{ ...M, fontSize: 10, color: '#00FF88', flex: 1, position: 'relative' }}>{fmtP(b.price)}</span>
+                                <span style={{ ...M, fontSize: 9, color: '#00FF8888', width: 50, textAlign: 'right', position: 'relative' }}>{b.size < 1 ? b.size.toFixed(3) : b.size.toFixed(1)}</span>
+                                <span style={{ ...M, fontSize: 9, color: '#00FF8855', width: 50, textAlign: 'right', position: 'relative' }}>{(b.total ?? b.size) < 1 ? (b.total ?? b.size).toFixed(3) : (b.total ?? b.size).toFixed(1)}</span>
+                              </div>
+                            );
+                          })
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               {bottomPositionStrip}
             </div>
@@ -1542,10 +1756,9 @@ export default function TradingTerminal() {
               <div style={{ flexShrink: 0, maxHeight: 120, overflowY: 'auto' }}>
                 {quickPositions}
               </div>
-              {/* Order entry + defense (scrollable) */}
-              <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+              {/* Order entry (scrollable) */}
+              <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, WebkitOverflowScrolling: 'touch' }}>
                 {orderPanel}
-                {defensePanel}
               </div>
             </div>
           </div>
@@ -1630,7 +1843,7 @@ export default function TradingTerminal() {
               {([
                 { key: 'chart' as const, label: 'CHART', icon: '📈' },
                 { key: 'trade' as const, label: 'TRADE', icon: '⚡' },
-                { key: 'battle' as const, label: 'ARSENAL', icon: '🎯' },
+                { key: 'battle' as const, label: 'EVENTS', icon: '🎯' },
                 { key: 'rank' as const, label: 'RANK', icon: '🏆' },
               ]).map(t => {
                 const isActive = mobileTab === t.key;
@@ -1698,6 +1911,9 @@ export default function TradingTerminal() {
           </div>
         </div>
       )}
+
+      {/* Tutorial */}
+      <TutorialOverlay key={showTutorial} role="player" lobbyId={lobbyId} />
 
       {/* Chat */}
       {trader && (

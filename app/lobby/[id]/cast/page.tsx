@@ -239,18 +239,42 @@ interface FeedEntry {
 }
 
 function NarrativeFeed({ lobbyState }: { lobbyState: LobbyState }) {
-  const feedEntries: FeedEntry[] = [
-    { id: '1', type: 'big_trade', timestamp: '14:22', text: 'WOLFPACK opens BTC LONG $5,000 @ 5X leverage' },
-    { id: '2', type: 'trade', timestamp: '14:20', text: 'VEGA closes ETH SHORT with +$840 profit' },
-    { id: '3', type: 'sabotage', timestamp: '14:18', text: 'ANONYMOUS → WOLFPACK · BLACKOUT activated (200cr)' },
-    { id: '4', type: 'event', timestamp: '14:15', text: 'FLASH CRASH TRIGGERED · BTC drops 18% instantly' },
-    { id: '5', type: 'trade', timestamp: '14:12', text: 'IRON HANDS opens SOL LONG $2,000 @ 3X' },
-    { id: '6', type: 'trade', timestamp: '14:10', text: 'DEGEN PRIME closes BTC SHORT -$320 loss' },
-    { id: '7', type: 'sabotage', timestamp: '14:08', text: 'VEGA → IRON HANDS · DARK POOL mode (150cr)' },
-    { id: '8', type: 'elimination', timestamp: '14:05', text: 'MOON BOY ELIMINATED · Final return: -15.3%' },
-    { id: '9', type: 'trade', timestamp: '14:02', text: 'ANONYMOUS opens ETH LONG $4,000 @ 4X' },
-    { id: '10', type: 'big_trade', timestamp: '14:00', text: 'WOLFPACK closes SOL LONG +$1,240 profit' },
-  ]
+  // Build feed from real lobby state
+  const feedEntries: FeedEntry[] = []
+  let entryId = 0
+  const now = new Date()
+  const fmtTime = (offset: number) => {
+    const d = new Date(now.getTime() - offset * 1000)
+    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+  }
+
+  // Active positions as trade entries
+  for (const t of lobbyState.traders) {
+    if (t.isEliminated) {
+      feedEntries.push({ id: String(++entryId), type: 'elimination', timestamp: fmtTime(entryId * 15), text: `${t.name} ELIMINATED · Final return: ${t.return >= 0 ? '+' : ''}${t.return.toFixed(1)}%` })
+      continue
+    }
+    for (const p of t.positions) {
+      const isBig = p.size >= 3000 || p.leverage >= 5
+      const pnlStr = p.currentPnl >= 0 ? `+$${Math.round(p.currentPnl)}` : `-$${Math.abs(Math.round(p.currentPnl))}`
+      feedEntries.push({ id: String(++entryId), type: isBig ? 'big_trade' : 'trade', timestamp: fmtTime(entryId * 12), text: `${t.name} ${p.direction} ${p.asset} $${p.size.toLocaleString()} @ ${p.leverage}X · ${pnlStr}` })
+    }
+  }
+
+  // Market events from sabotage feed
+  for (const sab of lobbyState.sabotageEvents.slice(-5)) {
+    feedEntries.push({ id: String(++entryId), type: 'event', timestamp: fmtTime(entryId * 10), text: `${sab.from} → ${sab.to} · ${sab.type.replace(/_/g, ' ').toUpperCase()} (${sab.cost}cr)` })
+  }
+
+  // Volatility event
+  if (lobbyState.currentEvent) {
+    feedEntries.push({ id: String(++entryId), type: 'event', timestamp: fmtTime(0), text: `${lobbyState.currentEvent.type.replace(/_/g, ' ')} TRIGGERED ${lobbyState.currentEvent.asset ? `· ${lobbyState.currentEvent.asset}` : ''} ${lobbyState.currentEvent.impact ? `${lobbyState.currentEvent.impact}%` : ''}` })
+  }
+
+  // Fallback
+  if (feedEntries.length === 0) {
+    feedEntries.push({ id: '0', type: 'trade', timestamp: fmtTime(0), text: 'Waiting for round to start...' })
+  }
 
   const getBorderColor = (type: string) => {
     switch (type) {
@@ -272,7 +296,11 @@ function NarrativeFeed({ lobbyState }: { lobbyState: LobbyState }) {
     }
   }
 
-  const narrativePrompt = "Wolfpack has opened 3 leveraged longs in 2 minutes. They're either front-running the moon shot or about to get absolutely wrecked."
+  // Generate narrative from current state
+  const leader = lobbyState.traders.find(t => t.rank === 1)
+  const narrativePrompt = leader
+    ? `${leader.name} leads with ${leader.return >= 0 ? '+' : ''}${leader.return.toFixed(1)}% return. ${leader.positions.length} open position${leader.positions.length !== 1 ? 's' : ''}. ${lobbyState.sabotageEvents.length > 0 ? 'Market events are flying.' : 'The arena is quiet... for now.'}`
+    : 'Waiting for the round to begin...'
 
   return (
     <div className="flex-1 h-full flex flex-col border-r border-[#1A1A1A]">

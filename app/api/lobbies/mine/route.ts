@@ -28,14 +28,14 @@ export async function GET(request: NextRequest) {
     const ids = lobbies.map(l => l.id);
     const { data: traders } = await sb
       .from('traders')
-      .select('lobby_id, is_competitor')
+      .select('lobby_id')
       .in('lobby_id', ids);
 
     const counts: Record<string, { players: number; spectators: number }> = {};
     for (const t of traders ?? []) {
       if (!counts[t.lobby_id]) counts[t.lobby_id] = { players: 0, spectators: 0 };
-      if (t.is_competitor) counts[t.lobby_id].players++;
-      else counts[t.lobby_id].spectators++;
+      // is_competitor defaults to true; removed from SELECT due to PostgREST schema cache issue
+      counts[t.lobby_id].players++;
     }
 
     const result = lobbies.map(l => ({

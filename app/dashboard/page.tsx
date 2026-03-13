@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { usePrivy } from '@privy-io/react-auth'
 import { getOrCreateProfile } from '@/lib/auth'
+import { useAuthPersist } from '@/lib/use-auth-persist'
 import { font, c, globalCSS, radius } from '@/app/design'
 import StreakBadge from '@/components/streak-badge'
 
@@ -84,6 +85,7 @@ const FALLBACK_EVENTS = ['Loading activity...']
 export default function DashboardPage() {
   const router = useRouter()
   const { authenticated, user, ready, logout } = usePrivy()
+  useAuthPersist() // Keep localStorage profile_id in sync with Privy session
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [lobbies, setLobbies] = useState<Lobby[]>([])
   const [authReady, setAuthReady] = useState(false)
@@ -95,6 +97,9 @@ export default function DashboardPage() {
   const [displayPnl, setDisplayPnl] = useState(0)
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [showCreditsModal, setShowCreditsModal] = useState(false)
+  const [showPracticeModal, setShowPracticeModal] = useState(false)
+  const [practiceDifficulty, setPracticeDifficulty] = useState<string>('medium')
+  const [practiceBotCount, setPracticeBotCount] = useState(4)
   const [saving, setSaving] = useState(false)
   const [selectedLobby, setSelectedLobby] = useState<string | null>(null)
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
@@ -186,15 +191,23 @@ export default function DashboardPage() {
   }, [authReady, user])
 
   // ─── Play Actions ─────────────────────────────────────────
-  const play = useCallback(async (mode: string) => {
+  const play = useCallback(async (mode: string, opts?: { difficulty?: string; botCount?: number }) => {
     setPlayLoading(mode)
-    const pid = localStorage.getItem('bt_profile_id')
+    let pid = localStorage.getItem('bt_profile_id')
+    if (!pid) {
+      pid = crypto.randomUUID()
+      localStorage.setItem('bt_profile_id', pid)
+    }
     const name = profile?.display_name || 'Trader'
     try {
       if (mode === 'practice') {
         const r = await fetch('/api/lobbies/practice', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ profile_id: pid, display_name: name, bot_count: 3 }),
+          body: JSON.stringify({
+            profile_id: pid, display_name: name,
+            bot_count: opts?.botCount ?? practiceBotCount,
+            difficulty: opts?.difficulty ?? practiceDifficulty,
+          }),
         })
         if (r.ok) { const d = await r.json(); router.push(`/lobby/${d.lobby_id}/trade?code=${d.code}`) }
       } else if (mode === 'quick') {
@@ -213,7 +226,7 @@ export default function DashboardPage() {
         router.push('/create')
       }
     } catch {} finally { setPlayLoading(null) }
-  }, [router, profile])
+  }, [router, profile, practiceDifficulty, practiceBotCount])
 
   const deleteLobby = useCallback(async (lobbyId: string) => {
     setSaving(true)
@@ -315,6 +328,10 @@ export default function DashboardPage() {
         @media(max-width:900px){
           .dash-grid{grid-template-columns:1fr!important}
           .sidebar{order:-1}
+          .pillar-row{grid-template-columns:repeat(3,1fr)!important}
+        }
+        @media(max-width:480px){
+          .pillar-row{grid-template-columns:repeat(2,1fr)!important}
         }
       `}</style>
 
@@ -383,71 +400,232 @@ export default function DashboardPage() {
       {/* ══ BODY ══ */}
       {!authReady ? (
         <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 16px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16 }} className="dash-grid">
+          <div className="skeleton" style={{ height: 200, borderRadius: radius.xl, marginBottom: 16 }} />
+          <div className="dash-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16 }}>
             <div>
-              <div className="skeleton" style={{ height: 120, borderRadius: radius.lg, marginBottom: 12 }} />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                <div className="skeleton" style={{ height: 80, borderRadius: radius.md }} />
-                <div className="skeleton" style={{ height: 80, borderRadius: radius.md }} />
-                <div className="skeleton" style={{ height: 80, borderRadius: radius.md }} />
-              </div>
+              <div className="skeleton" style={{ height: 80, borderRadius: radius.lg, marginBottom: 12 }} />
+              <div className="skeleton" style={{ height: 200, borderRadius: radius.lg }} />
             </div>
             <div>
-              <div className="skeleton" style={{ height: 200, borderRadius: radius.lg, marginBottom: 12 }} />
-              <div className="skeleton" style={{ height: 160, borderRadius: radius.lg }} />
+              <div className="skeleton" style={{ height: 300, borderRadius: radius.lg }} />
             </div>
           </div>
         </div>
       ) : (
         <div style={{ maxWidth: 1100, margin: '0 auto', padding: '16px 16px 100px' }}>
+
+          {/* ═══════════════════════════════════════════════════════ */}
+          {/* RANK HERO — The ONE number. The dopamine.              */}
+          {/* ═══════════════════════════════════════════════════════ */}
+          <div className="fu" style={{
+            background: c.surface, border: `1px solid ${c.border}`, borderRadius: radius.xl,
+            padding: '32px', marginBottom: 16, position: 'relative', overflow: 'hidden',
+          }}>
+            {/* Top accent line */}
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${tier.color}, ${tier.color}40 40%, transparent 80%)` }} />
+
+            {/* Row 1: Score + Tier + Progress */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 32, marginBottom: 24 }}>
+              {/* Avatar */}
+              <div style={{
+                width: 64, height: 64, borderRadius: radius.lg, flexShrink: 0,
+                background: `${tier.color}15`, border: `2.5px solid ${tier.color}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: font.mono, fontSize: 28, color: tier.color, fontWeight: 700,
+                boxShadow: `0 0 30px ${tier.color}20`,
+              }}>{profile?.display_name?.[0]?.toUpperCase() ?? '?'}</div>
+
+              {/* Name + Tier label */}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontFamily: font.sans, fontSize: 20, fontWeight: 700, color: c.text, lineHeight: 1 }}>
+                  {profileLoading ? '...' : profile?.display_name ?? 'Trader'}
+                </div>
+                <div style={{
+                  fontFamily: font.mono, fontSize: 11, fontWeight: 700, color: tier.color,
+                  letterSpacing: '.08em', marginTop: 4,
+                  display: 'inline-block', padding: '2px 8px',
+                  background: `${tier.color}12`, border: `1px solid ${tier.color}25`, borderRadius: 4,
+                }}>{tier.name}</div>
+              </div>
+
+              {/* THE number */}
+              <div style={{ flex: 1, textAlign: 'right' }}>
+                <div style={{ fontFamily: font.mono, fontSize: 64, fontWeight: 700, color: tier.color, lineHeight: 1, letterSpacing: '-.02em' }}>{btr}</div>
+                <div style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 600, color: c.text4, letterSpacing: '.12em', marginTop: 4 }}>TRADER RANK</div>
+              </div>
+            </div>
+
+            {/* Row 2: Progress bar — how close to next tier */}
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontFamily: font.mono, fontSize: 10, color: c.text3 }}>{tier.name} · {btr}</span>
+                <span style={{ fontFamily: font.mono, fontSize: 10, color: tier.color }}>
+                  {tier.next - btr} pts to {btrTier(tier.next).name}
+                </span>
+              </div>
+              <div style={{ height: 8, background: c.hover, borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{
+                  width: `${btrProg}%`, height: '100%', borderRadius: 4,
+                  background: `linear-gradient(90deg, ${tier.color}, ${tier.color}CC)`,
+                  transition: 'width .6s cubic-bezier(.25,.1,.25,1)',
+                  boxShadow: `0 0 12px ${tier.color}40`,
+                }} />
+              </div>
+            </div>
+
+            {/* Row 3: 5 Pillars — what builds your score */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 24 }} className="pillar-row">
+              {[
+                { name: 'PERFORMANCE', weight: 35, col: c.green },
+                { name: 'RISK MGMT', weight: 25, col: c.pink },
+                { name: 'CONSISTENCY', weight: 20, col: c.blue },
+                { name: 'ADAPTABILITY', weight: 10, col: '#FFD700' },
+                { name: 'COMMUNITY', weight: 10, col: c.red },
+              ].map(p => (
+                <div key={p.name} style={{
+                  background: `${p.col}08`, border: `1px solid ${p.col}18`, borderRadius: radius.sm,
+                  padding: '10px 8px', textAlign: 'center',
+                }}>
+                  <div style={{ fontFamily: font.mono, fontSize: 8, fontWeight: 700, color: `${p.col}AA`, letterSpacing: '.04em', marginBottom: 4 }}>{p.name}</div>
+                  <div style={{ height: 3, background: `${p.col}15`, borderRadius: 2, overflow: 'hidden', marginBottom: 4 }}>
+                    <div style={{ width: `${p.weight}%`, height: '100%', background: p.col, borderRadius: 2, transition: 'width .4s ease' }} />
+                  </div>
+                  <div style={{ fontFamily: font.mono, fontSize: 13, fontWeight: 700, color: p.col }}>{p.weight}%</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Row 4: Stats — the proof */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 1, background: c.border, borderRadius: radius.sm, overflow: 'hidden' }}>
+              {[
+                { value: pnlPos ? `+${displayPnl >= 1000 ? `${(displayPnl/1000).toFixed(1)}K` : Math.round(displayPnl)}` : `${displayPnl <= -1000 ? `${(displayPnl/1000).toFixed(1)}K` : Math.round(displayPnl)}`, label: 'TOTAL P&L', color: pnlPos ? c.green : c.red },
+                { value: `${((winRate) * 100).toFixed(0)}%`, label: 'WIN RATE', color: winRate >= 0.5 ? c.green : c.text },
+                { value: `${pastBattles.length}`, label: 'BATTLES', color: c.text },
+                { value: `${profile?.total_wins ?? 0}`, label: 'WINS', color: c.green },
+                { value: streak > 0 ? `${streak}` : '0', label: 'STREAK', color: streak >= 3 ? c.gold : streak > 0 ? '#FF8C00' : c.text4 },
+                { value: (profile?.best_return ?? 0) > 0 ? `+${(profile!.best_return).toFixed(0)}%` : '-', label: 'BEST', color: (profile?.best_return ?? 0) > 0 ? c.green : c.text4 },
+              ].map(s => (
+                <div key={s.label} style={{ background: c.surface, padding: '12px 0', textAlign: 'center' }}>
+                  <div style={{ fontFamily: font.mono, fontSize: 18, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</div>
+                  <div style={{ fontFamily: font.sans, fontSize: 8, fontWeight: 600, color: c.text4, letterSpacing: '.08em', marginTop: 4 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {streak >= 2 && (
+              <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center' }}>
+                <StreakBadge streak={streak} />
+              </div>
+            )}
+          </div>
+
+          {/* ═══════════════════════════════════════════════════════ */}
+          {/* CTA — Rank up. Opens difficulty picker.                  */}
+          {/* ═══════════════════════════════════════════════════════ */}
+          <button
+            className={`mode-btn fu fu1 ${playLoading === 'practice' ? 'loading' : ''}`}
+            onClick={() => setShowPracticeModal(true)}
+            style={{
+              padding: '20px 24px', marginBottom: 16, width: '100%',
+              border: `1px solid ${c.pinkBorder}`,
+              background: `linear-gradient(135deg, rgba(245,160,208,.06) 0%, ${c.surface} 50%, rgba(0,220,130,.03) 100%)`,
+              animation: 'glow 4s ease infinite',
+            }}
+          >
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${c.pink}, transparent 70%)` }} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 700, color: c.pink, letterSpacing: '.1em', marginBottom: 4 }}>
+                  {playLoading === 'practice' ? 'CREATING BATTLE...' : `${tier.next - btr} PTS TO ${btrTier(tier.next).name}`}
+                </div>
+                <div style={{ fontFamily: font.display, fontSize: 32, color: c.text, lineHeight: 1, letterSpacing: '.02em' }}>
+                  Rank Up Now
+                </div>
+                <div style={{ fontFamily: font.sans, fontSize: 12, color: c.text3, marginTop: 2 }}>
+                  Choose your difficulty and climb the ranks
+                </div>
+              </div>
+              <div style={{
+                width: 50, height: 50, borderRadius: radius.md,
+                background: c.pinkDim, border: `1px solid ${c.pinkBorder}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: font.display, fontSize: 24, color: c.pink,
+              }}>GO</div>
+            </div>
+          </button>
+
           <div className="dash-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, alignItems: 'start' }}>
 
             {/* ═══ MAIN COLUMN ═══ */}
             <div>
-              {/* PLAY NOW — Big CTA */}
-              <button
-                className={`mode-btn fu ${playLoading === 'quick' ? 'loading' : ''}`}
-                onClick={() => play('quick')}
-                style={{
-                  padding: '24px', marginBottom: 10,
-                  border: `1px solid ${c.pinkBorder}`,
-                  background: `linear-gradient(135deg, rgba(245,160,208,.04) 0%, ${c.surface} 60%, rgba(0,220,130,.02) 100%)`,
-                  animation: 'glow 4s ease infinite',
-                }}
-              >
-                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${c.pink}, transparent 80%)` }} />
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <div style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 700, color: c.pink, letterSpacing: '.1em', marginBottom: 4 }}>
-                      {playLoading === 'quick' ? 'FINDING MATCH...' : 'READY?'}
-                    </div>
-                    <div style={{ fontFamily: font.display, fontSize: 32, color: c.text, lineHeight: 1, letterSpacing: '.02em' }}>
-                      Play Now
-                    </div>
-                    <div style={{ fontFamily: font.sans, fontSize: 13, color: c.text3, marginTop: 2 }}>
-                      Jump into a live battle instantly
-                    </div>
+
+              {/* LEADERBOARD — front and center */}
+              <div className="fu fu2" style={{
+                background: c.surface, border: `1px solid ${c.border}`, borderRadius: radius.lg,
+                padding: '16px', marginBottom: 16,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 700, color: c.text3, letterSpacing: '.06em' }}>GLOBAL RANKINGS</span>
+                    {profile && <span style={{ fontFamily: font.mono, fontSize: 10, color: c.pink, background: c.pinkDim, padding: '2px 6px', borderRadius: 3 }}>YOU</span>}
                   </div>
-                  <div style={{
-                    width: 50, height: 50, borderRadius: radius.md,
-                    background: c.pinkDim, border: `1px solid ${c.pinkBorder}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontFamily: font.display, fontSize: 24, color: c.pink,
-                  }}>GO</div>
+                  <Link href="/leaderboard" style={{ fontFamily: font.sans, fontSize: 11, color: c.pink, textDecoration: 'none' }}>View All</Link>
                 </div>
-              </button>
+
+                {leaderboard.length > 0 ? (
+                  <div style={{ border: `1px solid ${c.border}`, borderRadius: radius.sm, overflow: 'hidden' }}>
+                    {leaderboard.map((t, i) => {
+                      const tTier = btrTier(t.tr_score)
+                      const isYou = profile?.id === t.id
+                      return (
+                        <Link key={t.id} href={`/profile/${t.id}`} style={{
+                          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
+                          textDecoration: 'none', color: 'inherit', transition: 'background .1s',
+                          background: isYou ? `${c.pink}08` : 'transparent',
+                          borderBottom: i < leaderboard.length - 1 ? `1px solid ${c.border}` : 'none',
+                        }} className="lobby-row">
+                          <span style={{
+                            fontFamily: font.mono, fontSize: 14, fontWeight: 700, width: 22, textAlign: 'center',
+                            color: i === 0 ? c.gold : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : c.text3,
+                          }}>{i + 1}</span>
+                          <div style={{
+                            width: 28, height: 28, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            background: `${tTier.color}18`, border: `1.5px solid ${tTier.color}40`,
+                            fontFamily: font.mono, fontSize: 11, fontWeight: 700, color: tTier.color,
+                          }}>{t.display_name?.[0]?.toUpperCase() ?? '?'}</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{
+                              fontFamily: font.sans, fontSize: 13, fontWeight: isYou ? 700 : 500, color: isYou ? c.pink : c.text,
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            }}>
+                              {t.display_name}{isYou ? ' (you)' : ''}
+                            </div>
+                            <div style={{ fontFamily: font.mono, fontSize: 9, color: c.text4 }}>{tTier.name} · {t.total_wins}W</div>
+                          </div>
+                          <div style={{ fontFamily: font.mono, fontSize: 16, fontWeight: 700, color: tTier.color, flexShrink: 0 }}>{t.tr_score}</div>
+                        </Link>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                    <div style={{ fontFamily: font.sans, fontSize: 13, color: c.text3, marginBottom: 8 }}>No rankings yet</div>
+                    <div style={{ fontFamily: font.sans, fontSize: 11, color: c.text4 }}>Complete your first battle to get ranked</div>
+                  </div>
+                )}
+              </div>
 
               {/* MODE SELECT — Practice / 1v1 / Host */}
-              <div className="fu fu1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
+              <div className="fu fu3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
                 {[
-                  { id: 'practice', label: 'Practice', sub: 'vs AI bots', accent: c.green },
-                  { id: 'duel', label: '1v1 Duel', sub: 'head to head', accent: '#FF6B35' },
-                  { id: 'create', label: 'Host Battle', sub: 'invite friends', accent: c.blue },
+                  { id: 'practice', label: 'Practice', sub: 'vs AI bots', accent: c.green, onClick: () => setShowPracticeModal(true) },
+                  { id: 'duel', label: '1v1 Duel', sub: 'head to head', accent: '#FF6B35', onClick: () => play('duel') },
+                  { id: 'create', label: 'Host Battle', sub: 'invite friends', accent: c.blue, onClick: () => play('create') },
                 ].map(m => (
                   <button
                     key={m.id}
                     className={`mode-btn ${playLoading === m.id ? 'loading' : ''}`}
-                    onClick={() => play(m.id)}
+                    onClick={m.onClick}
                     style={{ padding: '14px 12px', textAlign: 'center' }}
                   >
                     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${m.accent}80, transparent)` }} />
@@ -461,7 +639,7 @@ export default function DashboardPage() {
 
               {/* LIVE NOW */}
               {live.length > 0 && (
-                <div className="fu fu2" style={{ marginBottom: 16 }}>
+                <div className="fu fu4" style={{ marginBottom: 16 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                     <div className="live-dot" style={{ width: 5, height: 5 }} />
                     <span style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 700, color: c.green, letterSpacing: '.06em' }}>LIVE NOW</span>
@@ -497,7 +675,7 @@ export default function DashboardPage() {
                           fontFamily: font.sans, fontSize: 11, fontWeight: 600, color: c.green,
                           padding: '5px 12px', borderRadius: 6, background: `${c.green}12`,
                           border: `1px solid ${c.green}25`, flexShrink: 0,
-                        }}>Watch</div>
+                        }}>Enter</div>
                       </div>
                     ))}
                   </div>
@@ -506,9 +684,9 @@ export default function DashboardPage() {
 
               {/* OPEN LOBBIES */}
               {open.length > 0 && (
-                <div className="fu fu3" style={{ marginBottom: 16 }}>
+                <div className="fu fu4" style={{ marginBottom: 16 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 700, color: c.text3, letterSpacing: '.06em' }}>OPEN LOBBIES</span>
+                    <span style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 700, color: c.text3, letterSpacing: '.06em' }}>OPEN ARENAS</span>
                     <Link href="/create" style={{ fontFamily: font.sans, fontSize: 11, color: c.pink, textDecoration: 'none' }}>+ New</Link>
                   </div>
                   <div style={{ border: `1px solid ${c.border}`, borderRadius: radius.lg, overflow: 'hidden' }}>
@@ -578,12 +756,12 @@ export default function DashboardPage() {
                   border: `1px solid ${c.border}`, borderRadius: radius.lg, background: c.surface,
                 }}>
                   <div style={{ fontFamily: font.display, fontSize: 28, color: c.text, marginBottom: 4 }}>
-                    No Battles Yet
+                    Your rank starts at zero
                   </div>
                   <div style={{ fontFamily: font.sans, fontSize: 13, color: c.text3, marginBottom: 20 }}>
-                    Start a practice round or host your own battle
+                    Every battle counts. Start climbing.
                   </div>
-                  <button onClick={() => play('practice')} style={{
+                  <button onClick={() => setShowPracticeModal(true)} style={{
                     fontFamily: font.sans, fontSize: 14, fontWeight: 600, color: c.bg,
                     background: c.green, padding: '12px 28px', borderRadius: radius.md,
                     border: 'none', cursor: 'pointer', marginRight: 10,
@@ -595,38 +773,44 @@ export default function DashboardPage() {
                   }}>Host a Battle</Link>
                 </div>
               )}
+            </div>
 
-              {/* MATCH HISTORY */}
+            {/* ═══ SIDEBAR ═══ */}
+            <div className="sidebar">
+
+              {/* BATTLE LOG — recent battles as rank progression */}
               {pastBattles.length > 0 && (
-                <div className="fu fu4">
-                  <div style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 700, color: c.text3, letterSpacing: '.06em', marginBottom: 8 }}>
-                    RECENT BATTLES
-                  </div>
-                  <div style={{ border: `1px solid ${c.border}`, borderRadius: radius.lg, overflow: 'hidden' }}>
-                    {pastBattles.slice(0, 8).map(b => {
+                <div className="sidebar-card fu fu1">
+                  <div className="sidebar-label">BATTLE LOG</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                    {pastBattles.slice(0, 6).map((b, i) => {
                       const startBal = b.starting_balance ?? 10000
                       const ret = b.final_balance != null ? ((b.final_balance - startBal) / startBal * 100) : null
                       const won = b.final_rank === 1
                       const pos = ret != null && ret >= 0
                       return (
-                        <Link key={b.id} href={`/lobby/${b.lobby_id}`} className="lobby-row" style={{ textDecoration: 'none', color: 'inherit' }}>
+                        <Link key={b.id} href={`/lobby/${b.lobby_id}`} style={{
+                          display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0',
+                          textDecoration: 'none', color: 'inherit',
+                          borderBottom: i < Math.min(pastBattles.length, 6) - 1 ? `1px solid ${c.border}` : 'none',
+                        }}>
                           <div style={{
-                            width: 28, height: 28, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            width: 24, height: 24, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center',
                             background: won ? `${c.green}15` : c.hover,
                             border: `1.5px solid ${won ? `${c.green}40` : c.border}`, flexShrink: 0,
                           }}>
-                            <span style={{ fontFamily: font.mono, fontSize: 12, fontWeight: 700, color: won ? c.green : c.text3 }}>
+                            <span style={{ fontFamily: font.mono, fontSize: 10, fontWeight: 700, color: won ? c.green : c.text3 }}>
                               {won ? 'W' : b.final_rank ?? '-'}
                             </span>
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontFamily: font.sans, fontSize: 12, fontWeight: 500, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <div style={{ fontFamily: font.sans, fontSize: 11, fontWeight: 500, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {b.lobby_name ?? 'Battle'}
                             </div>
                             <div style={{ fontFamily: font.sans, fontSize: 9, color: c.text4 }}>{timeAgo(b.created_at)}</div>
                           </div>
                           {ret != null && (
-                            <span style={{ fontFamily: font.mono, fontSize: 12, fontWeight: 700, color: pos ? c.green : c.red, flexShrink: 0 }}>
+                            <span style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 700, color: pos ? c.green : c.red, flexShrink: 0 }}>
                               {pos ? '+' : ''}{ret.toFixed(1)}%
                             </span>
                           )}
@@ -634,180 +818,62 @@ export default function DashboardPage() {
                       )
                     })}
                   </div>
-                  {pastBattles.length > 8 && (
-                    <Link href="/profile" style={{ display: 'block', textAlign: 'center', padding: '10px', fontFamily: font.sans, fontSize: 11, color: c.pink, textDecoration: 'none' }}>
+                  {pastBattles.length > 6 && (
+                    <Link href="/profile" style={{ display: 'block', textAlign: 'center', padding: '8px 0 0', fontFamily: font.sans, fontSize: 11, color: c.pink, textDecoration: 'none' }}>
                       View all {pastBattles.length} battles
                     </Link>
                   )}
                 </div>
               )}
-            </div>
 
-            {/* ═══ SIDEBAR ═══ */}
-            <div className="sidebar">
-
-              {/* YOUR STATS */}
-              <div className="sidebar-card fu fu1">
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{
-                      width: 40, height: 40, borderRadius: radius.sm,
-                      background: `${tier.color}18`, border: `2px solid ${tier.color}`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontFamily: font.mono, fontSize: 18, color: tier.color, fontWeight: 700,
-                    }}>{profile?.display_name?.[0]?.toUpperCase() ?? '?'}</div>
-                    <div>
-                      <div style={{ fontFamily: font.sans, fontSize: 15, fontWeight: 700, color: c.text }}>
-                        {profileLoading ? '...' : profile?.display_name ?? 'Trader'}
-                      </div>
-                      <div style={{ fontFamily: font.mono, fontSize: 10, color: tier.color, fontWeight: 600, letterSpacing: '.04em' }}>{tier.name}</div>
-                    </div>
+              {/* PAYOUTS */}
+              {totalPayouts > 0 && (
+                <div className="sidebar-card fu fu2" style={{ background: `linear-gradient(135deg, ${c.surface}, rgba(0,220,130,.03))` }}>
+                  <div className="sidebar-label">TOTAL EARNINGS</div>
+                  <div style={{ fontFamily: font.mono, fontSize: 28, fontWeight: 700, color: c.green, lineHeight: 1 }}>
+                    +${totalPayouts >= 1000 ? `${(totalPayouts / 1000).toFixed(1)}K` : totalPayouts.toLocaleString()}
                   </div>
-                  <Link href="/profile" style={{
-                    fontFamily: font.sans, fontSize: 10, color: c.text3, textDecoration: 'none',
-                    padding: '4px 8px', borderRadius: 4, border: `1px solid ${c.border}`,
-                  }}>Edit</Link>
-                </div>
-
-                {/* BTR Score */}
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                      <span style={{ fontFamily: font.mono, fontSize: 24, fontWeight: 700, color: tier.color }}>{btr}</span>
-                      <span style={{ fontFamily: font.sans, fontSize: 10, color: c.text4, fontWeight: 600, letterSpacing: '.06em' }}>BTR</span>
-                    </div>
-                    <span style={{ fontFamily: font.mono, fontSize: 10, color: c.text4 }}>{tier.next} next</span>
-                  </div>
-                  <div style={{ height: 4, background: c.hover, borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{ width: `${btrProg}%`, height: '100%', borderRadius: 2, background: `linear-gradient(90deg, ${tier.color}, ${tier.color}88)`, transition: 'width .4s ease' }} />
+                  <div style={{ fontFamily: font.sans, fontSize: 10, color: c.text4, marginTop: 4 }}>
+                    from {pastBattles.filter(b => b.final_balance != null && b.starting_balance != null && b.final_balance > b.starting_balance).length} profitable battles
                   </div>
                 </div>
-
-                {/* Stats grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1, background: c.border, borderRadius: radius.sm, overflow: 'hidden', marginBottom: 10 }}>
-                  {[
-                    { value: pnlPos ? `+${displayPnl >= 1000 ? `${(displayPnl/1000).toFixed(1)}K` : Math.round(displayPnl)}` : `${displayPnl <= -1000 ? `${(displayPnl/1000).toFixed(1)}K` : Math.round(displayPnl)}`, label: 'P&L', color: pnlPos ? c.green : c.red },
-                    { value: `${((winRate) * 100).toFixed(0)}%`, label: 'WIN RATE', color: c.text },
-                    { value: `${pastBattles.length}`, label: 'BATTLES', color: c.text },
-                  ].map(s => (
-                    <div key={s.label} style={{ background: c.surface, padding: '10px 0', textAlign: 'center' }}>
-                      <div style={{ fontFamily: font.mono, fontSize: 15, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</div>
-                      <div style={{ fontFamily: font.sans, fontSize: 8, fontWeight: 600, color: c.text4, letterSpacing: '.08em', marginTop: 3 }}>{s.label}</div>
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1, background: c.border, borderRadius: radius.sm, overflow: 'hidden' }}>
-                  {[
-                    { value: `${profile?.total_wins ?? 0}`, label: 'WINS', color: c.green },
-                    { value: streak > 0 ? `${streak}` : '-', label: 'STREAK', color: streak >= 3 ? c.gold : streak > 0 ? '#FF8C00' : c.text4 },
-                    { value: totalPayouts > 0 ? `+${totalPayouts >= 1000 ? `${(totalPayouts/1000).toFixed(1)}K` : Math.round(totalPayouts)}` : '-', label: 'PAYOUTS', color: totalPayouts > 0 ? c.green : c.text4 },
-                  ].map(s => (
-                    <div key={s.label} style={{ background: c.surface, padding: '10px 0', textAlign: 'center' }}>
-                      <div style={{ fontFamily: font.mono, fontSize: 15, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</div>
-                      <div style={{ fontFamily: font.sans, fontSize: 8, fontWeight: 600, color: c.text4, letterSpacing: '.08em', marginTop: 3 }}>{s.label}</div>
-                    </div>
-                  ))}
-                </div>
-
-                {streak >= 2 && (
-                  <div style={{ marginTop: 10, display: 'flex', justifyContent: 'center' }}>
-                    <StreakBadge streak={streak} />
-                  </div>
-                )}
-              </div>
-
-              {/* LAST BATTLE */}
-              {lastBattle && lastReturn !== null && (
-                <Link href={`/lobby/${lastBattle.lobby_id}`} className="sidebar-card fu fu2" style={{
-                  display: 'block', textDecoration: 'none', color: 'inherit', cursor: 'pointer',
-                }}>
-                  <div className="sidebar-label">LAST BATTLE</div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ fontFamily: font.sans, fontSize: 14, fontWeight: 600, color: c.text }}>{lastBattle.lobby_name ?? 'Battle'}</div>
-                      <div style={{ fontFamily: font.sans, fontSize: 11, color: c.text4 }}>{timeAgo(lastBattle.created_at)}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{
-                        fontFamily: font.mono, fontSize: 22, fontWeight: 700, lineHeight: 1,
-                        color: lastReturn >= 0 ? c.green : c.red,
-                      }}>{lastReturn >= 0 ? '+' : ''}{lastReturn.toFixed(1)}%</div>
-                      {lastBattle.final_rank && (
-                        <div style={{
-                          fontFamily: font.mono, fontSize: 10, fontWeight: 700, marginTop: 2,
-                          color: lastBattle.final_rank === 1 ? c.gold : c.text3,
-                        }}>
-                          {lastBattle.final_rank === 1 ? 'WINNER' : `#${lastBattle.final_rank}`}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </Link>
               )}
 
-              {/* BUY CREDITS */}
-              <div className="sidebar-card fu fu3">
-                <div className="sidebar-label">CREDITS</div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <div>
-                    <span style={{ fontFamily: font.mono, fontSize: 22, fontWeight: 700, color: c.pink }}>{profile?.credits ?? 0}</span>
-                    <span style={{ fontFamily: font.sans, fontSize: 11, color: c.text4, marginLeft: 6 }}>available</span>
+              {/* BADGES */}
+              {profile?.badges && profile.badges.length > 0 && (
+                <div className="sidebar-card fu fu2">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <div className="sidebar-label" style={{ marginBottom: 0 }}>BADGES</div>
+                    <Link href="/profile" style={{ fontFamily: font.sans, fontSize: 10, color: c.pink, textDecoration: 'none' }}>View all</Link>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {profile.badges.slice(0, 8).map(b => (
+                      <div key={b.id} title={b.name} style={{
+                        width: 36, height: 36, borderRadius: 8, background: c.elevated,
+                        border: `1px solid ${c.border}`, display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', fontFamily: font.sans, fontSize: 16,
+                        cursor: 'default',
+                      }}>{b.icon === 'fire' ? '🔥' : b.icon === 'crown' ? '👑' : b.icon === 'star' ? '⭐' : b.icon === 'shield' ? '🛡' : b.icon === 'bolt' ? '⚡' : b.icon === 'trophy' ? '🏆' : b.icon === 'diamond' ? '💎' : b.icon === 'skull' ? '💀' : b.icon === 'medal' ? '🎖' : '🏅'}</div>
+                    ))}
                   </div>
                 </div>
-                <div style={{ fontFamily: font.sans, fontSize: 11, color: c.text3, marginBottom: 10 }}>
-                  Use credits for sabotage attacks, prediction bets, and entry fees
+              )}
+
+              {/* CREDITS */}
+              <div className="sidebar-card fu fu2">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div className="sidebar-label" style={{ marginBottom: 0 }}>CREDITS</div>
+                  <span style={{ fontFamily: font.mono, fontSize: 16, fontWeight: 700, color: c.pink }}>{profile?.credits ?? 0}</span>
                 </div>
                 <button onClick={() => setShowCreditsModal(true)} style={{
-                  width: '100%', fontFamily: font.sans, fontSize: 13, fontWeight: 600,
-                  color: c.bg, background: c.pink, border: 'none', padding: '10px 0',
-                  borderRadius: radius.md, cursor: 'pointer', transition: 'all .15s',
+                  width: '100%', fontFamily: font.sans, fontSize: 12, fontWeight: 600,
+                  color: c.bg, background: c.pink, border: 'none', padding: '8px 0',
+                  borderRadius: radius.sm, cursor: 'pointer', transition: 'all .15s',
                 }}>Buy Credits</button>
               </div>
 
-              {/* TOP TRADERS LEADERBOARD */}
-              <div className="sidebar-card fu fu4">
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <div className="sidebar-label" style={{ marginBottom: 0 }}>TOP TRADERS</div>
-                  <Link href="/leaderboard" style={{ fontFamily: font.sans, fontSize: 10, color: c.pink, textDecoration: 'none' }}>View All</Link>
-                </div>
-                {leaderboard.length > 0 ? leaderboard.map((t, i) => {
-                  const tTier = btrTier(t.tr_score)
-                  return (
-                    <Link key={t.id} href={`/profile/${t.id}`} style={{
-                      display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0',
-                      textDecoration: 'none', color: 'inherit',
-                      borderBottom: i < leaderboard.length - 1 ? `1px solid ${c.border}` : 'none',
-                    }}>
-                      <span style={{
-                        fontFamily: font.mono, fontSize: 12, fontWeight: 700, width: 18, textAlign: 'center',
-                        color: i === 0 ? c.gold : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : c.text3,
-                      }}>{i + 1}</span>
-                      <div style={{
-                        width: 24, height: 24, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        background: `${tTier.color}18`, border: `1px solid ${tTier.color}40`,
-                        fontFamily: font.mono, fontSize: 10, fontWeight: 700, color: tTier.color,
-                      }}>{t.display_name?.[0]?.toUpperCase() ?? '?'}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontFamily: font.sans, fontSize: 12, fontWeight: 600, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {t.display_name}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ fontFamily: font.mono, fontSize: 12, fontWeight: 700, color: tTier.color }}>{t.tr_score}</div>
-                        <div style={{ fontFamily: font.sans, fontSize: 8, color: c.text4 }}>{t.total_wins}W</div>
-                      </div>
-                    </Link>
-                  )
-                }) : (
-                  <div style={{ fontFamily: font.sans, fontSize: 12, color: c.text4, textAlign: 'center', padding: '16px 0' }}>
-                    Play battles to appear on the leaderboard
-                  </div>
-                )}
-              </div>
-
               {/* QUICK LINKS */}
-              <div className="sidebar-card fu fu5">
+              <div className="sidebar-card fu fu3">
                 <div className="sidebar-label">EXPLORE</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   {[
@@ -829,17 +895,100 @@ export default function DashboardPage() {
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
 
-              {/* BEST RETURN */}
-              {(profile?.best_return ?? 0) > 0 && (
-                <div className="sidebar-card fu fu5">
-                  <div className="sidebar-label">PERSONAL BEST</div>
-                  <div style={{ fontFamily: font.mono, fontSize: 28, fontWeight: 700, color: c.green }}>
-                    +{(profile!.best_return).toFixed(1)}%
-                  </div>
-                  <div style={{ fontFamily: font.sans, fontSize: 11, color: c.text4 }}>Best single-battle return</div>
+      {/* ══ PRACTICE DIFFICULTY MODAL ══ */}
+      {showPracticeModal && (
+        <div className="modal-overlay" onClick={() => setShowPracticeModal(false)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <div>
+                <div style={{ fontFamily: font.display, fontSize: 24, color: c.text }}>Start Practice</div>
+                <div style={{ fontFamily: font.sans, fontSize: 12, color: c.text3 }}>
+                  Practice builds rank (capped outside top 100)
                 </div>
-              )}
+              </div>
+              <button onClick={() => setShowPracticeModal(false)} style={{
+                width: 32, height: 32, borderRadius: 8, border: `1px solid ${c.border}`,
+                background: c.surface, color: c.text3, cursor: 'pointer', fontSize: 18,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>&times;</button>
+            </div>
+
+            {/* Difficulty cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
+              {([
+                { id: 'easy', label: 'Chill', desc: '2 bots, 3min rounds, $50K', color: c.green, multiplier: '0.5x rank pts', icon: '~' },
+                { id: 'medium', label: 'Standard', desc: '4 bots, 2min rounds, $10K', color: c.blue, multiplier: '0.75x rank pts', icon: '!' },
+                { id: 'hard', label: 'Intense', desc: '6 bots, 1min rounds, $5K', color: '#FF6B35', multiplier: '1.0x rank pts', icon: '!!' },
+                { id: 'insane', label: 'Degen', desc: '7 bots, 45s rounds, $2K', color: c.red, multiplier: '1.25x rank pts', icon: '!!!' },
+              ] as const).map(d => (
+                <button
+                  key={d.id}
+                  onClick={() => { setPracticeDifficulty(d.id); setPracticeBotCount(d.id === 'easy' ? 2 : d.id === 'medium' ? 4 : d.id === 'hard' ? 6 : 7) }}
+                  style={{
+                    padding: '16px 14px', textAlign: 'left', cursor: 'pointer', transition: 'all .15s',
+                    border: practiceDifficulty === d.id ? `2px solid ${d.color}` : `1px solid ${c.border}`,
+                    borderRadius: radius.md, background: practiceDifficulty === d.id ? `${d.color}08` : c.surface,
+                    position: 'relative', overflow: 'hidden',
+                  }}
+                >
+                  {practiceDifficulty === d.id && (
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: d.color }} />
+                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span style={{
+                      fontFamily: font.mono, fontSize: 10, fontWeight: 700, color: d.color,
+                      background: `${d.color}15`, padding: '2px 6px', borderRadius: 3,
+                    }}>{d.icon}</span>
+                    <span style={{ fontFamily: font.sans, fontSize: 15, fontWeight: 700, color: practiceDifficulty === d.id ? c.text : c.text2 }}>
+                      {d.label}
+                    </span>
+                  </div>
+                  <div style={{ fontFamily: font.sans, fontSize: 11, color: c.text4, marginBottom: 4 }}>{d.desc}</div>
+                  <div style={{ fontFamily: font.mono, fontSize: 10, fontWeight: 600, color: d.color }}>{d.multiplier}</div>
+                </button>
+              ))}
+            </div>
+
+            {/* Bot count slider */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontFamily: font.sans, fontSize: 12, fontWeight: 600, color: c.text2 }}>Opponents</span>
+                <span style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 700, color: c.text }}>{practiceBotCount} bot{practiceBotCount !== 1 ? 's' : ''}</span>
+              </div>
+              <input
+                type="range" min={1} max={7} value={practiceBotCount}
+                onChange={e => setPracticeBotCount(Number(e.target.value))}
+                style={{ width: '100%', accentColor: c.pink }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontFamily: font.mono, fontSize: 9, color: c.text4 }}>1</span>
+                <span style={{ fontFamily: font.mono, fontSize: 9, color: c.text4 }}>7</span>
+              </div>
+            </div>
+
+            {/* Launch button */}
+            <button
+              className={playLoading === 'practice' ? 'loading' : ''}
+              onClick={() => { setShowPracticeModal(false); play('practice', { difficulty: practiceDifficulty, botCount: practiceBotCount }) }}
+              disabled={!!playLoading}
+              style={{
+                width: '100%', padding: '14px 0', fontFamily: font.display, fontSize: 20,
+                fontWeight: 700, color: c.bg, border: 'none', borderRadius: radius.md,
+                cursor: 'pointer', transition: 'all .15s',
+                background: `linear-gradient(135deg, ${c.green}, ${c.green}CC)`,
+                boxShadow: `0 4px 20px ${c.green}30`,
+              }}
+            >
+              {playLoading === 'practice' ? 'Creating Battle...' : 'Start Battle'}
+            </button>
+
+            <div style={{ fontFamily: font.sans, fontSize: 10, color: c.text4, textAlign: 'center', marginTop: 10 }}>
+              Practice rank points are capped — top 100 requires verified live trades
             </div>
           </div>
         </div>

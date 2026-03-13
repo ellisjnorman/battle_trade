@@ -198,7 +198,14 @@ export default function CreateLobbyPage() {
           format,
           is_public: isPublic,
           admin_password: password || undefined,
-          creator_id: localStorage.getItem('bt_profile_id') || undefined,
+          creator_id: (() => {
+            let pid = localStorage.getItem('bt_profile_id');
+            if (!pid) {
+              pid = crypto.randomUUID();
+              localStorage.setItem('bt_profile_id', pid);
+            }
+            return pid;
+          })(),
           config: {
             starting_balance: startingBalance,
             available_symbols: [],

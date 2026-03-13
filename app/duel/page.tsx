@@ -327,7 +327,7 @@ export default function DuelPage() {
         </Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <span style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 700, color: tier.color, textShadow: tier.glow }}>
-            {profile.tr_score} BTR
+            {profile.tr_score} RANK
           </span>
           <span style={{ fontSize: 11, fontWeight: 600, color: tier.color, letterSpacing: '.06em', textTransform: 'uppercase' as const }}>
             {tier.name}
@@ -346,7 +346,7 @@ export default function DuelPage() {
           </p>
         </div>
 
-        {/* ─── BTR Badge ─────────────────────────────────── */}
+        {/* ─── Rank Badge ─────────────────────────────────── */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
           padding: '14px 20px', marginBottom: 28,
@@ -444,7 +444,7 @@ export default function DuelPage() {
                   FIND MATCH
                 </button>
                 <p style={{ textAlign: 'center', fontSize: 12, color: c.text4, marginTop: 10 }}>
-                  Matches you with a player within 200 BTR of your rating
+                  Matches you with a player within 200 points of your rank
                 </p>
               </>
             )}
@@ -472,7 +472,7 @@ export default function DuelPage() {
                   }
                 </div>
                 <div style={{ fontSize: 12, color: c.text4, marginTop: 4 }}>
-                  BTR range: {Math.max(0, profile.tr_score - 200)} - {profile.tr_score + 200}
+                  Rank range: {Math.max(0, profile.tr_score - 200)} - {profile.tr_score + 200}
                 </div>
 
                 <button
@@ -579,7 +579,7 @@ export default function DuelPage() {
                         <div>
                           <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{p.display_name}</div>
                           <div style={{ fontSize: 12, color: c.text3 }}>
-                            <span style={{ fontFamily: font.mono, color: pTier.color }}>{p.tr_score}</span> BTR
+                            <span style={{ fontFamily: font.mono, color: pTier.color }}>{p.tr_score}</span> RANK
                             {p.handle && <span style={{ marginLeft: 8, color: c.text4 }}>@{p.handle}</span>}
                           </div>
                         </div>

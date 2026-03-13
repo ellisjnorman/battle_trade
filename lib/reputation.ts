@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
 // Reputation Scoring Engine
 // ---------------------------------------------------------------------------
-// Calculates the Trader Reputation (TR) score — a composite 0-100 rating
-// built from five pillars: performance, combat, strategy, community, streak.
+// Calculates the Trader Rank — a composite 0-100 rating
+// built from five pillars: performance, risk management, consistency, adaptability, community.
 // ---------------------------------------------------------------------------
 
 import type { RankTier, TRScore } from '@/types';
@@ -118,7 +118,7 @@ function confidence(n: number, threshold = 20): number {
 }
 
 // ---------------------------------------------------------------------------
-// Pillar: Performance (30%)
+// Pillar: Performance (35%)
 // ---------------------------------------------------------------------------
 
 export async function calcPerformance(profileId: string, traderIds?: string[]): Promise<number> {
@@ -164,56 +164,55 @@ export async function calcPerformance(profileId: string, traderIds?: string[]): 
 }
 
 // ---------------------------------------------------------------------------
-// Pillar: Combat (20%)
+// Pillar: Risk Management (25%)
 // ---------------------------------------------------------------------------
 
-export async function calcCombat(profileId: string, traderIds?: string[]): Promise<number> {
+export async function calcRiskManagement(profileId: string, traderIds?: string[]): Promise<number> {
   const { supabase } = await import('./supabase');
 
   const ids = traderIds ?? await getTraderIdsForProfile(profileId);
   if (ids.length === 0) return 0;
 
-  // Attacks sent
-  const { count: attacksSent } = await supabase
-    .from('sabotages')
-    .select('*', { count: 'exact', head: true })
-    .in('attacker_id', ids)
-    .eq('landed', true);
+  // Pull completed sessions to evaluate drawdown and loss control
+  const { data: sessions } = await supabase
+    .from('sessions')
+    .select('final_balance, starting_balance, max_drawdown')
+    .in('trader_id', ids)
+    .not('final_balance', 'is', null);
 
-  // Blocks
-  const { count: blocks } = await supabase
-    .from('sabotages')
-    .select('*', { count: 'exact', head: true })
-    .in('defender_id', ids)
-    .eq('blocked', true);
+  if (!sessions || sessions.length === 0) return 0;
 
-  // Deflects
-  const { count: deflects } = await supabase
-    .from('sabotages')
-    .select('*', { count: 'exact', head: true })
-    .in('defender_id', ids)
-    .eq('deflected', true);
+  const total = sessions.length;
 
-  const attacks = attacksSent ?? 0;
-  const def = (blocks ?? 0) + (deflects ?? 0);
+  // 1. Max drawdown control: smaller max drawdown = better risk mgmt
+  const drawdowns = sessions.map(s => Math.abs(s.max_drawdown ?? 0));
+  const avgDrawdown = drawdowns.reduce((a, b) => a + b, 0) / total;
+  // Avg drawdown < 10% is excellent, > 40% is terrible
+  const drawdownRatio = Math.max(0, 1 - avgDrawdown / 40);
+  const drawdownScore = sigmoid(drawdownRatio, 0.5, 6) * 0.50;
 
-  // Attack score: 50 attacks = ~max
-  const attackScore = sigmoid(Math.min(attacks / 50, 1), 0.4, 6) * 0.6;
-  // Defense score: 20 blocks/deflects = ~max
-  const defScore = sigmoid(Math.min(def / 20, 1), 0.4, 6) * 0.4;
+  // 2. Loss control: % of sessions that didn't blow up (final_balance > 50% of start)
+  const survivedCount = sessions.filter(s => {
+    const start = s.starting_balance ?? 1;
+    return s.final_balance >= start * 0.5;
+  }).length;
+  const survivalRate = survivedCount / total;
+  const survivalScore = sigmoid(survivalRate, 0.6, 6) * 0.50;
 
-  const totalEngagements = attacks + def;
-  const conf = confidence(totalEngagements, 15);
+  const raw = drawdownScore + survivalScore;
+  const conf = confidence(total, 10);
 
-  const raw = attackScore + defScore;
   return clamp(raw * conf + 50 * (1 - conf));
 }
 
+/** @deprecated Use calcRiskManagement instead */
+export const calcCombat = calcRiskManagement;
+
 // ---------------------------------------------------------------------------
-// Pillar: Strategy (20%)
+// Pillar: Consistency (20%)
 // ---------------------------------------------------------------------------
 
-export async function calcStrategy(profileId: string, traderIds?: string[]): Promise<number> {
+export async function calcConsistency(profileId: string, traderIds?: string[]): Promise<number> {
   const { supabase } = await import('./supabase');
 
   const ids = traderIds ?? await getTraderIdsForProfile(profileId);
@@ -251,7 +250,7 @@ export async function calcStrategy(profileId: string, traderIds?: string[]): Pro
 }
 
 // ---------------------------------------------------------------------------
-// Pillar: Community (15%)
+// Pillar: Community (10%)
 // ---------------------------------------------------------------------------
 
 export async function calcCommunity(profileId: string): Promise<number> {
@@ -292,10 +291,10 @@ export async function calcCommunity(profileId: string): Promise<number> {
 }
 
 // ---------------------------------------------------------------------------
-// Pillar: Streak (15%)
+// Pillar: Adaptability (10%)
 // ---------------------------------------------------------------------------
 
-export async function calcStreak(profileId: string, traderIds?: string[]): Promise<number> {
+export async function calcAdaptability(profileId: string, traderIds?: string[]): Promise<number> {
   const { supabase } = await import('./supabase');
 
   // Profile streak data
@@ -340,11 +339,11 @@ export async function calcStreak(profileId: string, traderIds?: string[]): Promi
 // ---------------------------------------------------------------------------
 
 const WEIGHTS = {
-  performance: 0.30,
-  combat: 0.20,
-  strategy: 0.20,
-  community: 0.15,
-  streak: 0.15,
+  performance: 0.35,
+  riskManagement: 0.25,
+  consistency: 0.20,
+  adaptability: 0.10,
+  community: 0.10,
 } as const;
 
 export function getRankTier(score: number): RankTier {
@@ -361,25 +360,34 @@ export async function calcTR(profileId: string): Promise<TRScore> {
   // Fetch all trader IDs for this profile once, pass to each pillar
   const traderIds = await getTraderIdsForProfile(profileId);
 
-  const [performance, combat, strategy, community, streak] = await Promise.all([
+  const [performance, riskManagement, consistency, community, adaptability] = await Promise.all([
     calcPerformance(profileId, traderIds),
-    calcCombat(profileId, traderIds),
-    calcStrategy(profileId, traderIds),
-    calcCommunity(profileId), // community uses profileId (author_id, profiles table)
-    calcStreak(profileId, traderIds),
+    calcRiskManagement(profileId, traderIds),
+    calcConsistency(profileId, traderIds),
+    calcCommunity(profileId),
+    calcAdaptability(profileId, traderIds),
   ]);
 
   const total = clamp(
     performance * WEIGHTS.performance +
-    combat * WEIGHTS.combat +
-    strategy * WEIGHTS.strategy +
-    community * WEIGHTS.community +
-    streak * WEIGHTS.streak,
+    riskManagement * WEIGHTS.riskManagement +
+    consistency * WEIGHTS.consistency +
+    adaptability * WEIGHTS.adaptability +
+    community * WEIGHTS.community,
   );
 
   const tier = getRankTier(total);
 
-  return { total, performance, combat, strategy, community, streak, tier };
+  // Map to TRScore shape — keep backward compat field names
+  return {
+    total,
+    performance,
+    combat: riskManagement,
+    strategy: consistency,
+    community,
+    streak: adaptability,
+    tier,
+  };
 }
 
 // ---------------------------------------------------------------------------

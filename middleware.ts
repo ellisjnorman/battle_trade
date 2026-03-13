@@ -118,6 +118,7 @@ const PUBLIC_ROUTE_PREFIXES = [
   '/api/health',
   '/api/market-data',
   '/api/lobbies/active',
+  '/api/lobby/create',
   '/api/guest/',
   '/api/webhooks/',
   '/api/og/',
@@ -134,6 +135,27 @@ function requiresAuth(req: NextRequest): boolean {
   if (!MUTATION_METHODS.has(req.method)) return false;
   if (isPublicRoute(req.nextUrl.pathname)) return false;
   if (!req.nextUrl.pathname.startsWith('/api/lobby/')) return false;
+
+  // Skip Privy JWT auth for routes that use their own auth (admin password, trader codes, etc.)
+  // These routes validate credentials internally — middleware JWT would block them
+  const path = req.nextUrl.pathname;
+  const selfAuthPatterns = [
+    /\/admin\//,          // admin routes use password-based auth
+    /\/register$/,        // player registration
+    /\/positions/,        // trading (uses trader code)
+    /\/sabotage/,         // market events (uses trader/spectator id)
+    /\/events/,           // volatility events
+    /\/markets/,          // prediction markets
+    /\/credits\//,        // credit purchases
+    /\/backfill-bots$/,   // bot backfill (uses admin_id)
+    /\/spectate-join$/,   // spectator join
+    /\/stream/,           // broadcast streaming
+    /\/chat/,             // chat messages
+    /\/manage$/,          // lobby management
+    /\/predictions/,      // predictions
+  ];
+  if (selfAuthPatterns.some(p => p.test(path))) return false;
+
   return true;
 }
 

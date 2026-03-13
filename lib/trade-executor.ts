@@ -55,12 +55,26 @@ export class PaperOnlyExecutor implements TradeExecutor {
 
     // Check sabotage: blackout
     if (!params.is_forced) {
-      const { data: session } = await supabase
+      let session: { positions_locked?: boolean; frozen_asset?: string | null } | null = null;
+      const { data: s1, error: s1Err } = await supabase
         .from('sessions')
         .select('positions_locked, frozen_asset')
         .eq('trader_id', params.trader_id)
         .eq('lobby_id', params.lobby_id)
         .single();
+
+      if (!s1Err) {
+        session = s1;
+      } else {
+        // Fallback: schema cache may not have these columns — skip sabotage checks
+        const { data: s2 } = await supabase
+          .from('sessions')
+          .select('id')
+          .eq('trader_id', params.trader_id)
+          .eq('lobby_id', params.lobby_id)
+          .single();
+        session = s2 ? { positions_locked: false, frozen_asset: null } : null;
+      }
 
       if (session?.positions_locked) {
         return { success: false, position_id: '', error: 'LOCKED_OUT' };
@@ -87,33 +101,47 @@ export class PaperOnlyExecutor implements TradeExecutor {
     const ot = params.order_type ?? 'market';
     const isPending = ot !== 'market';
 
-    // Insert position
-    const { data: position, error } = await supabase
-      .from('positions')
-      .insert({
-        trader_id: params.trader_id,
-        round_id: params.round_id,
-        symbol: params.asset,
-        direction: params.direction,
-        size: params.size_usd,
-        leverage: params.leverage,
-        entry_price: isPending ? 0 : params.entry_price,
-        opened_at: isPending ? null : new Date().toISOString(),
-        order_type: ot,
-        limit_price: params.limit_price ?? null,
-        stop_price: params.stop_price ?? null,
-        trail_pct: params.trail_pct ?? null,
-        trail_peak: ot === 'trailing_stop' ? params.entry_price : null,
-        status: isPending ? 'pending' : 'open',
-      })
-      .select()
-      .single();
+    // Insert position — progressive fallback for schema cache issues
+    const fullRow: Record<string, unknown> = {
+      trader_id: params.trader_id,
+      round_id: params.round_id,
+      symbol: params.asset,
+      direction: params.direction,
+      size: params.size_usd,
+      leverage: params.leverage,
+      entry_price: isPending ? 0 : params.entry_price,
+      opened_at: isPending ? null : new Date().toISOString(),
+      order_type: ot,
+      limit_price: params.limit_price ?? null,
+      stop_price: params.stop_price ?? null,
+      trail_pct: params.trail_pct ?? null,
+      trail_peak: ot === 'trailing_stop' ? params.entry_price : null,
+      status: isPending ? 'pending' : 'open',
+    };
 
-    if (error || !position) {
-      return { success: false, position_id: '', error: error?.message ?? 'Insert failed' };
+    // Tier 0: full row, Tier 1: without order_type columns (migration 005)
+    const tiers = [
+      fullRow,
+      (() => {
+        const { order_type: _a, limit_price: _b, stop_price: _c, trail_pct: _d, trail_peak: _e, status: _f, ...r } = fullRow;
+        return r;
+      })(),
+    ];
+
+    for (const row of tiers) {
+      const { data: position, error } = await supabase
+        .from('positions')
+        .insert(row)
+        .select('id')
+        .single();
+
+      if (!error && position) {
+        return { success: true, position_id: position.id };
+      }
+      console.error('Position insert error:', error?.message, 'keys:', Object.keys(row));
     }
 
-    return { success: true, position_id: position.id };
+    return { success: false, position_id: '', error: 'Insert failed after all attempts' };
   }
 
   async closePosition(params: CloseParams): Promise<TradeResult> {

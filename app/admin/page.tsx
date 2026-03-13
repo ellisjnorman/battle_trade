@@ -46,10 +46,165 @@ const mono = "var(--font-jetbrains), monospace";
 // Component
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Lobby Picker — auto-loads your lobbies + all active lobbies
+// ---------------------------------------------------------------------------
+
+function LobbyPicker({ onSelect }: { onSelect: (id: string, name: string | null) => void }) {
+  const [myLobbies, setMyLobbies] = useState<{ id: string; name: string; status: string; player_count: number; created_at?: string }[]>([]);
+  const [allLobbies, setAllLobbies] = useState<{ id: string; name: string; status: string; player_count: number }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [manualId, setManualId] = useState('');
+
+  useEffect(() => {
+    const pid = localStorage.getItem('bt_profile_id');
+    const fetches: Promise<void>[] = [];
+
+    if (pid) {
+      fetches.push(
+        fetch(`/api/lobbies/mine?profile_id=${pid}`)
+          .then(r => r.ok ? r.json() : { lobbies: [] })
+          .then(d => setMyLobbies(d.lobbies ?? []))
+          .catch(() => {})
+      );
+    }
+
+    fetches.push(
+      fetch('/api/lobbies/active')
+        .then(r => r.ok ? r.json() : { lobbies: [] })
+        .then(d => setAllLobbies(d.lobbies ?? []))
+        .catch(() => {})
+    );
+
+    Promise.all(fetches).finally(() => setLoading(false));
+  }, []);
+
+  // Deduplicate: show "my" lobbies separate from "all" lobbies
+  const myIds = new Set(myLobbies.map(l => l.id));
+  const otherLobbies = allLobbies.filter(l => !myIds.has(l.id));
+
+  const timeAgo = (date?: string) => {
+    if (!date) return '';
+    const ms = Date.now() - new Date(date).getTime();
+    const mins = Math.floor(ms / 60000);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  };
+
+  const LobbyRow = ({ lobby, badge }: { lobby: { id: string; name: string; status: string; player_count: number; created_at?: string }; badge?: string }) => (
+    <button
+      onClick={() => onSelect(lobby.id, lobby.name)}
+      className="admin-btn"
+      style={{
+        width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '14px 20px', background: '#111', border: '1px solid #222',
+        cursor: 'pointer', transition: 'all .15s', textAlign: 'left',
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#F5A0D0'; (e.currentTarget as HTMLElement).style.background = '#151515'; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#222'; (e.currentTarget as HTMLElement).style.background = '#111'; }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{
+          width: 8, height: 8, borderRadius: '50%',
+          background: lobby.status === 'active' ? '#00FF88' : lobby.status === 'waiting' ? '#FFD700' : '#444',
+        }} />
+        <div>
+          <div style={{ fontFamily: bebas, fontSize: '1.1rem', color: '#FFF', letterSpacing: '.08em' }}>
+            {lobby.name}
+            {badge && <span style={{ marginLeft: 8, fontFamily: mono, fontSize: '0.55rem', color: '#F5A0D0', background: 'rgba(245,160,208,.1)', padding: '2px 6px', verticalAlign: 'middle' }}>{badge}</span>}
+          </div>
+          <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#555' }}>
+            {lobby.player_count} player{lobby.player_count !== 1 ? 's' : ''} · {lobby.status}{lobby.created_at ? ` · ${timeAgo(lobby.created_at)}` : ''}
+          </div>
+        </div>
+      </div>
+      <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#333' }}>{lobby.id.slice(0, 8)}...</div>
+    </button>
+  );
+
+  return (
+    <div className="p-6" style={{ maxWidth: 600, margin: '0 auto' }}>
+      {/* MY LOBBIES */}
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '40px 0' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.7rem', color: '#555', letterSpacing: '.1em' }}>LOADING LOBBIES...</div>
+        </div>
+      ) : (
+        <>
+          {myLobbies.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#666', letterSpacing: '.12em', marginBottom: 8 }}>YOUR LOBBIES</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {myLobbies.map(l => <LobbyRow key={l.id} lobby={l} badge="HOST" />)}
+              </div>
+            </div>
+          )}
+
+          {otherLobbies.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#666', letterSpacing: '.12em', marginBottom: 8 }}>ALL ACTIVE</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {otherLobbies.map(l => <LobbyRow key={l.id} lobby={l} />)}
+              </div>
+            </div>
+          )}
+
+          {myLobbies.length === 0 && otherLobbies.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '32px 0', marginBottom: 24 }}>
+              <div style={{ fontFamily: bebas, fontSize: '1.4rem', color: '#555', letterSpacing: '.1em' }}>NO LOBBIES FOUND</div>
+              <div style={{ fontFamily: mono, fontSize: '0.65rem', color: '#333', marginTop: 4 }}>Create a battle first, or paste a lobby ID below</div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* MANUAL FALLBACK */}
+      <div style={{ borderTop: '1px solid #1A1A1A', paddingTop: 16 }}>
+        <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#444', letterSpacing: '.12em', marginBottom: 8 }}>OR PASTE LOBBY ID</div>
+        <div className="flex gap-3">
+          <input
+            type="text"
+            value={manualId}
+            onChange={e => setManualId(e.target.value)}
+            placeholder="UUID or invite code"
+            className="flex-1 p-3 text-sm tracking-widest outline-none"
+            style={{ background: '#111', border: '1px solid #222', color: '#F5A0D0', fontFamily: mono, fontSize: '0.75rem' }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && manualId.trim()) onSelect(manualId.trim(), null);
+            }}
+          />
+          <button
+            onClick={() => { if (manualId.trim()) onSelect(manualId.trim(), null); }}
+            className="admin-btn px-6 py-3 cursor-pointer"
+            style={{ background: '#F5A0D0', color: '#0A0A0A', border: 'none', fontFamily: bebas, fontSize: '1rem', letterSpacing: '0.1em' }}
+          >
+            CONNECT
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main Admin Component
+// ---------------------------------------------------------------------------
+
 export default function AdminPage() {
   const [password, setPassword] = useState('');
   const [authenticated, setAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
+
+  // Auto-authenticate using profile_id from localStorage
+  useEffect(() => {
+    const pid = localStorage.getItem('bt_profile_id');
+    if (pid && !authenticated) {
+      setPassword(pid);
+      setAuthenticated(true);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [standings, setStandings] = useState<TraderStanding[]>([]);
   const [currentRound, setCurrentRound] = useState<RoundData | null>(null);
@@ -359,35 +514,7 @@ export default function AdminPage() {
       </div>
 
       {/* LOBBY CONNECT */}
-      {!lobbyId && (
-        <div className="p-6">
-          <div className="flex gap-3 max-w-xl mx-auto">
-            <input
-              id="lobby-input"
-              type="text"
-              placeholder="PASTE LOBBY ID"
-              className="flex-1 p-3 text-sm tracking-widest outline-none"
-              style={{ background: '#111', border: '2px solid #333', color: '#F5A0D0', fontFamily: mono }}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  const val = (e.target as HTMLInputElement).value.trim();
-                  if (val) { setLobbyId(val); addLog(`Connected to ${val}`, 'info'); }
-                }
-              }}
-            />
-            <button
-              onClick={() => {
-                const val = (document.getElementById('lobby-input') as HTMLInputElement)?.value.trim();
-                if (val) { setLobbyId(val); addLog(`Connected to ${val}`, 'info'); }
-              }}
-              className="admin-btn px-6 py-3 cursor-pointer"
-              style={{ background: '#F5A0D0', color: '#0A0A0A', border: 'none', fontFamily: bebas, fontSize: '1.1rem', letterSpacing: '0.1em' }}
-            >
-              CONNECT
-            </button>
-          </div>
-        </div>
-      )}
+      {!lobbyId && <LobbyPicker onSelect={(id, name) => { setLobbyId(id); addLog(`Connected to ${name ?? id}`, 'info'); }} />}
 
       {lobbyId && (
         <div className="flex" style={{ height: 'calc(100vh - 56px)' }}>

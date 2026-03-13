@@ -31,13 +31,28 @@ export async function startAutoAdmin(lobbyId: string): Promise<void> {
   if (activeLoops.has(lobbyId)) return; // Already running
 
   const sb = getServerSupabase();
-  const { data: lobby } = await sb
+  let lobby: Record<string, unknown> | null = null;
+  const { data: l1, error: e1 } = await sb
     .from('lobbies')
     .select('id, config, auto_admin, min_players, auto_start_countdown, status')
     .eq('id', lobbyId)
     .single();
+  if (!e1) {
+    lobby = l1;
+  } else {
+    // Fallback: auto_admin/min_players/auto_start_countdown may not be in schema cache
+    const { data: l2 } = await sb
+      .from('lobbies')
+      .select('id, config, status')
+      .eq('id', lobbyId)
+      .single();
+    if (l2) {
+      const cfg = l2.config as Record<string, unknown> | null;
+      lobby = { ...l2, auto_admin: cfg?.auto_admin ?? cfg?.is_practice, min_players: cfg?.min_players ?? 2, auto_start_countdown: cfg?.auto_start_countdown ?? 5 };
+    }
+  }
 
-  if (!lobby?.auto_admin) return;
+  if (!lobby?.auto_admin && !(lobby?.config as Record<string, unknown>)?.auto_admin) return;
 
   // Start the game loop
   await runGameLoop(lobbyId);
@@ -57,13 +72,28 @@ export function stopAutoAdmin(lobbyId: string): void {
 export async function checkAutoStart(lobbyId: string): Promise<{ shouldStart: boolean; countdown?: number }> {
   const sb = getServerSupabase();
 
-  const { data: lobby } = await sb
+  let lobby: Record<string, unknown> | null = null;
+  const { data: l1, error: e1 } = await sb
     .from('lobbies')
     .select('id, auto_admin, min_players, auto_start_countdown, status')
     .eq('id', lobbyId)
     .single();
+  if (!e1) {
+    lobby = l1;
+  } else {
+    const { data: l2 } = await sb
+      .from('lobbies')
+      .select('id, config, status')
+      .eq('id', lobbyId)
+      .single();
+    if (l2) {
+      const cfg = l2.config as Record<string, unknown> | null;
+      lobby = { ...l2, auto_admin: cfg?.auto_admin ?? cfg?.is_practice, min_players: cfg?.min_players ?? 2, auto_start_countdown: cfg?.auto_start_countdown ?? 5 };
+    }
+  }
 
-  if (!lobby?.auto_admin || lobby.status !== 'waiting') {
+  const isAutoAdmin = lobby?.auto_admin || (lobby?.config as Record<string, unknown>)?.auto_admin;
+  if (!isAutoAdmin || lobby?.status !== 'waiting') {
     return { shouldStart: false };
   }
 
@@ -76,8 +106,8 @@ export async function checkAutoStart(lobbyId: string): Promise<{ shouldStart: bo
     .eq('is_eliminated', false);
 
   const playerCount = count ?? 0;
-  if (playerCount >= (lobby.min_players ?? 2)) {
-    return { shouldStart: true, countdown: lobby.auto_start_countdown ?? 30 };
+  if (playerCount >= ((lobby.min_players as number) ?? 2)) {
+    return { shouldStart: true, countdown: (lobby.auto_start_countdown as number) ?? 30 };
   }
 
   return { shouldStart: false };

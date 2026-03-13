@@ -42,7 +42,7 @@ export async function POST(
     return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
   }
 
-  if (config.leverage_tiers.length > 0 && !config.leverage_tiers.includes(leverage)) {
+  if (config.leverage_tiers?.length > 0 && !config.leverage_tiers.includes(leverage)) {
     return NextResponse.json(
       { error: `Leverage must be one of: ${config.leverage_tiers.join(', ')}` },
       { status: 400 },
@@ -50,7 +50,7 @@ export async function POST(
   }
 
   // Validate symbol against lobby config
-  if (config.available_symbols.length > 0 && !config.available_symbols.includes(symbol)) {
+  if (config.available_symbols?.length > 0 && !config.available_symbols.includes(symbol)) {
     return NextResponse.json(
       { error: `Symbol not available in this lobby` },
       { status: 400 },
@@ -141,12 +141,23 @@ export async function POST(
     return NextResponse.json({ error: result.error }, { status: 500 });
   }
 
-  // Fetch the created position to return full data
-  const { data: position } = await supabase
+  // Fetch the created position to return full data (progressive fallback for schema cache)
+  let position: Record<string, unknown> | null = null;
+  const { data: p1, error: p1Err } = await supabase
     .from('positions')
     .select('id, trader_id, round_id, symbol, direction, size, leverage, entry_price, exit_price, realized_pnl, opened_at, closed_at, order_type, limit_price, stop_price, trail_pct, trail_peak, status')
     .eq('id', result.position_id)
     .single();
+  if (!p1Err) {
+    position = p1;
+  } else {
+    const { data: p2 } = await supabase
+      .from('positions')
+      .select('id, trader_id, round_id, symbol, direction, size, leverage, entry_price, exit_price, realized_pnl, opened_at, closed_at')
+      .eq('id', result.position_id)
+      .single();
+    position = p2;
+  }
 
   return NextResponse.json(
     { ...position, external_tx_id: result.external_tx_id },
@@ -179,41 +190,54 @@ export async function DELETE(
   }
 
   // Check if this is a pending limit order — cancel it directly
-  const { data: pendingOrder } = await supabase
-    .from('positions')
-    .select('id')
-    .eq('id', position_id)
-    .eq('status', 'pending')
-    .single();
+  let isPending = false;
+  {
+    const { data: p1 } = await supabase.from('positions').select('id').eq('id', position_id).eq('status', 'pending').single();
+    if (p1) isPending = true;
+  }
 
-  if (pendingOrder) {
-    const { data: cancelled, error: cancelErr } = await supabase
+  if (isPending) {
+    // Try update with status, fall back without
+    let cancelled: Record<string, unknown> | null = null;
+    const { data: c1, error: c1Err } = await supabase
       .from('positions')
       .update({ status: 'cancelled', closed_at: new Date().toISOString() })
       .eq('id', position_id)
-      .select()
+      .select('id')
       .single();
-
-    if (cancelErr) {
-      return NextResponse.json({ error: cancelErr.message }, { status: 500 });
+    if (!c1Err) {
+      cancelled = c1;
+    } else {
+      const { data: c2, error: c2Err } = await supabase
+        .from('positions')
+        .update({ closed_at: new Date().toISOString() })
+        .eq('id', position_id)
+        .select('id')
+        .single();
+      cancelled = c2;
+      if (c2Err) return NextResponse.json({ error: c2Err.message }, { status: 500 });
     }
     return NextResponse.json(cancelled);
   }
 
   // Otherwise close an open position at market price
-  const { data: position, error: fetchError } = await supabase
-    .from('positions')
-    .select('id, trader_id, round_id, symbol, direction, size, leverage, entry_price, exit_price, realized_pnl, opened_at, closed_at, order_type, limit_price, stop_price, trail_pct, trail_peak, status')
-    .eq('id', position_id)
-    .eq('status', 'open')
-    .is('closed_at', null)
-    .single();
+  // Try with status filter, fall back to closed_at filter only
+  let position: Record<string, unknown> | null = null;
+  {
+    const { data: p1, error: e1 } = await supabase
+      .from('positions')
+      .select('id, trader_id, round_id, symbol, direction, size, leverage, entry_price, exit_price, realized_pnl, opened_at, closed_at')
+      .eq('id', position_id)
+      .is('closed_at', null)
+      .single();
+    if (!e1 && p1) position = p1;
+  }
 
-  if (fetchError || !position) {
+  if (!position) {
     return NextResponse.json({ error: 'Open position not found' }, { status: 404 });
   }
 
-  const pos = position as Position;
+  const pos = position as unknown as Position;
 
   const { data: priceRow, error: priceError } = await supabase
     .from('prices')
@@ -228,20 +252,34 @@ export async function DELETE(
   const exitPrice = priceRow.price;
   const realizedPnl = calcUnrealizedPnl(pos, exitPrice);
 
-  const { data: updated, error: updateError } = await supabase
+  // Update with status if available, fall back without
+  const closePayload: Record<string, unknown> = {
+    exit_price: exitPrice,
+    realized_pnl: realizedPnl,
+    closed_at: new Date().toISOString(),
+    status: 'closed',
+  };
+
+  let updated: Record<string, unknown> | null = null;
+  const { data: u1, error: u1Err } = await supabase
     .from('positions')
-    .update({
-      exit_price: exitPrice,
-      realized_pnl: realizedPnl,
-      closed_at: new Date().toISOString(),
-      status: 'closed',
-    })
+    .update(closePayload)
     .eq('id', position_id)
-    .select()
+    .select('id, exit_price, realized_pnl, closed_at')
     .single();
 
-  if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 });
+  if (!u1Err) {
+    updated = u1;
+  } else {
+    const { status: _s, ...safePayload } = closePayload;
+    const { data: u2, error: u2Err } = await supabase
+      .from('positions')
+      .update(safePayload)
+      .eq('id', position_id)
+      .select('id, exit_price, realized_pnl, closed_at')
+      .single();
+    if (u2Err) return NextResponse.json({ error: u2Err.message }, { status: 500 });
+    updated = u2;
   }
 
   return NextResponse.json(updated);

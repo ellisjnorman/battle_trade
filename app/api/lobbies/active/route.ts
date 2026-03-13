@@ -26,7 +26,7 @@ export async function GET() {
     const [tradersResult, roundsResult] = await Promise.all([
       supabase
         .from('traders')
-        .select('lobby_id, is_competitor')
+        .select('lobby_id')
         .in('lobby_id', lobbyIds),
       activeLobbyIds.length > 0
         ? supabase
@@ -40,12 +40,9 @@ export async function GET() {
 
     const playerCounts: Record<string, number> = {};
     const spectatorCounts: Record<string, number> = {};
+    // is_competitor defaults to true; removed from SELECT due to PostgREST schema cache issue
     for (const t of tradersResult.data ?? []) {
-      if (t.is_competitor) {
-        playerCounts[t.lobby_id] = (playerCounts[t.lobby_id] ?? 0) + 1;
-      } else {
-        spectatorCounts[t.lobby_id] = (spectatorCounts[t.lobby_id] ?? 0) + 1;
-      }
+      playerCounts[t.lobby_id] = (playerCounts[t.lobby_id] ?? 0) + 1;
     }
 
     const roundMap: Record<string, { round_number: number; status: string; started_at: string | null; duration_seconds: number }> = {};

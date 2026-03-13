@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { usePrivy } from '@privy-io/react-auth'
 import { supabase } from '@/lib/supabase'
 import { getOrCreateProfile } from '@/lib/auth'
+import { useAuthPersist } from '@/lib/use-auth-persist'
 import { getOrCreateGuest } from '@/lib/guest'
 import { font, c } from '@/app/design'
 
@@ -19,6 +20,7 @@ export default function LobbyAutoJoin() {
   const { id: lobbyId } = useParams<{ id: string }>()
   const router = useRouter()
   const { authenticated, user, ready } = usePrivy()
+  useAuthPersist() // Keep localStorage profile_id in sync with Privy session
   const [status, setStatus] = useState('Loading...')
   const [error, setError] = useState<string | null>(null)
   const joinAttempted = useRef(false)
@@ -47,21 +49,21 @@ export default function LobbyAutoJoin() {
       return
     }
 
-    // 2. Check if already registered in this lobby
+    // 2. Check if already registered in this lobby (skip if profile_id column missing from schema cache)
     setStatus('Checking registration...')
     try {
-      const { data: existing } = await supabase
+      const { data: existing, error: qErr } = await supabase
         .from('traders')
-        .select('id, is_competitor')
+        .select('id')
         .eq('profile_id', profileId)
         .eq('lobby_id', lobbyId)
         .maybeSingle()
 
-      if (existing) {
-        const dest = existing.is_competitor ? 'trade' : 'spectate'
-        router.replace(`/lobby/${lobbyId}/${dest}`)
+      if (!qErr && existing) {
+        router.replace(`/lobby/${lobbyId}/trade`)
         return
       }
+      // If qErr (e.g. column not in schema cache), fall through to registration
     } catch {}
 
     // 3. Auto-register as competitor
@@ -116,14 +118,13 @@ export default function LobbyAutoJoin() {
       try {
         const { data: existing } = await supabase
           .from('traders')
-          .select('id, is_competitor')
+          .select('id')
           .eq('id', cachedTraderId)
           .eq('lobby_id', lobbyId)
           .maybeSingle()
 
         if (existing) {
-          const dest = existing.is_competitor ? 'trade' : 'spectate'
-          router.replace(`/lobby/${lobbyId}/${dest}`)
+          router.replace(`/lobby/${lobbyId}/trade`)
           return
         }
         // Cached trader no longer exists — clear and re-join

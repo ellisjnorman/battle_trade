@@ -8,6 +8,7 @@ import type { EventPreset } from '@/lib/event-presets';
 import { PYTH_FEEDS, MARKET_TYPES, getFeedsByMarket } from '@/lib/pyth-feeds';
 import type { AssetCategory, MarketType } from '@/lib/pyth-feeds';
 import PredictionAdmin from '@/components/prediction-admin';
+import TutorialOverlay, { resetTutorial } from '@/components/tutorial-overlay';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -158,6 +159,7 @@ export default function AdminPanel() {
   const [authenticated, setAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [autoAuthAttempted, setAutoAuthAttempted] = useState(false);
+  const [tutorialKey, setTutorialKey] = useState(0);
 
   // Auto-authenticate if user is the lobby creator
   useEffect(() => {
@@ -627,6 +629,7 @@ export default function AdminPanel() {
   };
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showCloseAllConfirm, setShowCloseAllConfirm] = useState(false);
   const handleResetGame = async () => {
     const data = await adminPost('reset');
     if (data.success) {
@@ -634,6 +637,30 @@ export default function AdminPanel() {
       setShowResetConfirm(false);
       fetchStatus();
     }
+  };
+
+  const [botLoading, setBotLoading] = useState(false);
+  const [botResult, setBotResult] = useState<string | null>(null);
+  const handleBackfillBots = async () => {
+    setBotLoading(true);
+    setBotResult(null);
+    try {
+      const res = await fetch(`/api/lobby/${lobbyId}/backfill-bots`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_id: authToken, bot_count: 3 }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBotResult(`+${data.bots_added} bots: ${data.bot_names.join(', ')}`);
+        fetchStatus();
+      } else {
+        setBotResult(data.error || 'Failed');
+      }
+    } catch {
+      setBotResult('Network error');
+    }
+    setBotLoading(false);
   };
 
   const handleFireEvent = async () => {
@@ -899,12 +926,37 @@ export default function AdminPanel() {
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/brand/logo-main.png" alt="Battle Trade" style={{ width: 280, height: 'auto' }} />
-              <div style={{ fontFamily: bebas, fontSize: 20, color: '#999', letterSpacing: '0.15em' }}>ACCESS DENIED</div>
+              <div style={{ fontFamily: bebas, fontSize: 20, color: '#999', letterSpacing: '0.15em' }}>ADMIN LOGIN</div>
               <div style={{ fontFamily: sans, fontSize: 13, color: '#666', textAlign: 'center', maxWidth: 320 }}>
-                You don&apos;t have admin access to this lobby. Only the creator can manage it.
+                Enter the admin password for this lobby.
               </div>
-              <a href="/dashboard" style={{ fontFamily: bebas, fontSize: 18, color: '#F5A0D0', textDecoration: 'none', padding: '12px 32px', border: '2px solid #F5A0D0', cursor: 'pointer' }}>
-                GO TO DASHBOARD
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                if (!passwordInput.trim()) return;
+                const res = await fetch(`/api/lobby/${lobbyId}/admin/status`, {
+                  headers: { Authorization: passwordInput.trim() },
+                });
+                if (res.ok) {
+                  setAuthToken(passwordInput.trim());
+                  setAuthenticated(true);
+                } else {
+                  alert('Invalid password');
+                }
+              }} style={{ display: 'flex', flexDirection: 'column', gap: 12, width: 280 }}>
+                <input
+                  type="password"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  placeholder="Admin password"
+                  style={{ height: 44, background: '#111', border: '1px solid #333', color: '#FFF', fontFamily: mono, fontSize: 14, padding: '0 12px', textAlign: 'center' }}
+                  autoFocus
+                />
+                <button type="submit" style={{ height: 44, background: '#F5A0D0', color: '#000', border: 'none', fontFamily: bebas, fontSize: 18, letterSpacing: '0.08em', cursor: 'pointer' }}>
+                  ENTER
+                </button>
+              </form>
+              <a href="/dashboard" style={{ fontFamily: sans, fontSize: 12, color: '#555', textDecoration: 'none', marginTop: 8 }}>
+                back to dashboard
               </a>
             </>
           )}
@@ -956,6 +1008,7 @@ export default function AdminPanel() {
           </a>
           <a href="/dashboard" style={{ fontFamily: sans, fontSize: 12, color: '#888', textDecoration: 'none', padding: '4px 12px', border: '1px solid #1A1A1A', cursor: 'pointer' }}>DASHBOARD</a>
           <a href="/create" style={{ fontFamily: sans, fontSize: 12, color: '#888', textDecoration: 'none', padding: '4px 12px', border: '1px solid #1A1A1A', cursor: 'pointer' }}>+ NEW BATTLE</a>
+          <button onClick={() => { resetTutorial('admin', lobbyId); setTutorialKey(k => k + 1); }} style={{ fontFamily: mono, fontSize: 10, color: '#555', background: 'transparent', border: '1px solid #222', padding: '4px 10px', cursor: 'pointer' }}>? GUIDE</button>
           <div style={{ flex: 1 }} />
 
           {/* Live prices — top assets */}
@@ -1097,6 +1150,29 @@ export default function AdminPanel() {
               )}
             </div>
 
+            {/* Add Bots */}
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <button
+                onClick={handleBackfillBots}
+                disabled={botLoading}
+                style={{
+                  flex: 1, height: 36,
+                  background: '#1A1A1A', color: '#F5A0D0',
+                  border: '1px solid #333', fontFamily: bebas,
+                  fontSize: 14, letterSpacing: '0.08em',
+                  cursor: botLoading ? 'not-allowed' : 'pointer',
+                  opacity: botLoading ? 0.5 : 1,
+                }}
+              >
+                {botLoading ? 'ADDING...' : '+ ADD 3 BOTS'}
+              </button>
+              {botResult && (
+                <span style={{ fontFamily: sans, fontSize: 10, color: botResult.startsWith('+') ? '#4ADE80' : '#FF3333' }}>
+                  {botResult}
+                </span>
+              )}
+            </div>
+
             {/* Round display — compact inline */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0' }}>
               <div style={{ fontFamily: bebas, fontSize: 28, color: '#FFF', lineHeight: 1, whiteSpace: 'nowrap' }}>
@@ -1184,6 +1260,7 @@ export default function AdminPanel() {
                                 </div>
                               );
                             })}
+                            <button onClick={async (e) => { e.stopPropagation(); const res = await adminPost('close-all', { trader_id: t.trader_id }); if (res) console.log(`Closed ${res.closed} positions for ${t.name}`, 'success'); }} style={{ fontFamily: bebas, fontSize: 8, color: '#FF8C00', background: 'transparent', border: '1px solid #FF8C0066', padding: '0px 4px', cursor: 'pointer', alignSelf: 'center' }}>CLOSE ALL</button>
                             <span style={{ fontFamily: mono, fontSize: 8, color: '#999', alignSelf: 'center' }}>{t.credits}CR</span>
                           </div>
                         ) : (
@@ -1265,8 +1342,18 @@ export default function AdminPanel() {
               </div>
             </div>
 
-            {/* ── LIQUIDATION + RESET — compact row ── */}
+            {/* ── CLOSE ALL + LIQUIDATION + RESET — compact row ── */}
             <div style={{ borderTop: '1px solid #1A1A1A', paddingTop: 8, display: 'flex', gap: 6 }}>
+              {!showCloseAllConfirm ? (
+                <button onClick={() => setShowCloseAllConfirm(true)} style={{ flex: 1, height: 28, fontFamily: bebas, fontSize: 11, color: '#FF8C00', background: 'transparent', border: '1px solid #FF8C00', cursor: 'pointer', letterSpacing: '0.05em' }}>
+                  CLOSE ALL POSITIONS
+                </button>
+              ) : (
+                <div style={{ flex: 1, display: 'flex', gap: 4 }}>
+                  <button onClick={() => setShowCloseAllConfirm(false)} style={{ flex: 1, height: 28, background: '#1A1A1A', color: '#888', border: 'none', fontFamily: bebas, fontSize: 10, cursor: 'pointer' }}>CANCEL</button>
+                  <button onClick={async () => { setShowCloseAllConfirm(false); const res = await adminPost('close-all'); if (res) { console.log(`Closed ${res.closed ?? 0} positions (total P&L: $${(res.total_pnl ?? 0).toFixed(2)})`, res.closed > 0 ? 'success' : 'info'); } }} style={{ flex: 1, height: 28, background: '#FF8C00', color: '#FFF', border: 'none', fontFamily: bebas, fontSize: 10, cursor: 'pointer' }}>CONFIRM</button>
+                </div>
+              )}
               {!showLiquidateConfirm ? (
                 <button onClick={() => setShowLiquidateConfirm(true)} style={{ flex: 1, height: 28, fontFamily: bebas, fontSize: 11, color: '#FF3333', background: 'transparent', border: '1px solid #FF3333', cursor: 'pointer', letterSpacing: '0.05em' }}>
                   LIQUIDATION SWEEP
@@ -1274,7 +1361,7 @@ export default function AdminPanel() {
               ) : (
                 <div style={{ flex: 1, display: 'flex', gap: 4 }}>
                   <button onClick={() => setShowLiquidateConfirm(false)} style={{ flex: 1, height: 28, background: '#1A1A1A', color: '#888', border: 'none', fontFamily: bebas, fontSize: 10, cursor: 'pointer' }}>CANCEL</button>
-                  <button onClick={async () => { setShowLiquidateConfirm(false); const res = await adminPost('liquidate'); if (res) { const count = res.liquidated ?? 0; alert(count > 0 ? `Liquidated ${count} position(s)` : 'No positions to liquidate'); } }} style={{ flex: 1, height: 28, background: '#FF3333', color: '#FFF', border: 'none', fontFamily: bebas, fontSize: 10, cursor: 'pointer' }}>CONFIRM</button>
+                  <button onClick={async () => { setShowLiquidateConfirm(false); const res = await adminPost('liquidate'); if (res) { const count = res.liquidated ?? 0; console.log(count > 0 ? `Liquidated ${count} position(s)` : 'No positions to liquidate', count > 0 ? 'success' : 'info'); } }} style={{ flex: 1, height: 28, background: '#FF3333', color: '#FFF', border: 'none', fontFamily: bebas, fontSize: 10, cursor: 'pointer' }}>CONFIRM</button>
                 </div>
               )}
               {!showResetConfirm ? (
@@ -1334,64 +1421,51 @@ export default function AdminPanel() {
               </div>
             </div>
 
-            {/* Tab switch */}
-            <div style={{ display: 'flex', gap: 0 }}>
-              <button onClick={() => setDjTab('presets')} style={{ flex: 1, height: 48, background: djTab === 'presets' ? '#F5A0D0' : 'transparent', color: djTab === 'presets' ? '#0A0A0A' : '#555555', border: `1px solid ${djTab === 'presets' ? '#F5A0D0' : '#1A1A1A'}`, fontFamily: bebas, fontSize: 22, letterSpacing: '0.08em', cursor: 'pointer' }}>
-                BLACK SWAN PRESETS
-              </button>
-              <button onClick={() => setDjTab('events')} style={{ flex: 1, height: 48, background: djTab === 'events' ? '#F5A0D0' : 'transparent', color: djTab === 'events' ? '#0A0A0A' : '#555555', border: `1px solid ${djTab === 'events' ? '#F5A0D0' : '#1A1A1A'}`, fontFamily: bebas, fontSize: 22, letterSpacing: '0.08em', cursor: 'pointer' }}>
-                MANUAL EVENTS
-              </button>
-            </div>
-
-            {/* PRESETS TAB */}
-            {djTab === 'presets' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {/* Category tabs */}
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {/* QUICK-FIRE PRESETS — always visible */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* Category bar + label */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontFamily: bebas, fontSize: 18, color: '#F5A0D0', letterSpacing: '0.08em', flexShrink: 0 }}>PRESETS</span>
+                <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', flex: 1 }}>
                   {PRESET_CATEGORIES.map((cat) => (
-                    <button key={cat} onClick={() => setPresetCategory(cat)} style={{ padding: '8px 20px', background: presetCategory === cat ? '#F5A0D0' : 'transparent', color: presetCategory === cat ? '#0A0A0A' : '#555555', border: `1px solid ${presetCategory === cat ? '#F5A0D0' : '#222222'}`, fontFamily: bebas, fontSize: 16, letterSpacing: '0.08em', cursor: 'pointer' }}>
+                    <button key={cat} onClick={() => setPresetCategory(cat)} style={{ padding: '4px 12px', background: presetCategory === cat ? '#F5A0D0' : 'transparent', color: presetCategory === cat ? '#0A0A0A' : '#555555', border: `1px solid ${presetCategory === cat ? '#F5A0D0' : '#222222'}`, fontFamily: bebas, fontSize: 13, letterSpacing: '0.06em', cursor: 'pointer' }}>
                       {cat.toUpperCase()}
                     </button>
                   ))}
                 </div>
-
-                {/* Preset grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                  {PRESETS.filter(p => p.category === presetCategory).map((preset) => (
-                    <button
-                      key={preset.id}
-                      onClick={() => handleFirePreset(preset)}
-                      disabled={presetCooldown}
-                      style={{
-                        background: '#111111', border: '1px solid #1A1A1A',
-                        padding: 10, cursor: presetCooldown ? 'not-allowed' : 'pointer',
-                        textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 4,
-                        opacity: presetCooldown ? 0.4 : 1,
-                        transition: 'border-color 150ms ease',
-                      }}
-                      onMouseEnter={(e) => { if (!presetCooldown) e.currentTarget.style.borderColor = '#F5A0D0'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#1A1A1A'; }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 20 }}>{preset.emoji}</span>
-                        <span style={{ fontFamily: bebas, fontSize: 14, color: '#FFF', letterSpacing: '0.05em' }}>{preset.name}</span>
-                      </div>
-                      <span style={{ fontFamily: sans, fontSize: 9, color: '#888888', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{preset.narrative}</span>
-                      <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-                        {preset.events.map((ev, i) => (
-                          <span key={i} style={{ fontFamily: mono, fontSize: 8, color: '#999999', background: '#0A0A0A', padding: '1px 4px', border: '1px solid #1A1A1A' }}>
-                            {ev.type.replace(/_/g, ' ').toUpperCase()}
-                          </span>
-                        ))}
-                      </div>
-                    </button>
-                  ))}
-                </div>
               </div>
-            )}
 
-            {/* MANUAL EVENTS TAB */}
+              {/* Preset grid — compact, always showing */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+                {PRESETS.filter(p => p.category === presetCategory).map((preset) => (
+                  <button
+                    key={preset.id}
+                    onClick={() => handleFirePreset(preset)}
+                    disabled={presetCooldown}
+                    className={presetCooldown ? '' : 'fire-glow'}
+                    style={{
+                      background: '#111111', border: '1px solid #1A1A1A', borderTop: '2px solid #F5A0D060',
+                      padding: '8px 6px', cursor: presetCooldown ? 'not-allowed' : 'pointer',
+                      textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                      opacity: presetCooldown ? 0.4 : 1,
+                      transition: 'all 150ms ease',
+                    }}
+                    onMouseEnter={(e) => { if (!presetCooldown) { e.currentTarget.style.borderColor = '#F5A0D0'; e.currentTarget.style.background = 'rgba(245,160,208,0.06)'; } }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#1A1A1A'; e.currentTarget.style.background = '#111111'; }}
+                  >
+                    <span style={{ fontSize: 22 }}>{preset.emoji}</span>
+                    <span style={{ fontFamily: bebas, fontSize: 11, color: '#FFF', letterSpacing: '0.04em', lineHeight: 1.1 }}>{preset.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* MANUAL EVENTS — collapsible */}
+            <div>
+              <button onClick={() => setDjTab(djTab === 'events' ? 'presets' : 'events')} style={{ width: '100%', height: 36, background: djTab === 'events' ? 'rgba(245,160,208,0.06)' : 'transparent', color: djTab === 'events' ? '#F5A0D0' : '#555555', border: `1px solid ${djTab === 'events' ? '#F5A0D0' : '#1A1A1A'}`, fontFamily: bebas, fontSize: 14, letterSpacing: '0.06em', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                MANUAL EVENTS <span style={{ fontSize: 10, transition: 'transform 150ms', transform: djTab === 'events' ? 'rotate(180deg)' : 'none' }}>▼</span>
+              </button>
+            </div>
             {djTab === 'events' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {/* Event grid */}
@@ -1594,38 +1668,61 @@ export default function AdminPanel() {
               </div>
             </div>
 
-            {/* ── BROADCAST CONTROLS ── */}
+            {/* ── BROADCAST SWITCHER ── */}
             <div style={{ padding: '10px 20px', borderBottom: '1px solid #1A1A1A' }}>
-              <div style={{ fontFamily: sans, fontSize: 9, color: '#999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>BROADCAST & LINKS</div>
+              <div style={{ fontFamily: sans, fontSize: 9, color: '#999', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>BROADCAST VIEWS</div>
 
-              {/* Quick links row */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
+              {/* Thumbnail grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 10 }}>
                 {[
-                  { label: 'OBS OVERLAY', path: `/lobby/${lobbyId}/broadcast`, color: '#F5A0D0', desc: 'Full broadcast view for OBS' },
-                  { label: 'SPECTATE', path: `/lobby/${lobbyId}/spectate`, color: '#00DC82', desc: 'Live spectator view' },
-                  { label: 'CAST VIEW', path: `/lobby/${lobbyId}/cast`, color: '#7B93DB', desc: 'Minimal casting overlay' },
-                  { label: 'LEADERBOARD', path: `/lobby/${lobbyId}/leaderboard`, color: '#FFF', desc: 'Standalone leaderboard' },
-                  { label: 'STAGE', path: `/lobby/${lobbyId}/stage`, color: '#FF4466', desc: 'Big-screen stage view' },
-                ].map(link => (
-                  <div key={link.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <button
-                      onClick={() => window.open(link.path, '_blank')}
-                      style={{ flex: 1, height: 32, display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', background: '#0D0D0D', border: '1px solid #1A1A1A', cursor: 'pointer', textAlign: 'left' }}
-                    >
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: link.color, flexShrink: 0 }} />
-                      <span style={{ fontFamily: bebas, fontSize: 13, color: link.color, letterSpacing: '0.05em' }}>{link.label}</span>
-                      <span style={{ fontFamily: sans, fontSize: 9, color: '#666', marginLeft: 'auto' }}>{link.desc}</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        const url = `${window.location.origin}${link.path}`;
-                        navigator.clipboard.writeText(url);
+                  { label: 'OBS OVERLAY', path: `/lobby/${lobbyId}/broadcast`, color: '#F5A0D0' },
+                  { label: 'SPECTATE', path: `/lobby/${lobbyId}/spectate`, color: '#00DC82' },
+                  { label: 'CAST', path: `/lobby/${lobbyId}/cast`, color: '#7B93DB' },
+                  { label: 'LEADERBOARD', path: `/lobby/${lobbyId}/leaderboard`, color: '#FFF' },
+                  { label: 'STAGE', path: `/lobby/${lobbyId}/stage`, color: '#FF4466' },
+                  { label: 'GLOBAL LB', path: '/leaderboard', color: '#FFD700' },
+                ].map(view => (
+                  <div key={view.label} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <div
+                      onClick={() => window.open(view.path, '_blank')}
+                      style={{
+                        position: 'relative', width: '100%', aspectRatio: '16/9', borderRadius: 4,
+                        border: `1px solid ${view.color}30`, overflow: 'hidden', cursor: 'pointer',
+                        background: '#050505',
                       }}
-                      style={{ height: 32, width: 32, background: 'transparent', border: '1px solid #1A1A1A', color: '#666', fontFamily: mono, fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      title="Copy link"
                     >
-                      ⎘
-                    </button>
+                      <iframe
+                        src={view.path}
+                        title={view.label}
+                        style={{
+                          position: 'absolute', top: 0, left: 0, width: '400%', height: '400%',
+                          transform: 'scale(0.25)', transformOrigin: 'top left',
+                          border: 'none', pointerEvents: 'none',
+                        }}
+                        tabIndex={-1}
+                        loading="lazy"
+                        sandbox="allow-scripts allow-same-origin"
+                      />
+                      <div style={{
+                        position: 'absolute', inset: 0, cursor: 'pointer',
+                        background: 'linear-gradient(transparent 50%, rgba(0,0,0,0.6))',
+                      }} />
+                      <div style={{
+                        position: 'absolute', top: 3, left: 3, width: 5, height: 5,
+                        borderRadius: '50%', background: view.color,
+                      }} />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ fontFamily: bebas, fontSize: 10, color: view.color, letterSpacing: '0.05em', flex: 1 }}>{view.label}</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(`${window.location.origin}${view.path}`);
+                        }}
+                        style={{ background: 'transparent', border: 'none', color: '#555', fontFamily: mono, fontSize: 9, cursor: 'pointer', padding: 0 }}
+                        title="Copy link"
+                      >⎘</button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1810,6 +1907,9 @@ export default function AdminPanel() {
           </div>
         </div>
       </div>
+
+      {/* Tutorial */}
+      <TutorialOverlay key={tutorialKey} role="admin" lobbyId={lobbyId} />
     </>
   );
 }

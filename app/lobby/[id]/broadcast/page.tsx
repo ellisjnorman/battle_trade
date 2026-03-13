@@ -210,28 +210,56 @@ function RightPanel({ lobbyId }: { lobbyId: string }) {
   )
 }
 
-// Bottom Ticker Component
+// Bottom Ticker Component — wired to real lobby data
 function BottomTicker({ lobbyState }: { lobbyState: LobbyState }) {
-  const tickerItems = [
-    { type: 'trade', text: 'WOLFPACK opens BTC LONG $5,000 @ 5X' },
-    { type: 'sabotage', text: 'ANONYMOUS locks out IRON HANDS for 30s' },
-    { type: 'trade', text: 'VEGA closes ETH SHORT +$840' },
-    { type: 'event', text: 'FLASH CRASH WARNING — 2:14' },
-    { type: 'trade', text: 'IRON HANDS opens SOL LONG $2,000 @ 3X' },
-    { type: 'trade', text: 'DEGEN PRIME closes BTC SHORT -$320' },
-    { type: 'sabotage', text: 'VEGA ghosts DEGEN PRIME positions' },
-    { type: 'trade', text: 'ANONYMOUS opens ETH LONG $4,000 @ 4X' },
-  ]
+  // Build ticker items from real lobby state
+  const tickerItems: { type: string; text: string }[] = []
+
+  // Add trader positions as trade items
+  for (const t of lobbyState.traders) {
+    if (t.isEliminated) continue
+    for (const p of t.positions) {
+      const pnlStr = p.currentPnl >= 0 ? `+$${Math.round(p.currentPnl)}` : `-$${Math.abs(Math.round(p.currentPnl))}`
+      tickerItems.push({ type: 'trade', text: `${t.name} ${p.direction} ${p.asset} $${p.size.toLocaleString()} @ ${p.leverage}X · ${pnlStr}` })
+    }
+    // Trader with no positions but still active
+    if (t.positions.length === 0 && t.return !== 0) {
+      const retStr = t.return >= 0 ? `+${t.return.toFixed(1)}%` : `${t.return.toFixed(1)}%`
+      tickerItems.push({ type: 'trade', text: `${t.name} · ${retStr} return` })
+    }
+  }
+
+  // Add market events from sabotage feed
+  for (const sab of lobbyState.sabotageEvents.slice(-5)) {
+    tickerItems.push({ type: 'event', text: `${sab.from} triggered ${sab.type.replace(/_/g, ' ').toUpperCase()} on ${sab.to}` })
+  }
+
+  // Add volatility event if active
+  if (lobbyState.currentEvent) {
+    tickerItems.push({ type: 'event', text: `${lobbyState.currentEvent.type.replace(/_/g, ' ')} ${lobbyState.currentEvent.asset ? `· ${lobbyState.currentEvent.asset}` : ''} ${lobbyState.currentEvent.impact ? `${lobbyState.currentEvent.impact}%` : ''}` })
+  }
+
+  // Add elimination events
+  for (const t of lobbyState.traders) {
+    if (t.isEliminated) {
+      tickerItems.push({ type: 'elimination', text: `${t.name} ELIMINATED · Final: ${t.return >= 0 ? '+' : ''}${t.return.toFixed(1)}%` })
+    }
+  }
+
+  // Fallback if nothing is happening yet
+  if (tickerItems.length === 0) {
+    tickerItems.push({ type: 'trade', text: `${lobbyState.name} · Round ${lobbyState.round} · Waiting for action...` })
+  }
 
   const getIcon = (type: string) => {
-    if (type === 'sabotage') return '◆'
-    if (type === 'event') return '▲'
+    if (type === 'event') return '◆'
+    if (type === 'elimination') return '▲'
     return '•'
   }
 
   const getColor = (type: string) => {
-    if (type === 'sabotage') return '#F5A0D0'
-    if (type === 'event') return '#FF3333'
+    if (type === 'event') return '#F5A0D0'
+    if (type === 'elimination') return '#FF3333'
     return '#888888'
   }
 

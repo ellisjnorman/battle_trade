@@ -5,16 +5,35 @@ import { PrivyProvider } from '@privy-io/react-auth';
 import { ErrorBoundary } from './error-boundary';
 import { registerServiceWorker } from '@/lib/register-sw';
 
-// Suppress hydration warnings caused by browser extensions (MetaMask, Phantom, etc.)
-// injecting DOM nodes that React doesn't expect
+// Suppress hydration warnings and wallet extension errors (MetaMask, Phantom, etc.)
+// These extensions inject DOM nodes and attempt connections that React/Next.js don't expect
 if (typeof window !== 'undefined') {
   const origError = console.error;
   console.error = (...args: unknown[]) => {
     const msg = typeof args[0] === 'string' ? args[0] : '';
     if (msg.includes('unique "key" prop') && new Error().stack?.includes('inpage.js')) return;
     if (msg.includes('Hydration') || msg.includes('hydrat')) return;
+    if (msg.includes('MetaMask') || msg.includes('metamask')) return;
+    if (msg.includes('Cross-Origin-Opener-Policy') || msg.includes('COOP')) return;
+    if (msg.includes('Failed to connect to MetaMask')) return;
     origError.apply(console, args);
   };
+
+  // Intercept unhandled rejections from wallet extensions
+  window.addEventListener('unhandledrejection', (e) => {
+    const msg = e.reason?.message || String(e.reason || '');
+    if (msg.includes('MetaMask') || msg.includes('metamask') || msg.includes('inpage.js')) {
+      e.preventDefault();
+    }
+  });
+
+  // Suppress error events from wallet extensions
+  window.addEventListener('error', (e) => {
+    const msg = e.message || '';
+    if (msg.includes('MetaMask') || msg.includes('Cross-Origin-Opener-Policy')) {
+      e.preventDefault();
+    }
+  });
 }
 
 export default function Providers({ children }: { children: React.ReactNode }) {
@@ -50,9 +69,6 @@ export default function Providers({ children }: { children: React.ReactNode }) {
           loginMethods: ['google', 'twitter', 'email', 'wallet'],
           externalWallets: {
             walletConnect: { enabled: true },
-            metamask: { enabled: true },
-            coinbaseWallet: { enabled: true },
-            phantom: { enabled: true },
           },
           embeddedWallets: {
             ethereum: {
