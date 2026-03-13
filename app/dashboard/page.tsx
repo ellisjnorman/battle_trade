@@ -535,7 +535,7 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Link href="/" style={{ display: 'flex', alignItems: 'center' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/logo-main.png" alt="Battle Trade" style={{ height: 100, width: 'auto' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+            <img src="/brand/logo-main.png" alt="Battle Trade" style={{ height: 64, width: 'auto' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
           </Link>
           <div style={{ fontFamily: font.sans, fontSize: 11, color: c.text3, maxWidth: 260, overflow: 'hidden', whiteSpace: 'nowrap' }}>
             <span key={liveEventIdx} style={{ animation: 'tickerSlide .3s ease', display: 'inline-block' }}>
