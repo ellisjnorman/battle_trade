@@ -66,6 +66,7 @@ export default function ProfilePage() {
   const [editLocation, setEditLocation] = useState('')
   const [saving, setSaving] = useState(false)
   const [showAvatars, setShowAvatars] = useState(false)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [activeTab, setActiveTab] = useState<Tab>('overview')
   const [notifyTrades, setNotifyTrades] = useState(true)
@@ -187,6 +188,31 @@ export default function ProfilePage() {
     window.location.href = '/login'
   }
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !profileId) return
+    setUploadingAvatar(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch(`/api/profile/${profileId}/avatar`, { method: 'POST', body: fd })
+      if (!res.ok) {
+        const d = await res.json()
+        addToast(d.error ?? 'Upload failed', 'error')
+        return
+      }
+      const d = await res.json()
+      setEditAvatar(d.avatar_url)
+      setProfile(p => p ? { ...p, avatar_url: d.avatar_url } : p)
+      addToast('Profile picture updated', 'success')
+    } catch {
+      addToast('Upload failed', 'error')
+    } finally {
+      setUploadingAvatar(false)
+      e.target.value = '' // reset input
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Loading / empty states
   // ---------------------------------------------------------------------------
@@ -239,13 +265,30 @@ export default function ProfilePage() {
         {/* PROFILE HEADER                                         */}
         {/* ═══════════════════════════════════════════════════════ */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 8 }}>
-          <div onClick={() => setShowAvatars(!showAvatars)} style={{
-            width: 80, height: 80, background: c.surface, border: `2px solid ${tier.color}`,
-            borderRadius: radius.lg, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 40, cursor: 'pointer', boxShadow: `0 0 20px ${tier.color}30`,
-            transition: 'all 200ms',
-          }}>
-            {editAvatar || '🎮'}
+          <div style={{ position: 'relative' }}>
+            <div onClick={() => setShowAvatars(!showAvatars)} style={{
+              width: 80, height: 80, background: c.surface, border: `2px solid ${tier.color}`,
+              borderRadius: radius.lg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 40, cursor: 'pointer', boxShadow: `0 0 20px ${tier.color}30`,
+              transition: 'all 200ms', overflow: 'hidden',
+            }}>
+              {editAvatar && editAvatar.startsWith('http') ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img src={editAvatar} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                editAvatar || '🎮'
+              )}
+            </div>
+            {/* Upload photo button */}
+            <label style={{
+              position: 'absolute', bottom: -4, right: -4, width: 28, height: 28, borderRadius: '50%',
+              background: c.pink, border: `2px solid ${c.bg}`, display: 'flex', alignItems: 'center',
+              justifyContent: 'center', cursor: uploadingAvatar ? 'wait' : 'pointer',
+              fontSize: 13, color: '#FFF', opacity: uploadingAvatar ? 0.5 : 1,
+            }}>
+              {uploadingAvatar ? '...' : '📷'}
+              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={handleAvatarUpload} style={{ display: 'none' }} />
+            </label>
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

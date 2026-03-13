@@ -2,6 +2,7 @@
 // Battle Trade Live Platform v5.0 - Volatility Engine UI Layer
 import { useState, useEffect, Suspense } from "react"
 import Image from "next/image"
+import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 
 // Types
@@ -23,6 +24,7 @@ interface Team {
   crowdHeat: number
   isComeback?: boolean
   btcExposed?: boolean
+  profileId?: string | null
 }
 
 interface Trade {
@@ -644,11 +646,19 @@ function TeamRow({ team, isEliminated = false, eventActive = false }: { team: Te
         <TeamAvatar team={team} isEliminated={isEliminated} />
         <div className="flex flex-col">
           <div className="flex items-center gap-[8px]">
-            <span
-              className={`font-display tracking-[0.05em] text-[24px] leading-tight ${isEliminated ? "line-through text-[#FF3333]" : "text-white"}`}
-            >
-              {team.teamName}
-            </span>
+            {team.profileId ? (
+              <Link href={`/profile/${team.profileId}`}
+                className={`font-display tracking-[0.05em] text-[24px] leading-tight hover:underline ${isEliminated ? "line-through text-[#FF3333]" : "text-white"}`}
+              >
+                {team.teamName}
+              </Link>
+            ) : (
+              <span
+                className={`font-display tracking-[0.05em] text-[24px] leading-tight ${isEliminated ? "line-through text-[#FF3333]" : "text-white"}`}
+              >
+                {team.teamName}
+              </span>
+            )}
             {team.isComeback && !isEliminated && (
               <span
                 className="font-display tracking-[0.05em] text-[11px] text-white"

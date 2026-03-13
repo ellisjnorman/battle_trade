@@ -74,9 +74,9 @@ function DoneScreen({ name, lobby, router }: { name: string; lobby: { id: string
 
       {/* Share links */}
       <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={{ ...S, fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>SHARE THESE LINKS</div>
+        <div style={{ ...S, fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>SHARE WITH FRIENDS</div>
 
-        {/* Join as trader */}
+        {/* Invite friends to trade */}
         <button
           onClick={() => copy(joinLink, 'join')}
           style={{
@@ -89,7 +89,7 @@ function DoneScreen({ name, lobby, router }: { name: string; lobby: { id: string
           }}
         >
           <div>
-            <div style={{ ...B, fontSize: 18, color: '#F5A0D0' }}>JOIN AS TRADER</div>
+            <div style={{ ...B, fontSize: 18, color: '#F5A0D0' }}>INVITE FRIENDS TO TRADE</div>
             <div style={{ ...M, fontSize: 11, color: '#555', marginTop: 2, wordBreak: 'break-all' }}>{joinLink}</div>
           </div>
           <span style={{ ...B, fontSize: 14, color: copied === 'join' ? '#00FF88' : '#888', flexShrink: 0, marginLeft: 16 }}>
@@ -119,24 +119,16 @@ function DoneScreen({ name, lobby, router }: { name: string; lobby: { id: string
         </button>
       </div>
 
-      {/* Invite code */}
-      <div style={{ marginTop: 24, padding: 20, border: '2px solid #F5A0D0', background: '#0D0D0D', display: 'inline-block' }} className="glow-pulse">
-        <div style={{ ...S, fontSize: 10, color: '#888', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.1em' }}>INVITE CODE</div>
-        <div style={{ ...M, fontSize: 40, color: '#F5A0D0', fontWeight: 700, letterSpacing: '0.15em', textShadow: '0 0 30px rgba(245,160,208,0.5)' }}>
-          {lobby.invite_code}
-        </div>
-      </div>
-
       {/* Actions */}
       <div style={{ display: 'flex', gap: 12, marginTop: 28, justifyContent: 'center', flexWrap: 'wrap' }}>
         <button
-          onClick={() => router.push(`/lobby/${lobby.id}/admin`)}
+          onClick={() => window.open(`/lobby/${lobby.id}/admin`, '_blank')}
           style={{ height: 56, padding: '0 32px', ...B, fontSize: 20, color: '#0A0A0A', background: '#F5A0D0', border: 'none', cursor: 'pointer' }}
         >
           OPEN ADMIN PANEL
         </button>
         <button
-          onClick={() => router.push(`/register/${lobby.invite_code}`)}
+          onClick={() => window.open(`/register/${lobby.invite_code}`, '_blank')}
           style={{ height: 56, padding: '0 32px', ...B, fontSize: 20, color: '#FFF', background: 'transparent', border: '2px solid #333', cursor: 'pointer' }}
         >
           JOIN AS PLAYER

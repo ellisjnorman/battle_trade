@@ -30,6 +30,7 @@ interface Team {
   crowdHeat: number
   isComeback?: boolean
   btcExposed?: boolean
+  profileId?: string | null
 }
 
 interface Trade {
@@ -1158,6 +1159,7 @@ interface RawTrader {
   avatar_url: string | null
   is_eliminated: boolean
   lobby_id: string | null
+  profile_id: string | null
 }
 
 interface RawTeam {
@@ -1219,7 +1221,7 @@ function useLobbyData(lobbyId: string) {
     // Teams
     const { data: traders } = await supabase
       .from("traders")
-      .select("id, name, team_id, avatar_url, is_eliminated, lobby_id")
+      .select("id, name, team_id, avatar_url, is_eliminated, lobby_id, profile_id")
       .eq("lobby_id", lobbyId)
 
     if (traders) setRawTraders(traders as RawTrader[])
@@ -1504,6 +1506,7 @@ function useLobbyData(lobbyId: string) {
         teamName: team.name,
         traderName: leadTrader?.name ?? "Unknown",
         avatar: leadTrader?.avatar_url ?? null,
+        profileId: leadTrader?.profile_id ?? null,
         balance,
         returnPct,
         odds,
@@ -1597,6 +1600,7 @@ function useLobbyData(lobbyId: string) {
         crowdHeat: Math.round((entry.volume / maxVolume) * 100),
         isComeback,
         btcExposed: entry.btcExposed,
+        profileId: entry.profileId,
       } satisfies Team
     })
   }, [rawTraders, rawTeams, positions, prices, marketOutcomes, startingBalance])

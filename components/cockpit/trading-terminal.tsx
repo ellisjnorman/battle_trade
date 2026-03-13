@@ -48,7 +48,15 @@ function getAuthHeaders(traderCode?: string | null): Record<string, string> {
   return h;
 }
 
-const CORE_ASSETS = ['BTC', 'ETH', 'SOL', 'DOGE', 'AVAX', 'LINK', 'XRP'];
+const DEFAULT_TICKER_ASSETS = ['BTC', 'ETH', 'SOL', 'DOGE', 'AVAX', 'LINK', 'XRP', 'ADA', 'DOT', 'UNI', 'AAVE', 'ARB', 'OP', 'SUI', 'APT', 'NEAR', 'INJ'];
+const CORE_ASSETS = (() => {
+  if (typeof window === 'undefined') return DEFAULT_TICKER_ASSETS;
+  try {
+    const saved = localStorage.getItem('bt_ticker_assets');
+    if (saved) return JSON.parse(saved) as string[];
+  } catch {}
+  return DEFAULT_TICKER_ASSETS;
+})();
 const SIZES = [500, 1000, 2000, 5000];
 const LEVS = [2, 5, 10, 20, 50];
 const fmtP = (p: number) => p === 0 ? '---' : p > 100 ? p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : p > 1 ? p.toFixed(2) : p.toFixed(6);
@@ -649,7 +657,7 @@ export default function TradingTerminal() {
   const allSymbols = Object.keys(PYTH_FEEDS).map(s => s.replace('USD', ''));
   const frozen = round?.status === 'frozen';
   const canExec = selectedDirection && selectedSize > 0 && !isLockedOut && !frozen && openPos.length < 3 && (!frozenAsset || frozenAsset.replace('USDT', '') !== selectedSymbol) && round?.status === 'active';
-  const execLabel = isLockedOut ? `BLACKED OUT ${Math.floor(lockoutTime/60)}:${(lockoutTime%60).toString().padStart(2,'0')}` : frozen ? 'FROZEN' : openPos.length >= 3 ? 'MAX POSITIONS' : !selectedDirection ? 'PICK A SIDE ↑' : actionLoading === 'trade' ? 'EXECUTING...' : selectedDirection === 'spot' ? `BUY ${selectedSymbol}` : `${selectedDirection.toUpperCase()} ${selectedSymbol}`;
+  const execLabel = isLockedOut ? `BLACKED OUT ${Math.floor(lockoutTime/60)}:${(lockoutTime%60).toString().padStart(2,'0')}` : frozen ? 'FROZEN' : openPos.length >= 3 ? 'MAX POSITIONS' : !selectedDirection ? 'SELECT LONG, SPOT OR SHORT' : actionLoading === 'trade' ? 'EXECUTING...' : selectedDirection === 'spot' ? `BUY ${selectedSymbol}` : `${selectedDirection.toUpperCase()} ${selectedSymbol}`;
   const effectiveLev = selectedDirection === 'spot' ? 1 : leverage;
   const liqP = selectedPrice > 0 && selectedDirection && selectedDirection !== 'spot' ? (selectedDirection === 'long' ? selectedPrice * (1 - 1/leverage) : selectedPrice * (1 + 1/leverage)) : 0;
 
@@ -822,57 +830,62 @@ export default function TradingTerminal() {
     { id: 'trailing_stop', label: 'TRAIL' },
   ];
 
+  const pnlColor = rp >= 0 ? '#00FF88' : '#FF3333';
   const rankColor = myRank === 1 ? '#FFD700' : myRank === 2 ? '#C0C0C0' : myRank === 3 ? '#CD7F32' : '#F5A0D0';
-  const rankGlow = myRank <= 3 ? `0 0 30px ${rankColor}60, 0 0 60px ${rankColor}30` : `0 0 20px rgba(245,160,208,0.3)`;
   const orderPanel = (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       {/* RANK HERO — Mario Kart position indicator */}
       <div style={{
-        padding: '12px 16px', borderBottom: `2px solid ${rankColor}40`,
-        background: `linear-gradient(180deg, ${rankColor}12, ${rankColor}04, transparent)`,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 14px', borderBottom: `2px solid ${rankColor}40`,
+        background: `linear-gradient(180deg, ${pnlColor}06, transparent)`,
         animation: rankFlash === 'up' ? 'rankUpFlash 1.5s ease-out' : rankFlash === 'down' ? 'rankDownFlash 1.5s ease-out' : 'none',
       }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-          <span style={{
-            ...B, fontSize: 52, lineHeight: 1, color: rankColor,
-            textShadow: rankGlow,
-            animation: myRank === 1 ? 'glowPulse 3s ease-in-out infinite' : 'none',
-            transition: 'all 400ms',
-          }}>#{myRank || '—'}</span>
-          <span style={{ ...M, fontSize: 14, color: '#555' }}>/{totalTraders}</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{
+              ...B, fontSize: 36, lineHeight: 1, color: rankColor,
+              textShadow: `0 0 16px ${rankColor}50`,
+              animation: myRank === 1 ? 'glowPulse 3s ease-in-out infinite' : 'none',
+              transition: 'all 400ms',
+            }}>#{myRank || '—'}</span>
+            <div>
+              <span style={{ ...B, fontSize: 28, color: pnlColor, lineHeight: 1, display: 'block', textShadow: rp !== 0 ? `0 0 12px ${pnlColor}40` : 'none' }}>{rp >= 0 ? '+' : ''}{rp.toFixed(1)}%</span>
+              <span style={{ ...M, fontSize: 10, color: '#666', marginTop: 2, display: 'block' }}>${pv.toLocaleString(undefined, { maximumFractionDigits: 0 })} · {openPos.length} open</span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {winStreak >= 2 && <StreakBadge streak={winStreak} />}
+            <span style={{ ...M, fontSize: 9, color: '#555' }}>{myRank}/{totalTraders}</span>
+          </div>
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <span style={{ ...M, fontSize: 18, fontWeight: 700, color: rp >= 0 ? '#00FF88' : '#FF3333', display: 'block', lineHeight: 1, textShadow: `0 0 12px ${rp >= 0 ? 'rgba(0,255,136,0.4)' : 'rgba(255,51,51,0.4)'}` }}>{rp >= 0 ? '+' : ''}{rp.toFixed(1)}%</span>
-          <span style={{ ...M, fontSize: 11, color: '#888', marginTop: 2, display: 'block' }}>${pv.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-        </div>
+        {proximityGap !== null && proximityGap < 2 && myRank > 1 && (
+          <div style={{ marginTop: 6, padding: '3px 8px', background: 'rgba(245,160,208,0.08)', border: '1px solid rgba(245,160,208,0.3)', animation: 'proximityPulse 1.5s infinite' }}>
+            <span style={{ ...B, fontSize: 10, color: '#F5A0D0' }}>{proximityGap.toFixed(1)}% FROM #{myRank - 1}</span>
+          </div>
+        )}
       </div>
       {/* Direction: LONG / SPOT / SHORT */}
       <div style={{ display: 'flex', minHeight: 56, borderBottom: '1px solid #1A1A1A' }}>
-        <button onClick={() => setSelectedDirection('long')} style={{ flex: 1, minHeight: 48, ...B, fontSize: 22, background: selectedDirection === 'long' ? '#00FF88' : '#0D0D0D', color: selectedDirection === 'long' ? '#0A0A0A' : '#00FF88', border: 'none', cursor: 'pointer', transition: 'all 150ms' }}>LONG</button>
-        <button onClick={() => setSelectedDirection('spot')} style={{ flex: 1, minHeight: 48, ...B, fontSize: 22, background: selectedDirection === 'spot' ? '#00BFFF' : '#0D0D0D', color: selectedDirection === 'spot' ? '#0A0A0A' : '#00BFFF', border: 'none', borderLeft: '1px solid #1A1A1A', borderRight: '1px solid #1A1A1A', cursor: 'pointer', transition: 'all 150ms' }}>SPOT</button>
-        <button onClick={() => setSelectedDirection('short')} style={{ flex: 1, minHeight: 48, ...B, fontSize: 22, background: selectedDirection === 'short' ? '#FF3333' : '#0D0D0D', color: selectedDirection === 'short' ? '#FFF' : '#FF3333', border: 'none', cursor: 'pointer', transition: 'all 150ms' }}>SHORT</button>
+        <button onClick={() => setSelectedDirection('long')} style={{ flex: 1, minHeight: 56, ...B, fontSize: 22, borderRadius: 0, background: selectedDirection === 'long' ? '#00FF88' : '#0D0D0D', color: selectedDirection === 'long' ? '#0A0A0A' : '#00FF88', border: 'none', borderBottom: selectedDirection === 'long' ? '3px solid #00FF88' : '3px solid transparent', cursor: 'pointer', transition: 'all 150ms' }}>LONG</button>
+        <button onClick={() => setSelectedDirection('spot')} style={{ flex: 1, minHeight: 56, ...B, fontSize: 22, borderRadius: 0, background: selectedDirection === 'spot' ? '#00BFFF' : '#0D0D0D', color: selectedDirection === 'spot' ? '#0A0A0A' : '#00BFFF', border: 'none', borderLeft: '1px solid #1A1A1A', borderRight: '1px solid #1A1A1A', borderBottom: selectedDirection === 'spot' ? '3px solid #00BFFF' : '3px solid transparent', cursor: 'pointer', transition: 'all 150ms' }}>SPOT</button>
+        <button onClick={() => setSelectedDirection('short')} style={{ flex: 1, minHeight: 56, ...B, fontSize: 22, borderRadius: 0, background: selectedDirection === 'short' ? '#FF3333' : '#0D0D0D', color: selectedDirection === 'short' ? '#FFF' : '#FF3333', border: 'none', borderBottom: selectedDirection === 'short' ? '3px solid #FF3333' : '3px solid transparent', cursor: 'pointer', transition: 'all 150ms' }}>SHORT</button>
       </div>
-      {/* Strategy Presets — always visible when round active */}
+      {/* Strategy Presets — 2x2 grid */}
       {canTrade && (
-        <div style={{ padding: '8px 12px', borderBottom: '1px solid #1A1A1A' }}>
-          <span style={{ ...B, fontSize: 9, color: '#666', display: 'block', marginBottom: 6 }}>QUICK STRATEGIES</span>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 3 }}>
-            {STRATEGY_PRESETS.map(s => (
-              <button key={s.id} onClick={() => executeStrategy(s.id)} disabled={actionLoading === 'strategy'}
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '6px 2px', minHeight: 52, background: '#0A0A0A', border: '1px solid #1A1A1A', borderTop: `2px solid ${s.color}`, cursor: actionLoading === 'strategy' ? 'wait' : 'pointer', transition: 'all 150ms', gap: 2, textAlign: 'center' }}>
-                <span style={{ fontSize: 14 }}>{s.icon}</span>
-                <span style={{ ...B, fontSize: 8, color: '#FFF', lineHeight: 1.1 }}>{actionLoading === 'strategy' ? '...' : s.label}</span>
-                <span style={{ ...S, fontSize: 7, color: '#555', lineHeight: 1.1 }}>{s.trades.length} trades</span>
-              </button>
-            ))}
-          </div>
+        <div style={{ padding: '8px 12px', borderBottom: '1px solid #1A1A1A', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+          {STRATEGY_PRESETS.map(s => (
+            <button key={s.id} onClick={() => executeStrategy(s.id)} disabled={actionLoading === 'strategy'}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 6px', minHeight: 40, background: '#0A0A0A', border: '1px solid #1A1A1A', borderTop: `2px solid ${s.color}`, borderRadius: 6, cursor: actionLoading === 'strategy' ? 'wait' : 'pointer', transition: 'all 150ms', gap: 6 }}>
+              <span style={{ fontSize: 16 }}>{s.icon}</span>
+              <span style={{ ...B, fontSize: 12, color: '#FFF', lineHeight: 1 }}>{actionLoading === 'strategy' ? '...' : s.label}</span>
+            </button>
+          ))}
         </div>
       )}
       {/* Order type tabs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', borderBottom: '1px solid #1A1A1A' }}>
         {ORDER_TYPES.map(ot => (
-          <button key={ot.id} onClick={() => setOrderType(ot.id)} style={{ minHeight: 44, ...B, fontSize: 11, background: orderType === ot.id ? '#1A1A1A' : 'transparent', color: orderType === ot.id ? '#F5A0D0' : '#555', border: 'none', borderBottom: orderType === ot.id ? '2px solid #F5A0D0' : '2px solid transparent', cursor: 'pointer', transition: 'all 100ms' }}>{ot.label}</button>
+          <button key={ot.id} onClick={() => setOrderType(ot.id)} style={{ minHeight: 42, ...B, fontSize: 12, background: orderType === ot.id ? '#1A1A1A' : 'transparent', color: orderType === ot.id ? '#F5A0D0' : '#555', border: 'none', borderBottom: orderType === ot.id ? '2px solid #F5A0D0' : '2px solid transparent', cursor: 'pointer', transition: 'all 100ms' }}>{ot.label}</button>
         ))}
       </div>
       {/* Conditional price inputs */}
@@ -912,21 +925,21 @@ export default function TradingTerminal() {
         </div>
       )}
       {/* Size */}
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid #1A1A1A' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ ...B, fontSize: 12, color: '#777' }}>SIZE</span>
-          <span style={{ ...M, fontSize: 11, color: '#999' }}>BAL: ${pv.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid #1A1A1A' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+          <span style={{ ...B, fontSize: 14, color: '#777' }}>SIZE</span>
+          <span style={{ ...M, fontSize: 12, color: '#999' }}>BAL: ${pv.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
           {SIZES.map(s => (
-            <button key={s} onClick={() => setSelectedSize(s)} style={{ minHeight: 44, ...B, fontSize: 15, background: selectedSize === s ? '#1A1A1A' : '#0D0D0D', color: selectedSize === s ? '#FFF' : '#555', border: selectedSize === s ? '1px solid #F5A0D0' : '1px solid #111', cursor: 'pointer', transition: 'all 100ms' }}>
+            <button key={s} onClick={() => setSelectedSize(s)} style={{ minHeight: 48, ...B, fontSize: 20, borderRadius: 8, background: selectedSize === s ? '#1A1A1A' : '#0D0D0D', color: selectedSize === s ? '#FFF' : '#555', border: selectedSize === s ? '1px solid #F5A0D0' : '1px solid #111', cursor: 'pointer', transition: 'all 100ms' }}>
               ${s >= 1000 ? `${s/1000}K` : s}
             </button>
           ))}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, marginTop: 6 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, marginTop: 4 }}>
           {[10, 25, 50, 100].map(pct => (
-            <button key={pct} onClick={() => setSelectedSize(Math.floor(pv * pct / 100))} style={{ minHeight: 36, ...B, fontSize: 11, background: pct === 100 ? 'rgba(255,51,51,0.15)' : '#0D0D0D', color: pct === 100 ? '#FF3333' : '#444', border: pct === 100 ? '1px solid #FF3333' : '1px solid #111', cursor: 'pointer', transition: 'all 100ms' }}>
+            <button key={pct} onClick={() => setSelectedSize(Math.floor(pv * pct / 100))} style={{ minHeight: 38, ...B, fontSize: 14, borderRadius: 6, background: pct === 100 ? 'rgba(255,51,51,0.15)' : '#0D0D0D', color: pct === 100 ? '#FF3333' : '#444', border: pct === 100 ? '1px solid #FF3333' : '1px solid #111', cursor: 'pointer', transition: 'all 100ms' }}>
               {pct === 100 ? 'ALL IN' : `${pct}%`}
             </button>
           ))}
@@ -934,17 +947,16 @@ export default function TradingTerminal() {
       </div>
       {/* Leverage Slider — hidden for spot */}
       {selectedDirection !== 'spot' ? (
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid #1A1A1A' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ ...B, fontSize: 12, color: '#777' }}>LEVERAGE</span>
-          <span style={{ ...M, fontSize: 18, color: '#F5A0D0', textShadow: leverage >= leverageTiers[leverageTiers.length - 1] ? '0 0 12px rgba(245,160,208,0.6)' : 'none' }}>{leverage}x</span>
+        <div style={{ padding: '10px 14px', borderBottom: '1px solid #1A1A1A' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+          <span style={{ ...B, fontSize: 14, color: '#777' }}>LEVERAGE</span>
+          <span style={{ ...M, fontSize: 24, color: '#F5A0D0', textShadow: leverage >= leverageTiers[leverageTiers.length - 1] ? '0 0 12px rgba(245,160,208,0.6)' : 'none' }}>{leverage}x</span>
         </div>
         {(() => {
           const maxLev = leverageTiers[leverageTiers.length - 1] ?? 50;
-          const steps = 4; // 25% increments = 4 steps
+          const steps = 4;
           const stepValues = Array.from({ length: steps + 1 }, (_, i) => {
             const pct = i / steps;
-            // Snap to nearest tier value
             const raw = Math.round(maxLev * pct);
             if (raw === 0) return leverageTiers[0] ?? 1;
             const nearest = leverageTiers.reduce((prev, curr) => Math.abs(curr - raw) < Math.abs(prev - raw) ? curr : prev);
@@ -958,63 +970,40 @@ export default function TradingTerminal() {
           return (
             <>
               <div style={{ position: 'relative', height: 36, display: 'flex', alignItems: 'center', padding: '0 2px' }}>
-                {/* Track background */}
-                <div style={{ position: 'absolute', left: 0, right: 0, height: 6, background: '#1A1A1A', overflow: 'hidden' }}>
-                  <div style={{ width: `${pct}%`, height: '100%', background: dangerZone ? 'linear-gradient(90deg, #F5A0D0, #FF3333)' : 'linear-gradient(90deg, #F5A0D060, #F5A0D0)', transition: 'width 100ms, background 200ms', boxShadow: dangerZone ? '0 0 8px rgba(255,51,51,0.4)' : '0 0 4px rgba(245,160,208,0.3)' }} />
+                <div style={{ position: 'absolute', left: 0, right: 0, height: 6, borderRadius: 3, background: '#1A1A1A', overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', borderRadius: 3, background: dangerZone ? 'linear-gradient(90deg, #F5A0D0, #FF3333)' : 'linear-gradient(90deg, #F5A0D060, #F5A0D0)', transition: 'width 100ms, background 200ms' }} />
                 </div>
-                {/* Tick marks */}
                 {uniqueSteps.map((_, i) => (
-                  <div key={i} style={{ position: 'absolute', left: `${(i / (uniqueSteps.length - 1)) * 100}%`, top: '50%', transform: 'translate(-50%, -50%)', width: 2, height: 12, background: i <= sliderIdx ? '#F5A0D0' : '#333', transition: 'background 100ms' }} />
+                  <div key={i} style={{ position: 'absolute', left: `${(i / (uniqueSteps.length - 1)) * 100}%`, top: '50%', transform: 'translate(-50%, -50%)', width: 3, height: 12, background: i <= sliderIdx ? '#F5A0D0' : '#333', transition: 'background 100ms' }} />
                 ))}
-                {/* Range input */}
-                <input
-                  type="range"
-                  min={0}
-                  max={uniqueSteps.length - 1}
-                  step={1}
-                  value={sliderIdx}
+                <input type="range" min={0} max={uniqueSteps.length - 1} step={1} value={sliderIdx}
                   onChange={(e) => setLeverage(uniqueSteps[parseInt(e.target.value)])}
-                  style={{ position: 'absolute', left: 0, right: 0, width: '100%', height: 36, opacity: 0, cursor: 'pointer', zIndex: 2, margin: 0 }}
-                />
-                {/* Thumb indicator */}
-                <div style={{ position: 'absolute', left: `${pct}%`, top: '50%', transform: 'translate(-50%, -50%)', width: 20, height: 20, background: dangerZone ? '#FF3333' : '#F5A0D0', border: '2px solid #FFF', boxShadow: `0 0 8px ${dangerZone ? 'rgba(255,51,51,0.6)' : 'rgba(245,160,208,0.6)'}`, transition: 'left 100ms, background 200ms', pointerEvents: 'none' }} />
+                  style={{ position: 'absolute', left: 0, right: 0, width: '100%', height: 36, opacity: 0, cursor: 'pointer', zIndex: 2, margin: 0 }} />
+                <div style={{ position: 'absolute', left: `${pct}%`, top: '50%', transform: 'translate(-50%, -50%)', width: 20, height: 20, borderRadius: 10, background: dangerZone ? '#FF3333' : '#F5A0D0', border: '1px solid rgba(255,255,255,0.3)', transition: 'left 100ms, background 200ms', pointerEvents: 'none' }} />
               </div>
-              {/* Step labels */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
                 {uniqueSteps.map((v, i) => (
-                  <button key={v} onClick={() => setLeverage(v)} style={{ ...B, fontSize: 10, color: i === sliderIdx ? '#F5A0D0' : '#444', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', transition: 'color 100ms' }}>{v}x</button>
+                  <button key={v} onClick={() => setLeverage(v)} style={{ ...B, fontSize: 13, color: i === sliderIdx ? '#F5A0D0' : '#444', background: 'none', border: 'none', cursor: 'pointer', padding: '3px 0', transition: 'color 100ms' }}>{v}x</button>
                 ))}
               </div>
-              {dangerZone && <div style={{ ...B, fontSize: 9, color: '#FF3333', textAlign: 'center', marginTop: 4, animation: 'pulse 1.5s infinite' }}>HIGH RISK — LIQUIDATION CLOSE</div>}
+              {dangerZone && <div style={{ ...B, fontSize: 8, color: '#FF3333', textAlign: 'center', marginTop: 2, animation: 'pulse 1.5s infinite' }}>HIGH RISK</div>}
             </>
           );
         })()}
       </div>
       ) : (
-        <div style={{ padding: '8px 16px', borderBottom: '1px solid #1A1A1A', background: 'rgba(0,191,255,0.04)' }}>
+        <div style={{ padding: '6px 12px', borderBottom: '1px solid #1A1A1A', background: 'rgba(0,191,255,0.04)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 3, height: 12, background: '#00BFFF', display: 'block' }} />
-            <span style={{ ...B, fontSize: 11, color: '#00BFFF' }}>SPOT BUY — 1x, NO LEVERAGE</span>
+            <span style={{ width: 3, height: 10, background: '#00BFFF', display: 'block' }} />
+            <span style={{ ...B, fontSize: 10, color: '#00BFFF' }}>SPOT · 1x NO LEVERAGE</span>
           </div>
         </div>
       )}
-      {/* Summary */}
-      {selectedDirection && selectedPrice > 0 && (
-        <div style={{ padding: '10px 16px', borderBottom: '1px solid #1A1A1A' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}><span style={{ ...S, fontSize: 11, color: '#777' }}>TYPE</span><span style={{ ...B, fontSize: 12, color: '#F5A0D0' }}>{orderType.replace('_', ' ').toUpperCase()}</span></div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}><span style={{ ...S, fontSize: 11, color: '#777' }}>NOTIONAL</span><span style={{ ...M, fontSize: 12, color: '#888' }}>${(selectedSize * effectiveLev).toLocaleString()}</span></div>
-          {orderType === 'market' && <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}><span style={{ ...S, fontSize: 11, color: '#777' }}>ENTRY</span><span style={{ ...M, fontSize: 12, color: '#FFF' }}>${fmtP(selectedPrice)}</span></div>}
-          {orderType === 'limit' && <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}><span style={{ ...S, fontSize: 11, color: '#777' }}>LIMIT</span><span style={{ ...M, fontSize: 12, color: '#F5A0D0' }}>${limitPrice || '---'}</span></div>}
-          {orderType === 'stop_limit' && <><div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}><span style={{ ...S, fontSize: 11, color: '#777' }}>STOP</span><span style={{ ...M, fontSize: 12, color: '#FF3333' }}>${stopPrice || '---'}</span></div><div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}><span style={{ ...S, fontSize: 11, color: '#777' }}>LIMIT</span><span style={{ ...M, fontSize: 12, color: '#F5A0D0' }}>${limitPrice || 'MKT'}</span></div></>}
-          {orderType === 'trailing_stop' && <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}><span style={{ ...S, fontSize: 11, color: '#777' }}>TRAIL</span><span style={{ ...M, fontSize: 12, color: '#F5A0D0' }}>{trailPct}%</span></div>}
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ ...S, fontSize: 11, color: '#777' }}>LIQ PRICE</span><span style={{ ...M, fontSize: 12, color: '#FF3333' }}>${fmtP(liqP)}</span></div>
-        </div>
-      )}
-      {/* Execute */}
-      <div style={{ padding: '12px 16px' }}>
+      {/* Execute — directly under leverage */}
+      <div style={{ padding: '10px 14px' }}>
         <button onClick={() => { if (canTrade && selectedDirection) openPosition(selectedDirection, selectedSize); }} disabled={!canExec || actionLoading === 'trade'}
           style={{
-            width: '100%', minHeight: 56, ...B, fontSize: 24,
+            width: '100%', minHeight: 58, ...B, fontSize: 26, borderRadius: 10,
             background: isLockedOut ? '#0D0D0D' : !selectedDirection ? '#111' : !canExec ? '#1A1A1A' : selectedDirection === 'spot' ? '#00BFFF' : selectedDirection === 'long' ? '#00FF88' : '#FF3333',
             color: isLockedOut ? '#FF3333' : !selectedDirection ? '#555' : !canExec ? '#333' : selectedDirection === 'short' ? '#FFF' : '#0A0A0A',
             border: isLockedOut ? '2px solid #FF3333' : !selectedDirection ? '2px solid #333' : canExec ? `2px solid ${selectedDirection === 'spot' ? '#00BFFF' : selectedDirection === 'long' ? '#00FF88' : '#FF3333'}` : '2px solid #1A1A1A',
@@ -1025,6 +1014,14 @@ export default function TradingTerminal() {
           }}>
           {execLabel}
         </button>
+        {/* Compact order summary */}
+        {selectedDirection && selectedPrice > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 6, flexWrap: 'wrap' }}>
+            <span style={{ ...M, fontSize: 9, color: '#555' }}>{orderType.replace('_', ' ').toUpperCase()}</span>
+            <span style={{ ...M, fontSize: 9, color: '#777' }}>${(selectedSize * effectiveLev).toLocaleString()} notional</span>
+            {liqP > 0 && <span style={{ ...M, fontSize: 9, color: '#FF3333' }}>LIQ ${fmtP(liqP)}</span>}
+          </div>
+        )}
       </div>
       {/* Pending orders */}
       {pendingPos.length > 0 && (
@@ -1047,41 +1044,89 @@ export default function TradingTerminal() {
           ))}
         </div>
       )}
+      {/* LIVE LEADERBOARD — compact, bottom of right sidebar */}
+      <div style={{ padding: '4px 8px', borderTop: '1px solid #1A1A1A' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#00FF88', animation: 'liveDot 2s ease-in-out infinite' }} />
+            <span style={{ ...B, fontSize: 9, color: '#888' }}>LEADERBOARD</span>
+          </div>
+          <span style={{ ...M, fontSize: 8, color: '#555' }}>{standings.length}</span>
+        </div>
+        <div style={{ maxHeight: 120, overflowY: 'auto' }}>
+          {standings.length === 0 ? (
+            <div style={{ ...M, fontSize: 9, color: '#333', textAlign: 'center', padding: '6px 0' }}>Waiting for round...</div>
+          ) : (
+            standings.slice(0, 8).map((s, i) => {
+              const isMe = s.trader.id === trader?.id;
+              const rankColor = i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : '#555';
+              return (
+                <div key={s.trader.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 4, padding: '2px 4px',
+                  background: isMe ? 'rgba(245,160,208,0.08)' : 'transparent',
+                  borderLeft: isMe ? '2px solid #F5A0D0' : '2px solid transparent',
+                }}>
+                  <span style={{ ...M, fontSize: 9, color: rankColor, width: 14, textAlign: 'right', fontWeight: 700 }}>
+                    {s.rank}
+                  </span>
+                  <span style={{
+                    ...S, fontSize: 9, color: isMe ? '#FFF' : '#777', flex: 1,
+                    fontWeight: isMe ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {s.trader.name}{isMe ? ' (you)' : ''}
+                  </span>
+                  <span style={{
+                    ...M, fontSize: 8, fontWeight: 700,
+                    color: s.returnPct > 0 ? '#00FF88' : s.returnPct < 0 ? '#FF3333' : '#555',
+                  }}>
+                    {s.returnPct >= 0 ? '+' : ''}{s.returnPct.toFixed(1)}%
+                  </span>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
     </div>
   );
 
   // Defense panel — BLUE/CYAN theme to distinguish from attacks
   const defensePanel = (
-    <div style={{ padding: '8px 10px', borderBottom: '1px solid #1A1A1A' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 3, height: 12, background: '#00BFFF', display: 'block' }} />
-          <span style={{ ...B, fontSize: 11, color: '#00BFFF' }}>DEFENSE</span>
+    <div style={{ padding: '4px 10px', borderBottom: '1px solid #1A1A1A' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ width: 2, height: 10, background: '#00BFFF', display: 'block' }} />
+          <span style={{ ...B, fontSize: 10, color: '#00BFFF' }}>DEFENSE</span>
         </div>
-        <span style={{ ...M, fontSize: 10, color: '#00BFFF' }}>{credits.balance}CR</span>
+        <span style={{ ...M, fontSize: 9, color: '#00BFFF' }}>{credits.balance}CR</span>
       </div>
 
       {defenseCooldown > 0 && (
-        <div style={{ marginBottom: 6, padding: '4px 8px', border: '1px solid rgba(0,191,255,0.3)', background: 'rgba(0,191,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ ...B, fontSize: 9, color: '#00BFFF' }}>RECHARGING</span>
-          <span style={{ ...M, fontSize: 11, color: '#00BFFF' }}>{Math.floor(defenseCooldown / 60)}:{(defenseCooldown % 60).toString().padStart(2, '0')}</span>
+        <div style={{ marginBottom: 3, padding: '2px 6px', border: '1px solid rgba(0,191,255,0.3)', background: 'rgba(0,191,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ ...B, fontSize: 8, color: '#00BFFF' }}>RECHARGING</span>
+          <span style={{ ...M, fontSize: 9, color: '#00BFFF' }}>{Math.floor(defenseCooldown / 60)}:{(defenseCooldown % 60).toString().padStart(2, '0')}</span>
         </div>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
         {DEFENSES.map(d => {
-          const locked = d.unlockRank > 0 && (myRank === 0 || myRank > d.unlockRank);
+          const reqRank = d.unlockRank > 0 ? Math.min(d.unlockRank, Math.max(1, Math.floor(totalTraders / 2))) : 0;
+          const locked = reqRank > 0 && (myRank === 0 || myRank > reqRank);
           const canAfford = !locked && credits.balance >= d.cost;
           const ok = canAfford && defenseCooldown === 0;
           const isLoading = actionLoading === d.id;
           return (
             <button key={d.id} className="weapon-card" onClick={() => !locked && ok && !isLoading && activateDefense(d.id)} disabled={locked || !ok || isLoading}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 6px', minHeight: 32, background: locked ? '#080808' : isLoading ? 'rgba(0,191,255,0.1)' : '#0A0A0A', border: `1px solid ${locked ? '#111' : '#1A1A1A'}`, borderLeft: `3px solid ${locked ? '#222' : canAfford ? '#00BFFF' : '#111'}`, opacity: locked ? 0.35 : canAfford ? 1 : 0.5, cursor: locked ? 'not-allowed' : ok ? 'pointer' : 'not-allowed', transition: 'all 150ms', textAlign: 'left', WebkitTapHighlightColor: 'transparent', position: 'relative', overflow: 'hidden' }}>
-              {locked && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', zIndex: 1 }}><span style={{ ...B, fontSize: 8, color: '#00BFFF', display: 'flex', alignItems: 'center', gap: 3 }}>🔒 #{d.unlockRank}</span></div>}
-              <span style={{ fontSize: 13, filter: locked ? 'grayscale(1)' : 'none', flexShrink: 0, width: 18, textAlign: 'center' }}>{d.icon}</span>
+              title={d.desc}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 5px', minHeight: 32, background: locked ? '#0D0D0D' : isLoading ? 'rgba(0,191,255,0.1)' : '#0A0A0A', border: `1px solid ${locked ? '#1A1A1A' : '#1A1A1A'}`, borderLeft: `2px solid ${locked ? '#333' : canAfford ? '#00BFFF' : '#222'}`, borderRadius: 4, opacity: canAfford ? 1 : 0.6, cursor: locked ? 'not-allowed' : ok ? 'pointer' : 'not-allowed', transition: 'all 150ms', textAlign: 'left', WebkitTapHighlightColor: 'transparent', position: 'relative', overflow: 'hidden' }}>
+              {locked && <div style={{ position: 'absolute', top: 1, right: 3, zIndex: 1 }}><span style={{ ...M, fontSize: 7, color: '#555', background: '#1A1A1A', padding: '0 4px', borderRadius: 2 }}>🔒{reqRank}</span></div>}
+              <span style={{ fontSize: 13, flexShrink: 0, width: 18, textAlign: 'center', filter: locked ? 'grayscale(1) brightness(0.5)' : 'none' }}>{d.icon}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ ...B, fontSize: 9, color: locked ? '#333' : '#FFF', lineHeight: 1, display: 'block' }}>{isLoading ? '...' : d.name}</span>
-                <span style={{ ...M, fontSize: 8, color: locked ? '#222' : canAfford ? '#00BFFF' : '#333' }}>{d.cost}</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                  <span style={{ ...B, fontSize: 9, color: locked ? '#444' : '#FFF', lineHeight: 1 }}>{isLoading ? '...' : d.name}</span>
+                  <span style={{ ...M, fontSize: 8, color: locked ? '#333' : canAfford ? '#00BFFF' : '#444', flexShrink: 0 }}>{d.cost}CR</span>
+                </div>
+                <span style={{ ...S, fontSize: 8, color: locked ? '#333' : '#666', lineHeight: 1.1, display: 'block', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.desc}</span>
               </div>
             </button>
           );
@@ -1092,50 +1137,54 @@ export default function TradingTerminal() {
 
   // Market Events panel
   const arsenalPanel = (
-    <div style={{ padding: '8px 10px', borderBottom: '1px solid #1A1A1A' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 3, height: 12, background: '#F5A0D0', display: 'block' }} />
-          <span style={{ ...B, fontSize: 11, color: '#F5A0D0' }}>MARKET EVENTS</span>
+    <div style={{ padding: '4px 10px', borderBottom: '1px solid #1A1A1A' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ width: 2, height: 10, background: '#F5A0D0', display: 'block' }} />
+          <span style={{ ...B, fontSize: 10, color: '#F5A0D0' }}>MARKET EVENTS</span>
         </div>
-        <span style={{ ...M, fontSize: 10, color: '#F5A0D0' }}>{credits.balance}CR</span>
+        <span style={{ ...M, fontSize: 9, color: '#F5A0D0' }}>{credits.balance}CR</span>
       </div>
 
       {/* Target indicator */}
-      <div style={{ marginBottom: 6, padding: '4px 8px', border: `1px solid ${selectedTarget ? '#F5A0D0' : '#1A1A1A'}`, background: selectedTarget ? 'rgba(245,160,208,0.05)' : '#0D0D0D', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ ...S, fontSize: 9, color: '#999' }}>TARGET</span>
+      <div style={{ marginBottom: 3, padding: '2px 6px', border: `1px solid ${selectedTarget ? '#F5A0D0' : '#1A1A1A'}`, background: selectedTarget ? 'rgba(245,160,208,0.05)' : '#0D0D0D', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ ...S, fontSize: 8, color: '#999' }}>TARGET</span>
         {selectedTarget ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ ...B, fontSize: 11, color: '#F5A0D0' }}>{allTraders.find(t => t.id === selectedTarget)?.name ?? '???'}</span>
-            <button onClick={() => setSelectedTarget(null)} style={{ ...S, fontSize: 9, color: '#999', background: 'none', border: 'none', cursor: 'pointer' }}>x</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ ...B, fontSize: 9, color: '#F5A0D0' }}>{allTraders.find(t => t.id === selectedTarget)?.name ?? '???'}</span>
+            <button onClick={() => setSelectedTarget(null)} style={{ ...S, fontSize: 8, color: '#999', background: 'none', border: 'none', cursor: 'pointer' }}>x</button>
           </div>
         ) : (
-          <span style={{ ...S, fontSize: 9, color: '#666', fontStyle: 'italic' }}>Click a player above</span>
+          <span style={{ ...S, fontSize: 8, color: '#666', fontStyle: 'italic' }}>Tap a rival above</span>
         )}
       </div>
 
       {cooldownRemaining > 0 && (
-        <div style={{ marginBottom: 6, padding: '4px 8px', border: '1px solid rgba(245,160,208,0.3)', background: 'rgba(245,160,208,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ ...B, fontSize: 9, color: '#F5A0D0' }}>RECHARGING</span>
-          <span style={{ ...M, fontSize: 11, color: '#F5A0D0' }}>{Math.floor(cooldownRemaining / 60)}:{(cooldownRemaining % 60).toString().padStart(2, '0')}</span>
+        <div style={{ marginBottom: 3, padding: '2px 6px', border: '1px solid rgba(245,160,208,0.3)', background: 'rgba(245,160,208,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ ...B, fontSize: 8, color: '#F5A0D0' }}>RECHARGING</span>
+          <span style={{ ...M, fontSize: 9, color: '#F5A0D0' }}>{Math.floor(cooldownRemaining / 60)}:{(cooldownRemaining % 60).toString().padStart(2, '0')}</span>
         </div>
       )}
 
-      {/* Event grid — rank-locked like CoD/Fortnite */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
         {ATTACKS.map(a => {
-          const locked = a.unlockRank > 0 && (myRank === 0 || myRank > a.unlockRank);
+          const reqRank = a.unlockRank > 0 ? Math.min(a.unlockRank, Math.max(1, Math.floor(totalTraders / 2))) : 0;
+          const locked = reqRank > 0 && (myRank === 0 || myRank > reqRank);
           const canAfford = !locked && credits.balance >= a.cost;
           const ok = canAfford && !!selectedTarget && cooldownRemaining === 0;
           const isLoading = actionLoading === a.id;
           return (
             <button key={a.id} className="weapon-card" onClick={() => !locked && selectedTarget && ok && !isLoading && launchAttack(a.id, selectedTarget)} disabled={locked || !ok || isLoading}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 6px', minHeight: 32, background: locked ? '#080808' : isLoading ? 'rgba(245,160,208,0.1)' : '#0A0A0A', border: `1px solid ${locked ? '#111' : '#1A1A1A'}`, borderLeft: `3px solid ${locked ? '#222' : canAfford ? '#F5A0D0' : '#111'}`, opacity: locked ? 0.35 : canAfford ? 1 : 0.5, cursor: locked ? 'not-allowed' : ok ? 'pointer' : 'not-allowed', transition: 'all 150ms', textAlign: 'left', WebkitTapHighlightColor: 'transparent', position: 'relative', overflow: 'hidden' }}>
-              {locked && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', zIndex: 1 }}><span style={{ ...B, fontSize: 8, color: '#F5A0D0', display: 'flex', alignItems: 'center', gap: 3 }}>🔒 #{a.unlockRank}</span></div>}
-              <span style={{ fontSize: 13, filter: locked ? 'grayscale(1)' : 'none', flexShrink: 0, width: 18, textAlign: 'center' }}>{a.icon}</span>
+              title={a.desc}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 5px', minHeight: 32, background: locked ? '#0D0D0D' : isLoading ? 'rgba(245,160,208,0.1)' : '#0A0A0A', border: `1px solid ${locked ? '#1A1A1A' : '#1A1A1A'}`, borderLeft: `2px solid ${locked ? '#333' : canAfford ? '#F5A0D0' : '#222'}`, borderRadius: 4, opacity: canAfford ? 1 : 0.6, cursor: locked ? 'not-allowed' : ok ? 'pointer' : 'not-allowed', transition: 'all 150ms', textAlign: 'left', WebkitTapHighlightColor: 'transparent', position: 'relative', overflow: 'hidden' }}>
+              {locked && <div style={{ position: 'absolute', top: 1, right: 3, zIndex: 1 }}><span style={{ ...M, fontSize: 7, color: '#555', background: '#1A1A1A', padding: '0 4px', borderRadius: 2 }}>🔒{reqRank}</span></div>}
+              <span style={{ fontSize: 13, flexShrink: 0, width: 18, textAlign: 'center', filter: locked ? 'grayscale(1) brightness(0.5)' : 'none' }}>{a.icon}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ ...B, fontSize: 9, color: locked ? '#333' : '#FFF', lineHeight: 1, display: 'block' }}>{isLoading ? '...' : a.name}</span>
-                <span style={{ ...M, fontSize: 8, color: locked ? '#222' : canAfford ? '#F5A0D0' : '#333' }}>{a.cost}</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                  <span style={{ ...B, fontSize: 9, color: locked ? '#444' : '#FFF', lineHeight: 1 }}>{isLoading ? '...' : a.name}</span>
+                  <span style={{ ...M, fontSize: 8, color: locked ? '#333' : canAfford ? '#F5A0D0' : '#444', flexShrink: 0 }}>{a.cost}CR</span>
+                </div>
+                <span style={{ ...S, fontSize: 8, color: locked ? '#333' : '#666', lineHeight: 1.1, display: 'block', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.desc}</span>
               </div>
             </button>
           );
@@ -1158,20 +1207,17 @@ export default function TradingTerminal() {
   ) : null;
 
   const leaderboardPanel = (
-    <div style={{ padding: '10px 14px', borderBottom: '1px solid #1A1A1A' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-        <span style={{ ...B, fontSize: 12, color: '#777' }}>STANDINGS</span>
-        {myRank > 0 && <span style={{ ...M, fontSize: 12, color: '#F5A0D0' }}>#{myRank}/{totalTraders}</span>}
+    <div style={{ padding: '6px 10px', borderBottom: '1px solid #1A1A1A' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <span style={{ ...B, fontSize: 10, color: '#777' }}>STANDINGS</span>
+        {myRank > 0 && <span style={{ ...M, fontSize: 10, color: '#F5A0D0' }}>#{myRank}/{totalTraders}</span>}
       </div>
-      <div style={{ ...B, fontSize: 10, color: '#F5A0D0', marginBottom: 8, padding: '4px 8px', background: 'rgba(245,160,208,0.06)', border: '1px dashed rgba(245,160,208,0.2)', textAlign: 'center', animation: 'borderPulse 3s ease-in-out infinite' }}>TAP A RIVAL TO TARGET THEM</div>
       {standings.length === 0 ? (
-        <div style={{ padding: '16px 0', textAlign: 'center' }}>
-          <span style={{ ...B, fontSize: 14, color: '#222' }}>WAITING FOR ROUND...</span>
-          <br />
-          <span style={{ ...S, fontSize: 11, color: '#1A1A1A', marginTop: 4, display: 'inline-block' }}>Standings appear when trading begins</span>
+        <div style={{ padding: '8px 0', textAlign: 'center' }}>
+          <span style={{ ...B, fontSize: 11, color: '#222' }}>WAITING FOR ROUND...</span>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           {standings.slice(0, 10).map(s => {
             const me = s.trader.id === trader?.id;
             const prev = prevRanks[s.trader.id];
@@ -1179,7 +1225,6 @@ export default function TradingTerminal() {
             const healthPct = Math.max(0, Math.min(100, (s.portfolioValue / startingBalance) * 100));
             const isKO = healthPct <= 0 || s.returnPct <= -99;
             const barColor = isKO ? '#FF3333' : healthPct > 60 ? '#00FF88' : healthPct > 30 ? '#F5A0D0' : '#FF3333';
-            const barGlow = isKO ? 'none' : healthPct > 60 ? '0 0 6px rgba(0,255,136,0.4)' : healthPct > 30 ? '0 0 6px rgba(245,160,208,0.3)' : '0 0 6px rgba(255,51,51,0.4)';
             const isTarget = selectedTarget === s.trader.id;
             const canTarget = !me && !isKO;
             return (
@@ -1188,51 +1233,37 @@ export default function TradingTerminal() {
                 className="standing-row"
                 onClick={() => canTarget && setSelectedTarget(isTarget ? null : s.trader.id)}
                 style={{
-                  display: 'block', width: '100%', textAlign: 'left', padding: '6px 8px', minHeight: 44,
+                  display: 'block', width: '100%', textAlign: 'left', padding: '3px 6px',
                   background: isTarget ? 'rgba(245,160,208,0.1)' : me ? 'rgba(245,160,208,0.03)' : '#0D0D0D',
                   border: isTarget ? '1px solid #F5A0D0' : '1px solid transparent',
                   borderLeft: me ? '2px solid #F5A0D0' : isTarget ? '2px solid #F5A0D0' : '2px solid transparent',
                   cursor: canTarget ? 'pointer' : me ? 'default' : 'not-allowed',
                   transition: 'all 150ms',
-                  marginLeft: me ? -14 : 0, marginRight: me ? -14 : 0, paddingLeft: me ? 14 : 8,
                   opacity: isKO && !me ? 0.4 : 1,
                   WebkitTapHighlightColor: 'transparent',
                 }}>
-                {/* Name row */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-                    <span style={{ ...B, fontSize: 12, color: s.rank === 1 ? '#FFD700' : s.rank === 2 ? '#C0C0C0' : s.rank === 3 ? '#CD7F32' : '#444', width: 22, flexShrink: 0, textShadow: s.rank <= 3 ? `0 0 8px ${s.rank === 1 ? 'rgba(255,215,0,0.5)' : s.rank === 2 ? 'rgba(192,192,192,0.4)' : 'rgba(205,127,50,0.4)'}` : 'none' }}>#{s.rank}</span>
-                    <span style={{ ...S, fontSize: 11, color: me ? '#F5A0D0' : isKO ? '#555' : '#FFF', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: isKO ? 'line-through' : 'none' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                    <span style={{ ...B, fontSize: 10, color: s.rank === 1 ? '#FFD700' : s.rank === 2 ? '#C0C0C0' : s.rank === 3 ? '#CD7F32' : '#444', width: 18, flexShrink: 0 }}>#{s.rank}</span>
+                    <span style={{ ...S, fontSize: 10, color: me ? '#F5A0D0' : isKO ? '#555' : '#FFF', maxWidth: 70, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: isKO ? 'line-through' : 'none' }}>
                       {s.teamName ?? s.trader.name}{me ? ' (YOU)' : ''}
                     </span>
-                    {rankDiff > 0 && <span style={{ ...M, fontSize: 9, color: '#00FF88' }}>▲{rankDiff}</span>}
-                    {rankDiff < 0 && <span style={{ ...M, fontSize: 9, color: '#FF3333' }}>▼{Math.abs(rankDiff)}</span>}
-                    {isTarget && <span style={{ ...B, fontSize: 8, color: '#F5A0D0', padding: '1px 4px', border: '1px solid #F5A0D0' }}>TARGET</span>}
+                    {rankDiff > 0 && <span style={{ ...M, fontSize: 8, color: '#00FF88' }}>▲{rankDiff}</span>}
+                    {rankDiff < 0 && <span style={{ ...M, fontSize: 8, color: '#FF3333' }}>▼{Math.abs(rankDiff)}</span>}
+                    {isTarget && <span style={{ ...B, fontSize: 7, color: '#F5A0D0', padding: '0 3px', border: '1px solid #F5A0D0' }}>TGT</span>}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {isKO && <span style={{ ...B, fontSize: 10, color: '#FF3333', letterSpacing: '0.1em' }}>KO</span>}
-                    <span style={{ ...M, fontSize: 12, color: '#FFF', letterSpacing: '-0.02em' }}>${s.portfolioValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-                    <span style={{ ...M, fontSize: 10, color: s.returnPct >= 0 ? '#00FF88' : '#FF3333' }}>{s.returnPct >= 0 ? '+' : ''}{s.returnPct.toFixed(1)}%</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {isKO && <span style={{ ...B, fontSize: 8, color: '#FF3333' }}>KO</span>}
+                    <span style={{ ...M, fontSize: 10, color: '#FFF' }}>${s.portfolioValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                    <span style={{ ...M, fontSize: 9, color: s.returnPct >= 0 ? '#00FF88' : '#FF3333' }}>{s.returnPct >= 0 ? '+' : ''}{s.returnPct.toFixed(1)}%</span>
                   </div>
                 </div>
-                {/* Health bar — Street Fighter style */}
-                <div style={{ width: '100%', height: 6, background: '#1A1A1A', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ width: '100%', height: 3, background: '#1A1A1A', overflow: 'hidden' }}>
                   <div style={{
-                    width: `${healthPct}%`,
-                    height: '100%',
-                    background: isKO
-                      ? '#FF3333'
-                      : `linear-gradient(90deg, ${barColor}, ${healthPct > 60 ? '#00CC66' : healthPct > 30 ? '#D080B0' : '#CC0000'})`,
-                    boxShadow: barGlow,
+                    width: `${healthPct}%`, height: '100%',
+                    background: isKO ? '#FF3333' : `linear-gradient(90deg, ${barColor}, ${healthPct > 60 ? '#00CC66' : healthPct > 30 ? '#D080B0' : '#CC0000'})`,
                     transition: 'width 600ms ease, background 400ms',
                   }} />
-                  {healthPct < 95 && !isKO && (
-                    <div style={{
-                      position: 'absolute', top: 0, right: 0,
-                      width: `${100 - healthPct}%`, height: '100%',
-                      background: 'linear-gradient(90deg, rgba(255,51,51,0.15), transparent)',
-                    }} />
-                  )}
                 </div>
               </button>
             );
@@ -1242,27 +1273,24 @@ export default function TradingTerminal() {
     </div>
   );
 
-  const pnlColor = rp >= 0 ? '#00FF88' : '#FF3333';
-  const _rankColor2 = myRank === 1 ? '#FFD700' : myRank === 2 ? '#C0C0C0' : myRank === 3 ? '#CD7F32' : '#F5A0D0';
   const pnlHero = (
-    <div style={{ padding: '10px 14px', borderBottom: '1px solid #1A1A1A', background: `linear-gradient(180deg, ${pnlColor}06, transparent)`, animation: rankFlash === 'up' ? 'rankUpFlash 1.5s ease-out' : rankFlash === 'down' ? 'rankDownFlash 1.5s ease-out' : 'none' }}>
+    <div style={{ padding: '6px 10px', borderBottom: '1px solid #1A1A1A', background: `linear-gradient(180deg, ${pnlColor}06, transparent)`, animation: rankFlash === 'up' ? 'rankUpFlash 1.5s ease-out' : rankFlash === 'down' ? 'rankDownFlash 1.5s ease-out' : 'none' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        {/* Rank + PnL combined */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ ...B, fontSize: 36, color: _rankColor2, lineHeight: 1, textShadow: `0 0 16px ${_rankColor2}50`, animation: myRank === 1 ? 'glowPulse 3s ease-in-out infinite' : 'none' }}>#{myRank || '—'}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ ...B, fontSize: 28, color: rankColor, lineHeight: 1, textShadow: `0 0 12px ${rankColor}50`, animation: myRank === 1 ? 'glowPulse 3s ease-in-out infinite' : 'none' }}>#{myRank || '—'}</span>
           <div>
-            <span style={{ ...B, fontSize: 28, color: pnlColor, lineHeight: 1, display: 'block', textShadow: rp !== 0 ? `0 0 12px ${pnlColor}40` : 'none' }}>{rp >= 0 ? '+' : ''}{rp.toFixed(1)}%</span>
-            <span style={{ ...M, fontSize: 10, color: '#666', marginTop: 2, display: 'block' }}>${pv.toLocaleString(undefined, { maximumFractionDigits: 0 })} · {openPos.length} open</span>
+            <span style={{ ...B, fontSize: 22, color: pnlColor, lineHeight: 1, display: 'block', textShadow: rp !== 0 ? `0 0 10px ${pnlColor}40` : 'none' }}>{rp >= 0 ? '+' : ''}{rp.toFixed(1)}%</span>
+            <span style={{ ...M, fontSize: 9, color: '#666', marginTop: 1, display: 'block' }}>${pv.toLocaleString(undefined, { maximumFractionDigits: 0 })} · {openPos.length} open</span>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {winStreak >= 2 && <StreakBadge streak={winStreak} />}
           <span style={{ ...M, fontSize: 9, color: '#555' }}>{myRank}/{totalTraders}</span>
         </div>
       </div>
       {proximityGap !== null && proximityGap < 2 && myRank > 1 && (
-        <div style={{ marginTop: 6, padding: '3px 8px', background: 'rgba(245,160,208,0.08)', border: '1px solid rgba(245,160,208,0.3)', animation: 'proximityPulse 1.5s infinite' }}>
-          <span style={{ ...B, fontSize: 10, color: '#F5A0D0' }}>{proximityGap.toFixed(1)}% FROM #{myRank - 1}</span>
+        <div style={{ marginTop: 4, padding: '2px 6px', background: 'rgba(245,160,208,0.08)', border: '1px solid rgba(245,160,208,0.3)', animation: 'proximityPulse 1.5s infinite' }}>
+          <span style={{ ...B, fontSize: 9, color: '#F5A0D0' }}>{proximityGap.toFixed(1)}% FROM #{myRank - 1}</span>
         </div>
       )}
     </div>
@@ -1285,19 +1313,19 @@ export default function TradingTerminal() {
 
   // Live feed panel
   const liveFeed = (
-    <div style={{ padding: '10px 14px', borderBottom: '1px solid #1A1A1A' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-        <span style={{ width: 6, height: 6, background: '#F5A0D0', display: 'block', animation: 'pulse 2s infinite' }} />
-        <span style={{ ...B, fontSize: 12, color: '#F5A0D0' }}>LIVE FEED</span>
+    <div style={{ padding: '4px 10px', borderBottom: '1px solid #1A1A1A' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
+        <span style={{ width: 4, height: 4, background: '#F5A0D0', display: 'block', animation: 'pulse 2s infinite' }} />
+        <span style={{ ...B, fontSize: 9, color: '#F5A0D0' }}>LIVE FEED</span>
       </div>
-      <div style={{ maxHeight: 140, overflowY: 'auto' }}>
+      <div style={{ maxHeight: 60, overflowY: 'auto' }}>
         {feedItems.length === 0 ? (
-          <span style={{ ...S, fontSize: 11, color: '#222', fontStyle: 'italic' }}>Waiting for action...</span>
-        ) : feedItems.map(f => (
-          <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0', borderBottom: '1px solid #0D0D0D' }}>
-            <span style={{ fontSize: 12 }}>{f.icon}</span>
-            <span style={{ ...S, fontSize: 11, color: f.color, flex: 1 }}>{f.text}</span>
-            <span style={{ ...M, fontSize: 9, color: '#666' }}>{Math.floor((Date.now() - f.time) / 1000)}s</span>
+          <span style={{ ...S, fontSize: 9, color: '#222', fontStyle: 'italic' }}>Waiting for action...</span>
+        ) : feedItems.slice(0, 4).map(f => (
+          <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 0', borderBottom: '1px solid #0D0D0D' }}>
+            <span style={{ fontSize: 10 }}>{f.icon}</span>
+            <span style={{ ...S, fontSize: 9, color: f.color, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.text}</span>
+            <span style={{ ...M, fontSize: 8, color: '#666' }}>{Math.floor((Date.now() - f.time) / 1000)}s</span>
           </div>
         ))}
       </div>
@@ -1310,15 +1338,15 @@ export default function TradingTerminal() {
   };
 
   const quickPositions = openPos.length > 0 ? (
-    <div style={{ padding: '10px 16px', borderBottom: '1px solid #1A1A1A' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <span style={{ ...B, fontSize: 12, color: '#777' }}>POSITIONS</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={closeAllPositions} style={{ ...B, fontSize: 9, color: '#FF3333', background: 'none', border: '1px solid #FF3333', padding: '2px 6px', cursor: 'pointer', letterSpacing: '0.05em' }}>CLOSE ALL</button>
-          <span style={{ ...B, fontSize: 12, color: openPos.length >= 3 ? '#FF3333' : '#F5A0D0' }}>{openPos.length}/3</span>
+    <div style={{ padding: '4px 10px', borderBottom: '1px solid #1A1A1A' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <span style={{ ...B, fontSize: 10, color: '#777' }}>POSITIONS</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={closeAllPositions} style={{ ...B, fontSize: 8, color: '#FF3333', background: 'none', border: '1px solid #FF3333', padding: '1px 5px', cursor: 'pointer', letterSpacing: '0.05em' }}>CLOSE ALL</button>
+          <span style={{ ...B, fontSize: 10, color: openPos.length >= 3 ? '#FF3333' : '#F5A0D0' }}>{openPos.length}/3</span>
         </div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {openPos.map(p => {
           const price = prices[p.symbol] ?? 0;
           const pnl = price > 0 ? (p.direction === 'long' ? (price - p.entry_price) / p.entry_price * p.size * p.leverage : (p.entry_price - price) / p.entry_price * p.size * p.leverage) : 0;
@@ -1332,20 +1360,20 @@ export default function TradingTerminal() {
           const nearLiq = liqDist < 10;
           const isNew = tradeFlashId === p.id;
           return (
-            <div key={p.id} className={isNew ? 'trade-flash' : ''} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', background: nearLiq ? 'rgba(255,51,51,0.12)' : `${dc}08`, borderLeft: `3px solid ${nearLiq ? '#FF3333' : dc}`, border: `1px solid ${nearLiq ? '#FF333344' : `${dc}22`}`, animation: nearLiq ? 'nearLiqPulse 1s infinite' : 'none' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ ...B, fontSize: 14, color: dc }}>{isLong ? 'L' : 'S'}</span>
+            <div key={p.id} className={isNew ? 'trade-flash' : ''} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 6px', background: nearLiq ? 'rgba(255,51,51,0.12)' : `${dc}08`, borderLeft: `2px solid ${nearLiq ? '#FF3333' : dc}`, border: `1px solid ${nearLiq ? '#FF333344' : `${dc}22`}`, animation: nearLiq ? 'nearLiqPulse 1s infinite' : 'none' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ ...B, fontSize: 11, color: dc }}>{isLong ? 'L' : 'S'}</span>
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <span style={{ ...B, fontSize: 14, color: '#FFF' }}>{p.symbol.replace('USDT', '')}</span>
-                    {isTrail && <span style={{ ...M, fontSize: 7, color: '#F5A0D0', background: '#F5A0D015', padding: '1px 4px' }}>TRAIL {p.trail_pct}%</span>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <span style={{ ...B, fontSize: 11, color: '#FFF' }}>{p.symbol.replace('USDT', '')}</span>
+                    {isTrail && <span style={{ ...M, fontSize: 7, color: '#F5A0D0', background: '#F5A0D015', padding: '0 3px' }}>TRAIL</span>}
                   </div>
-                  <span style={{ ...M, fontSize: 9, color: '#999', display: 'block' }}>{p.leverage}x <span style={{ color: '#FF333388' }}>liq {fmtP(getLiquidationPrice(p))}</span></span>
+                  <span style={{ ...M, fontSize: 8, color: '#999', display: 'block' }}>{p.leverage}x · liq {fmtP(getLiquidationPrice(p))}</span>
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ ...M, fontSize: 14, color: pnl >= 0 ? '#00FF88' : '#FF3333' }}>{pnl >= 0 ? '+' : ''}{pct.toFixed(1)}%</span>
-                <button onClick={() => closePosition(p.id)} disabled={isClosing} style={{ ...B, fontSize: 11, padding: '6px 12px', minHeight: 36, minWidth: 36, background: '#1A1A1A', color: '#888', border: '1px solid #333', cursor: isClosing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{isClosing ? '...' : '✕'}</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ ...M, fontSize: 11, color: pnl >= 0 ? '#00FF88' : '#FF3333' }}>{pnl >= 0 ? '+' : ''}{pct.toFixed(1)}%</span>
+                <button onClick={() => closePosition(p.id)} disabled={isClosing} style={{ ...B, fontSize: 9, padding: '3px 8px', minHeight: 24, background: '#1A1A1A', color: '#888', border: '1px solid #333', cursor: isClosing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{isClosing ? '...' : '✕'}</button>
               </div>
             </div>
           );
@@ -1600,34 +1628,27 @@ export default function TradingTerminal() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexShrink: 1 }}>
             <span className="top-bar-pnl" style={{ ...M, fontSize: 12, color: rp >= 0 ? '#00FF88' : '#FF3333', textShadow: `0 0 8px ${rp >= 0 ? 'rgba(0,255,136,0.3)' : 'rgba(255,51,51,0.3)'}`, whiteSpace: 'nowrap' }}>{rp >= 0 ? '+' : ''}{rp.toFixed(1)}%</span>
-            <button onClick={() => setShowPurchaseModal(true)} style={{ ...M, fontSize: 10, color: '#F5A0D0', padding: '3px 6px', background: 'rgba(245,160,208,0.08)', border: '1px solid rgba(245,160,208,0.2)', textShadow: '0 0 8px rgba(245,160,208,0.3)', cursor: 'pointer', transition: 'all 150ms', whiteSpace: 'nowrap', minHeight: 32 }}>{credits.balance}CR</button>
+            <button onClick={() => setShowPurchaseModal(true)} style={{ ...M, fontSize: 10, color: '#F5A0D0', padding: '3px 8px', background: 'rgba(245,160,208,0.08)', border: '1px solid rgba(245,160,208,0.2)', borderRadius: 6, cursor: 'pointer', transition: 'all 150ms', whiteSpace: 'nowrap', minHeight: 30 }}>{credits.balance}CR</button>
             {/* Wallet balance health bar */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: '#111', border: `1px solid ${rp >= 0 ? '#00FF8833' : '#FF333333'}`, minHeight: 32, flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: '#111', border: `1px solid ${rp >= 0 ? '#00FF8833' : '#FF333333'}`, borderRadius: 6, minHeight: 30, flexShrink: 0 }}>
               <span style={{ ...M, fontSize: 11, fontWeight: 700, color: '#FFF', whiteSpace: 'nowrap' }}>${pv.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-              <div style={{ width: 40, height: 6, background: '#1A1A1A', overflow: 'hidden', flexShrink: 0 }}>
-                <div style={{ width: `${Math.max(0, Math.min(100, (pv / startingBalance) * 100))}%`, height: '100%', background: pv >= startingBalance * 0.6 ? '#00FF88' : pv >= startingBalance * 0.3 ? '#F5A0D0' : '#FF3333', transition: 'width 500ms', boxShadow: `0 0 4px ${pv >= startingBalance * 0.6 ? 'rgba(0,255,136,0.4)' : pv >= startingBalance * 0.3 ? 'rgba(245,160,208,0.3)' : 'rgba(255,51,51,0.4)'}` }} />
+              <div style={{ width: 40, height: 5, background: '#1A1A1A', borderRadius: 3, overflow: 'hidden', flexShrink: 0 }}>
+                <div style={{ width: `${Math.max(0, Math.min(100, (pv / startingBalance) * 100))}%`, height: '100%', borderRadius: 3, background: pv >= startingBalance * 0.6 ? '#00FF88' : pv >= startingBalance * 0.3 ? '#F5A0D0' : '#FF3333', transition: 'width 500ms' }} />
               </div>
             </div>
-            {/* RANK — Mario Kart style, BIG and impossible to miss */}
+            {/* RANK — clean pill */}
             <div className="rank-badge" style={{
-              display: 'flex', alignItems: 'center', gap: 2, padding: '0 12px', minHeight: 40, flexShrink: 0,
-              background: myRank === 1
-                ? 'linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,215,0,0.08))'
-                : myRank === 2 ? 'linear-gradient(135deg, rgba(192,192,192,0.15), rgba(192,192,192,0.05))'
-                : myRank === 3 ? 'linear-gradient(135deg, rgba(205,127,50,0.15), rgba(205,127,50,0.05))'
-                : 'linear-gradient(135deg, rgba(245,160,208,0.1), rgba(245,160,208,0.03))',
-              border: `2px solid ${myRank === 1 ? '#FFD700' : myRank === 2 ? '#C0C0C0' : myRank === 3 ? '#CD7F32' : '#F5A0D0'}`,
-              boxShadow: myRank <= 3
-                ? `0 0 16px ${myRank === 1 ? 'rgba(255,215,0,0.35)' : myRank === 2 ? 'rgba(192,192,192,0.25)' : 'rgba(205,127,50,0.25)'}, inset 0 0 12px ${myRank === 1 ? 'rgba(255,215,0,0.1)' : 'transparent'}`
-                : '0 0 12px rgba(245,160,208,0.15)',
-              animation: rankFlash === 'up' ? 'rankUpFlash 1.5s ease-out' : rankFlash === 'down' ? 'rankDownFlash 1.5s ease-out' : myRank === 1 ? 'barGlow 2s ease-in-out infinite' : 'none',
+              display: 'flex', alignItems: 'center', gap: 3, padding: '0 10px', minHeight: 34, flexShrink: 0,
+              borderRadius: 8,
+              background: `${rankColor}12`,
+              border: `1px solid ${rankColor}40`,
+              animation: rankFlash === 'up' ? 'rankUpFlash 1.5s ease-out' : rankFlash === 'down' ? 'rankDownFlash 1.5s ease-out' : 'none',
             }}>
               <span style={{
-                ...B, fontSize: 28, lineHeight: 1, letterSpacing: '0.02em',
-                color: myRank === 1 ? '#FFD700' : myRank === 2 ? '#C0C0C0' : myRank === 3 ? '#CD7F32' : '#F5A0D0',
-                textShadow: `0 0 20px ${myRank === 1 ? 'rgba(255,215,0,0.6)' : myRank === 2 ? 'rgba(192,192,192,0.5)' : myRank === 3 ? 'rgba(205,127,50,0.5)' : 'rgba(245,160,208,0.4)'}, 0 2px 4px rgba(0,0,0,0.5)`,
+                ...B, fontSize: 22, lineHeight: 1, color: rankColor,
+                textShadow: `0 0 10px ${rankColor}40`,
               }}>#{myRank || '—'}</span>
-              <span style={{ ...M, fontSize: 10, color: '#666', lineHeight: 1 }}>/{totalTraders}</span>
+              <span style={{ ...M, fontSize: 10, color: '#555', lineHeight: 1 }}>/{totalTraders}</span>
             </div>
             <div className="top-bar-user" style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
               <span style={{ width: 6, height: 6, background: '#F5A0D0', display: 'block', animation: 'liveDot 2s ease-in-out infinite', flexShrink: 0 }} />
@@ -1636,18 +1657,18 @@ export default function TradingTerminal() {
           </div>
         </div>
 
-        {/* ASSET DROPDOWN */}
-        <div ref={assetDropdownRef} style={{ position: 'relative', minHeight: 44, borderBottom: '1px solid #1A1A1A', flexShrink: 0, background: '#0D0D0D' }}>
+        {/* ASSET DROPDOWN — mobile only, desktop version inside center column */}
+        <div ref={assetDropdownRef} className="md:hidden" style={{ position: 'relative', minHeight: 44, borderBottom: '1px solid #1A1A1A', flexShrink: 0, background: '#0D0D0D' }}>
           {/* Trigger — asset selector + scrollable price ticker */}
           <div style={{ display: 'flex', alignItems: 'center', minHeight: 44 }}>
             <button
               onClick={() => { setShowMoreAssets(!showMoreAssets); setAssetSearch(''); setAssetTab('all'); setTimeout(() => assetSearchRef.current?.focus(), 50); }}
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', minHeight: 44, ...B, fontSize: 16, color: '#FFF', background: showMoreAssets ? 'rgba(245,160,208,0.06)' : 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }}
             >
-              <span style={{ width: 8, height: 8, background: '#F5A0D0', display: 'block', boxShadow: '0 0 8px rgba(245,160,208,0.5)', flexShrink: 0 }} />
-              <span style={{ color: '#FFF' }}>{selectedSymbol}</span>
-              <span style={{ ...M, fontSize: 13, color: '#F5A0D0' }}>${selectedPrice > 100 ? selectedPrice.toLocaleString(undefined, { maximumFractionDigits: 2 }) : fmtP(selectedPrice)}</span>
-              <span style={{ ...S, fontSize: 12, color: '#555', transition: 'transform 150ms', transform: showMoreAssets ? 'rotate(180deg)' : 'none' }}>▼</span>
+              <span style={{ width: 10, height: 10, background: '#F5A0D0', display: 'block', boxShadow: '0 0 8px rgba(245,160,208,0.5)', flexShrink: 0, borderRadius: 2 }} />
+              <span style={{ ...B, fontSize: 18, color: '#FFF' }}>{selectedSymbol}</span>
+              <span style={{ ...M, fontSize: 15, color: '#F5A0D0' }}>${selectedPrice > 100 ? selectedPrice.toLocaleString(undefined, { maximumFractionDigits: 2 }) : fmtP(selectedPrice)}</span>
+              <span style={{ ...S, fontSize: 13, color: '#555', transition: 'transform 150ms', transform: showMoreAssets ? 'rotate(180deg)' : 'none' }}>▼</span>
             </button>
             {/* Horizontal scrollable price ticker for core assets */}
             <div className="price-ticker-scroll" style={{ flex: 1, display: 'flex', gap: 2, overflowX: 'auto', paddingRight: 8, minWidth: 0, WebkitOverflowScrolling: 'touch', msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
@@ -1656,10 +1677,10 @@ export default function TradingTerminal() {
                 const md = marketData[sym];
                 const chg = md?.change24h;
                 return (
-                  <button key={sym} onClick={() => setSelectedSymbol(sym)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0, minHeight: 32 }}>
-                    <span style={{ ...B, fontSize: 11, color: '#888' }}>{sym}</span>
-                    {p > 0 && <span style={{ ...M, fontSize: 10, color: '#666' }}>${p > 100 ? p.toLocaleString(undefined, { maximumFractionDigits: 0 }) : fmtP(p)}</span>}
-                    {chg !== null && chg !== undefined && <span style={{ ...M, fontSize: 9, color: chg >= 0 ? '#00FF88' : '#FF3333' }}>{chg >= 0 ? '+' : ''}{chg.toFixed(1)}%</span>}
+                  <button key={sym} onClick={() => setSelectedSymbol(sym)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0, minHeight: 38 }}>
+                    <span style={{ ...B, fontSize: 14, color: '#888' }}>{sym}</span>
+                    {p > 0 && <span style={{ ...M, fontSize: 12, color: '#666' }}>${p > 100 ? p.toLocaleString(undefined, { maximumFractionDigits: 0 }) : fmtP(p)}</span>}
+                    {chg !== null && chg !== undefined && <span style={{ ...M, fontSize: 11, color: chg >= 0 ? '#00FF88' : '#FF3333' }}>{chg >= 0 ? '+' : ''}{chg.toFixed(1)}%</span>}
                   </button>
                 );
               })}
@@ -1802,24 +1823,49 @@ export default function TradingTerminal() {
           <div className="hidden md:flex" style={{ flex: 1, overflow: 'hidden' }}>
             {/* LEFT: P&L + Standings + Positions + Feed + History + Arsenal + Chat */}
             <div style={{ width: 310, flexShrink: 0, borderRight: '1px solid #1A1A1A', display: 'flex', flexDirection: 'column', background: '#0A0A0A', overflow: 'hidden' }}>
-              {/* Top fixed: P&L + Effects */}
+              {/* Top fixed: Effects */}
               <div style={{ flexShrink: 0 }}>
-                {pnlHero}
                 {effectsBar}
               </div>
-              {/* Scrollable: Standings → Positions → Feed → History → Arsenal → Chat */}
-              <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, WebkitOverflowScrolling: 'touch' }}>
+              {/* Scrollable: Standings → Positions → Feed → History → Arsenal + Defense */}
+              <div style={{ flexShrink: 0 }}>
                 {leaderboardPanel}
                 {quickPositions}
                 {liveFeed}
                 {roundHistoryPanel}
                 {arsenalPanel}
-                {/* Chat moved to bottom center panel */}
+                {defensePanel}
               </div>
             </div>
 
-            {/* CENTER: Chart + Order Book + Full Position Strip */}
+            {/* CENTER: Ticker + Chart + Order Book + Full Position Strip */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: '#0A0A0A', overflow: 'hidden' }}>
+              {/* Desktop ticker bar */}
+              <div className="hidden md:flex" style={{ alignItems: 'center', minHeight: 40, borderBottom: '1px solid #1A1A1A', background: '#0D0D0D', flexShrink: 0, padding: '0 4px' }}>
+                <button
+                  onClick={() => { setShowMoreAssets(!showMoreAssets); setAssetSearch(''); setAssetTab('all'); setTimeout(() => assetSearchRef.current?.focus(), 50); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px', minHeight: 40, ...B, fontSize: 16, color: '#FFF', background: showMoreAssets ? 'rgba(245,160,208,0.06)' : 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }}
+                >
+                  <span style={{ width: 8, height: 8, background: '#F5A0D0', display: 'block', boxShadow: '0 0 8px rgba(245,160,208,0.5)', flexShrink: 0, borderRadius: 2 }} />
+                  <span style={{ ...B, fontSize: 16, color: '#FFF' }}>{selectedSymbol}</span>
+                  <span style={{ ...M, fontSize: 14, color: '#F5A0D0' }}>${selectedPrice > 100 ? selectedPrice.toLocaleString(undefined, { maximumFractionDigits: 2 }) : fmtP(selectedPrice)}</span>
+                  <span style={{ ...S, fontSize: 11, color: '#555', transition: 'transform 150ms', transform: showMoreAssets ? 'rotate(180deg)' : 'none' }}>▼</span>
+                </button>
+                <div style={{ flex: 1, display: 'flex', gap: 2, overflowX: 'auto', paddingRight: 8, minWidth: 0, scrollbarWidth: 'none' }}>
+                  {CORE_ASSETS.filter(s => s !== selectedSymbol).map(sym => {
+                    const p = prices[`${sym}USDT`] ?? prices[`${sym}USD`] ?? 0;
+                    const md = marketData[sym];
+                    const chg = md?.change24h;
+                    return (
+                      <button key={sym} onClick={() => setSelectedSymbol(sym)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0, minHeight: 34 }}>
+                        <span style={{ ...B, fontSize: 12, color: '#888' }}>{sym}</span>
+                        {p > 0 && <span style={{ ...M, fontSize: 11, color: '#666' }}>${p > 100 ? p.toLocaleString(undefined, { maximumFractionDigits: 0 }) : fmtP(p)}</span>}
+                        {chg !== null && chg !== undefined && <span style={{ ...M, fontSize: 10, color: chg >= 0 ? '#00FF88' : '#FF3333' }}>{chg >= 0 ? '+' : ''}{chg.toFixed(1)}%</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
                 <div style={{ flex: 1 }}>{priceHero}</div>
                 <button onClick={() => setShowOrderBook(!showOrderBook)} style={{ ...B, fontSize: 9, color: showOrderBook ? '#F5A0D0' : '#555', background: showOrderBook ? 'rgba(245,160,208,0.08)' : 'transparent', border: '1px solid #1A1A1A', padding: '4px 10px', marginRight: 8, cursor: 'pointer', minHeight: 28, transition: 'all 100ms' }}>
@@ -1938,10 +1984,9 @@ export default function TradingTerminal() {
               <div style={{ flexShrink: 0, maxHeight: 120, overflowY: 'auto' }}>
                 {quickPositions}
               </div>
-              {/* Order entry + Defense (scrollable) */}
+              {/* Order entry (scrollable) */}
               <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, WebkitOverflowScrolling: 'touch' }}>
                 {orderPanel}
-                {defensePanel}
               </div>
             </div>
           </div>

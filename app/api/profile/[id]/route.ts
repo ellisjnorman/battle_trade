@@ -14,11 +14,12 @@ export async function GET(
     // 1. Get full profile — this is the only required query
     const { data: profile, error: profileErr } = await supabase
       .from('profiles')
-      .select('id, display_name, handle, avatar_url, bio, location, tr_score, rank_tier, total_wins, total_lobbies_played, win_rate, best_return, credits, global_rank, badges, created_at')
+      .select('*')
       .eq('id', id)
       .single();
 
     if (profileErr || !profile) {
+      console.error('[profile] lookup failed:', id, profileErr?.message ?? 'no rows');
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 

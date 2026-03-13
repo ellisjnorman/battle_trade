@@ -46,13 +46,17 @@ export async function getOrCreateProfile(privyUser: any): Promise<BattleProfile 
   const sb = getClient();
 
   // Try to find existing profile by Privy ID
-  const { data: existing } = await sb
+  const { data: existing, error: lookupErr } = await sb
     .from('profiles')
     .select('*')
     .eq('auth_user_id', privyUser.id)
     .single();
 
   if (existing) return existing;
+  if (lookupErr && lookupErr.code !== 'PGRST116') {
+    // PGRST116 = "no rows returned" which is expected for new users
+    console.error('[auth] profile lookup error:', lookupErr);
+  }
 
   // Build display name from available data
   const displayName =
@@ -69,17 +73,30 @@ export async function getOrCreateProfile(privyUser: any): Promise<BattleProfile 
     privyUser.apple?.email ??
     null;
 
-  const { data: newProfile } = await sb
+  // Try upsert to handle race conditions (multiple logins before profile exists)
+  const { data: newProfile, error: insertErr } = await sb
     .from('profiles')
-    .insert({
+    .upsert({
       auth_user_id: privyUser.id,
       display_name: displayName,
       email,
       wallet_address: privyUser.wallet?.address ?? null,
       wallet_type: privyUser.wallet ? 'evm' : null,
-    })
+    }, { onConflict: 'auth_user_id' })
     .select('*')
     .single();
+
+  if (insertErr) {
+    console.error('[auth] profile upsert error:', insertErr);
+    // Last resort: try to find the profile again (it may have been created by another tab)
+    const { data: retry } = await sb
+      .from('profiles')
+      .select('*')
+      .eq('auth_user_id', privyUser.id)
+      .single();
+    if (retry) return retry;
+    return null;
+  }
 
   return newProfile;
 }

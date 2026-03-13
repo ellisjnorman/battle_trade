@@ -53,14 +53,17 @@ function calcStreak(battles: PastBattle[]): number {
   return streak
 }
 
+// Score is 0-100. Wall Street rank tiers.
 function btrTier(score: number) {
-  if (score >= 1800) return { name: 'LEGEND', color: '#FFD700', next: 2000, floor: 1800 }
-  if (score >= 1500) return { name: 'DIAMOND', color: '#B9F2FF', next: 1800, floor: 1500 }
-  if (score >= 1200) return { name: 'PLATINUM', color: '#E5E4E2', next: 1500, floor: 1200 }
-  if (score >= 900) return { name: 'GOLD', color: '#FFD700', next: 1200, floor: 900 }
-  if (score >= 600) return { name: 'SILVER', color: '#C0C0C0', next: 900, floor: 600 }
-  if (score >= 300) return { name: 'BRONZE', color: '#CD7F32', next: 600, floor: 300 }
-  return { name: 'UNRANKED', color: '#555', next: 300, floor: 0 }
+  // Convert legacy scores (0-2000) to 0-100 scale
+  const s = score > 100 ? Math.round((score / 2000) * 100) : score
+  if (s >= 90) return { name: 'MANAGING DIRECTOR', color: '#FFD700', next: 100, floor: 90, score100: s }
+  if (s >= 75) return { name: 'VICE PRESIDENT', color: '#B9F2FF', next: 90, floor: 75, score100: s }
+  if (s >= 60) return { name: 'SENIOR ANALYST', color: '#E5E4E2', next: 75, floor: 60, score100: s }
+  if (s >= 45) return { name: 'ANALYST', color: '#00DC82', next: 60, floor: 45, score100: s }
+  if (s >= 30) return { name: 'ASSOCIATE', color: '#C0C0C0', next: 45, floor: 30, score100: s }
+  if (s >= 15) return { name: 'JUNIOR TRADER', color: '#CD7F32', next: 30, floor: 15, score100: s }
+  return { name: 'INTERN', color: '#555', next: 15, floor: 0, score100: s }
 }
 
 function timeAgo(date: string): string {
@@ -81,6 +84,15 @@ function lobbyGrad(name: string): string {
 }
 
 const FALLBACK_EVENTS = ['Loading activity...']
+
+// Placeholder leaderboard data shown when no real data exists yet
+const PLACEHOLDER_TRADERS = [
+  { id: 'p1', display_name: 'SatoshiSniper', tr_score: 87, rank_tier: 'whale', return_pct: 42.3, payout: 12400, wins: 18, battles: 24 },
+  { id: 'p2', display_name: 'DeFi_Diana', tr_score: 79, rank_tier: 'whale', return_pct: 35.8, payout: 8750, wins: 14, battles: 20 },
+  { id: 'p3', display_name: 'ChartMaster_K', tr_score: 72, rank_tier: 'market_maker', return_pct: 28.1, payout: 5200, wins: 11, battles: 18 },
+  { id: 'p4', display_name: 'AlgoAlpha', tr_score: 64, rank_tier: 'market_maker', return_pct: 22.5, payout: 3100, wins: 9, battles: 15 },
+  { id: 'p5', display_name: 'YieldYoda', tr_score: 55, rank_tier: 'swing_trader', return_pct: 17.2, payout: 1800, wins: 7, battles: 12 },
+]
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -107,7 +119,7 @@ export default function DashboardPage() {
   const [editName, setEditName] = useState('')
   const [showMyBattles, setShowMyBattles] = useState(false)
   const [lbPeriod, setLbPeriod] = useState<'daily' | 'weekly' | 'all'>('daily')
-  const [topTraders, setTopTraders] = useState<{ id: string; display_name: string; tr_score: number; rank_tier: string; return_pct?: number; wins?: number; battles?: number }[]>([])
+  const [topTraders, setTopTraders] = useState<{ id: string; display_name: string; tr_score: number; rank_tier: string; return_pct?: number; payout?: number; wins?: number; battles?: number }[]>([])
   const [topLoading, setTopLoading] = useState(false)
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
   const targetPnl = useRef(0)
@@ -299,8 +311,9 @@ export default function DashboardPage() {
   // ─── Derived ──────────────────────────────────────────────
   const live = lobbies.filter(b => b.status === 'active')
   const open = lobbies.filter(b => b.status === 'waiting')
-  const btr = profile?.tr_score ?? 0
-  const tier = btrTier(btr)
+  const btrRaw = profile?.tr_score ?? 0
+  const tier = btrTier(btrRaw)
+  const btr = tier.score100 ?? 0  // normalized 0-100
   const btrProg = tier.next > tier.floor ? ((btr - tier.floor) / (tier.next - tier.floor)) * 100 : 100
   const pnlPos = displayPnl >= 0
   const winRate = profile?.win_rate ?? 0
@@ -412,7 +425,7 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Link href="/" style={{ display: 'flex', alignItems: 'center' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/logo-main.png" alt="BT" style={{ height: 24, width: 'auto' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+            <img src="/brand/logo-main.png" alt="Battle Trade" style={{ height: 32, width: 'auto' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
           </Link>
           <div style={{ fontFamily: font.sans, fontSize: 11, color: c.text3, maxWidth: 260, overflow: 'hidden', whiteSpace: 'nowrap' }}>
             <span key={liveEventIdx} style={{ animation: 'tickerSlide .3s ease', display: 'inline-block' }}>
@@ -423,6 +436,17 @@ export default function DashboardPage() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Rank badge */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            fontFamily: font.mono, fontSize: 11, fontWeight: 700,
+            color: tier.color, padding: '4px 8px', borderRadius: 6,
+            background: `${tier.color}10`, border: `1px solid ${tier.color}20`,
+          }}>
+            <span style={{ fontSize: 14, lineHeight: 1 }}>{btr}</span>
+            <span style={{ fontSize: 9, letterSpacing: '.04em', color: `${tier.color}BB` }}>{tier.name}</span>
+          </div>
+
           {/* Credits — always clickable */}
           <button className="credits-btn" onClick={() => setShowCreditsModal(true)}>
             {profile?.credits ?? 0} CR
@@ -482,6 +506,110 @@ export default function DashboardPage() {
         <div style={{ maxWidth: 1100, margin: '0 auto', padding: '16px 16px 100px' }}>
 
           {/* ═══════════════════════════════════════════════════════ */}
+          {/* RANK HERO — The ONE number. The dopamine.              */}
+          {/* ═══════════════════════════════════════════════════════ */}
+          <div className="fu" style={{
+            background: c.surface, border: `1px solid ${c.border}`, borderRadius: radius.xl,
+            padding: '14px 16px', marginBottom: 16, position: 'relative', overflow: 'hidden',
+          }}>
+            {/* Top accent line */}
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${tier.color}, ${tier.color}40 40%, transparent 80%)` }} />
+
+            {/* Row 1: Avatar + Name + Score + Rank */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
+              <div style={{
+                width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+                background: `${tier.color}15`, border: `2px solid ${tier.color}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: font.mono, fontSize: 17, color: tier.color, fontWeight: 700,
+                boxShadow: `0 0 20px ${tier.color}20`,
+              }}>{profile?.display_name?.[0]?.toUpperCase() ?? '?'}</div>
+
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                  <div style={{ fontFamily: font.sans, fontSize: 14, fontWeight: 700, color: c.text, lineHeight: 1 }}>
+                    {profileLoading ? '...' : profile?.display_name ?? 'Trader'}
+                  </div>
+                  <div style={{
+                    fontFamily: font.mono, fontSize: 9, fontWeight: 700, color: tier.color,
+                    letterSpacing: '.06em',
+                    display: 'inline-block', padding: '1px 6px',
+                    background: `${tier.color}12`, border: `1px solid ${tier.color}25`, borderRadius: 3,
+                  }}>{tier.name}</div>
+                </div>
+              </div>
+
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontFamily: font.mono, fontSize: 36, fontWeight: 700, color: tier.color, lineHeight: 1, letterSpacing: '-.02em', animation: 'countUp .5s ease both', animationDelay: '.2s' }}>{btr}</div>
+                <div style={{ fontFamily: font.sans, fontSize: 8, fontWeight: 600, color: c.text4, letterSpacing: '.1em', marginTop: 2 }}>TRADER RANK</div>
+              </div>
+            </div>
+
+            {/* Row 2: Progress bar */}
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                <span style={{ fontFamily: font.mono, fontSize: 9, color: c.text3 }}>{tier.name} · {btr}</span>
+                <span style={{ fontFamily: font.mono, fontSize: 9, color: tier.color }}>
+                  {tier.next - btr} pts to {btrTier(tier.next).name}
+                </span>
+              </div>
+              <div style={{ height: 5, background: c.hover, borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{
+                  width: `${btrProg}%`, height: '100%', borderRadius: 3,
+                  background: `linear-gradient(90deg, ${tier.color}, ${tier.color}CC)`,
+                  transition: 'width .6s cubic-bezier(.25,.1,.25,1)',
+                  boxShadow: `0 0 8px ${tier.color}40`,
+                }} />
+              </div>
+            </div>
+
+            {/* Row 3: 5 Pillars — compact inline */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4, marginBottom: 10 }} className="pillar-row">
+              {[
+                { name: 'PERF', weight: 35, col: c.green },
+                { name: 'RISK', weight: 25, col: c.pink },
+                { name: 'CONSIST', weight: 20, col: c.blue },
+                { name: 'ADAPT', weight: 10, col: '#FFD700' },
+                { name: 'SOCIAL', weight: 10, col: c.red },
+              ].map(p => (
+                <div key={p.name} style={{
+                  background: `${p.col}08`, border: `1px solid ${p.col}18`, borderRadius: 4,
+                  padding: '5px 4px', textAlign: 'center',
+                }}>
+                  <div style={{ fontFamily: font.mono, fontSize: 7, fontWeight: 700, color: `${p.col}AA`, letterSpacing: '.03em', marginBottom: 2 }}>{p.name}</div>
+                  <div style={{ height: 2, background: `${p.col}15`, borderRadius: 1, overflow: 'hidden', marginBottom: 2 }}>
+                    <div style={{ width: `${p.weight}%`, height: '100%', background: p.col, borderRadius: 1 }} />
+                  </div>
+                  <div style={{ fontFamily: font.mono, fontSize: 10, fontWeight: 700, color: p.col }}>{p.weight}%</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Row 4: Stats — compact */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 1, background: c.border, borderRadius: 4, overflow: 'hidden' }}>
+              {[
+                { value: pnlPos ? `+${displayPnl >= 1000 ? `${(displayPnl/1000).toFixed(1)}K` : Math.round(displayPnl)}` : `${displayPnl <= -1000 ? `${(displayPnl/1000).toFixed(1)}K` : Math.round(displayPnl)}`, label: 'TOTAL P&L', color: pnlPos ? c.green : c.red },
+                { value: `${((winRate) * 100).toFixed(0)}%`, label: 'WIN RATE', color: winRate >= 0.5 ? c.green : c.text },
+                { value: `${pastBattles.length}`, label: 'BATTLES', color: c.text },
+                { value: `${profile?.total_wins ?? 0}`, label: 'WINS', color: c.green },
+                { value: streak > 0 ? `${streak}` : '0', label: 'STREAK', color: streak >= 3 ? c.gold : streak > 0 ? '#FF8C00' : c.text4 },
+                { value: (profile?.best_return ?? 0) > 0 ? `+${(profile!.best_return).toFixed(0)}%` : '-', label: 'BEST', color: (profile?.best_return ?? 0) > 0 ? c.green : c.text4 },
+              ].map(s => (
+                <div key={s.label} style={{ background: c.surface, padding: '6px 0', textAlign: 'center' }}>
+                  <div style={{ fontFamily: font.mono, fontSize: 13, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</div>
+                  <div style={{ fontFamily: font.sans, fontSize: 7, fontWeight: 600, color: c.text4, letterSpacing: '.06em', marginTop: 2 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {streak >= 2 && (
+              <div style={{ marginTop: 8, display: 'flex', justifyContent: 'center' }}>
+                <StreakBadge streak={streak} />
+              </div>
+            )}
+          </div>
+
+          {/* ═══════════════════════════════════════════════════════ */}
           {/* TOP 5 LEADERBOARD — daily / weekly / all-time          */}
           {/* ═══════════════════════════════════════════════════════ */}
           <div className="fu" style={{
@@ -493,7 +621,7 @@ export default function DashboardPage() {
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontFamily: font.display, fontSize: 16, color: c.gold, letterSpacing: '.06em' }}>TOP TRADERS</span>
+                <span style={{ fontFamily: font.display, fontSize: 16, color: c.gold, letterSpacing: '.06em' }}>TOP PAYOUTS</span>
               </div>
               {/* Period tabs */}
               <div style={{ display: 'flex', gap: 0, background: c.bg, borderRadius: 6, overflow: 'hidden', border: `1px solid ${c.border}` }}>
@@ -515,24 +643,22 @@ export default function DashboardPage() {
                   <div key={i} className="skeleton" style={{ flex: 1, height: 64, borderRadius: radius.sm }} />
                 ))}
               </div>
-            ) : topTraders.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                <span style={{ fontFamily: font.sans, fontSize: 12, color: c.text4 }}>No {lbPeriod} data yet — be the first to compete</span>
-              </div>
             ) : (
               <div style={{ display: 'flex', gap: 6 }}>
-                {topTraders.slice(0, 5).map((t, i) => {
+                {(topTraders.length > 0 ? topTraders : PLACEHOLDER_TRADERS).slice(0, 5).map((t, i) => {
+                  const isPlaceholder = topTraders.length === 0;
                   const tTier = btrTier(t.tr_score)
                   const isYou = profile?.id === t.id
                   const rankColors = ['#FFD700', '#C0C0C0', '#CD7F32', c.text3, c.text4]
                   const medals = ['👑', '🥈', '🥉', '', '']
                   return (
-                    <Link key={t.id} href={`/profile/${t.id}`} className={`lb-row si si${i + 1}`} style={{
+                    <Link key={t.id} href={isPlaceholder ? '/leaderboard' : `/profile/${t.id}`} className={`lb-row si si${i + 1}`} style={{
                       flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
                       padding: '12px 8px', borderRadius: radius.sm, textDecoration: 'none', color: 'inherit',
                       background: isYou ? `${c.pink}10` : i === 0 ? `${c.gold}08` : 'transparent',
                       border: `1px solid ${isYou ? `${c.pink}30` : i === 0 ? `${c.gold}20` : c.border}`,
                       position: 'relative', overflow: 'hidden',
+                      opacity: isPlaceholder ? 0.6 : 1,
                     }}>
                       {i === 0 && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: c.gold, animation: 'glowBar 2s ease infinite' }} />}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -550,129 +676,16 @@ export default function DashboardPage() {
                         color: isYou ? c.pink : c.text, overflow: 'hidden', textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap', maxWidth: '100%', textAlign: 'center',
                       }}>{t.display_name}</span>
-                      {lbPeriod === 'all' ? (
-                        <span style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 700, color: tTier.color }}>{t.tr_score}</span>
-                      ) : (
-                        <span style={{ fontFamily: font.mono, fontSize: 13, fontWeight: 700, color: (t.return_pct ?? 0) >= 0 ? c.green : c.red }}>
-                          {(t.return_pct ?? 0) >= 0 ? '+' : ''}{(t.return_pct ?? 0).toFixed(1)}%
-                        </span>
-                      )}
+                      <span style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 700, color: c.green }}>
+                        {t.payout != null
+                          ? `$${t.payout >= 1000 ? `${(t.payout / 1000).toFixed(1)}K` : t.payout}`
+                          : `${(t.return_pct ?? 0) >= 0 ? '+' : ''}${(t.return_pct ?? 0).toFixed(1)}%`
+                        }
+                      </span>
                       {isYou && <span style={{ fontFamily: font.sans, fontSize: 8, fontWeight: 700, color: c.pink, background: c.pinkDim, padding: '1px 5px', borderRadius: 3 }}>YOU</span>}
                     </Link>
                   )
                 })}
-              </div>
-            )}
-          </div>
-
-          {/* ═══════════════════════════════════════════════════════ */}
-          {/* RANK HERO — The ONE number. The dopamine.              */}
-          {/* ═══════════════════════════════════════════════════════ */}
-          <div className="fu" style={{
-            background: c.surface, border: `1px solid ${c.border}`, borderRadius: radius.xl,
-            padding: '32px', marginBottom: 16, position: 'relative', overflow: 'hidden',
-          }}>
-            {/* Top accent line */}
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${tier.color}, ${tier.color}40 40%, transparent 80%)` }} />
-
-            {/* Row 1: Score + Tier + Progress */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 32, marginBottom: 24 }}>
-              {/* Avatar */}
-              <div style={{
-                width: 64, height: 64, borderRadius: radius.lg, flexShrink: 0,
-                background: `${tier.color}15`, border: `2.5px solid ${tier.color}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontFamily: font.mono, fontSize: 28, color: tier.color, fontWeight: 700,
-                boxShadow: `0 0 30px ${tier.color}20`,
-              }}>{profile?.display_name?.[0]?.toUpperCase() ?? '?'}</div>
-
-              {/* Name + Level + Tier label */}
-              <div style={{ minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                  <div style={{ fontFamily: font.sans, fontSize: 20, fontWeight: 700, color: c.text, lineHeight: 1 }}>
-                    {profileLoading ? '...' : profile?.display_name ?? 'Trader'}
-                  </div>
-                  <span style={{
-                    fontFamily: font.mono, fontSize: 22, fontWeight: 800, color: tier.color,
-                    lineHeight: 1, letterSpacing: '-.02em',
-                    textShadow: `0 0 12px ${tier.color}40`,
-                  }}>{btr}</span>
-                </div>
-                <div style={{
-                  fontFamily: font.mono, fontSize: 11, fontWeight: 700, color: tier.color,
-                  letterSpacing: '.08em', marginTop: 4,
-                  display: 'inline-block', padding: '2px 8px',
-                  background: `${tier.color}12`, border: `1px solid ${tier.color}25`, borderRadius: 4,
-                }}>{tier.name}</div>
-              </div>
-
-              {/* THE number */}
-              <div style={{ flex: 1, textAlign: 'right' }}>
-                <div style={{ fontFamily: font.mono, fontSize: 64, fontWeight: 700, color: tier.color, lineHeight: 1, letterSpacing: '-.02em', animation: 'countUp .5s ease both', animationDelay: '.2s' }}>{btr}</div>
-                <div style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 600, color: c.text4, letterSpacing: '.12em', marginTop: 4 }}>TRADER RANK</div>
-              </div>
-            </div>
-
-            {/* Row 2: Progress bar — how close to next tier */}
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ fontFamily: font.mono, fontSize: 10, color: c.text3 }}>{tier.name} · {btr}</span>
-                <span style={{ fontFamily: font.mono, fontSize: 10, color: tier.color }}>
-                  {tier.next - btr} pts to {btrTier(tier.next).name}
-                </span>
-              </div>
-              <div style={{ height: 8, background: c.hover, borderRadius: 4, overflow: 'hidden' }}>
-                <div style={{
-                  width: `${btrProg}%`, height: '100%', borderRadius: 4,
-                  background: `linear-gradient(90deg, ${tier.color}, ${tier.color}CC)`,
-                  transition: 'width .6s cubic-bezier(.25,.1,.25,1)',
-                  boxShadow: `0 0 12px ${tier.color}40`,
-                }} />
-              </div>
-            </div>
-
-            {/* Row 3: 5 Pillars — what builds your score */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 24 }} className="pillar-row">
-              {[
-                { name: 'PERFORMANCE', weight: 35, col: c.green },
-                { name: 'RISK MGMT', weight: 25, col: c.pink },
-                { name: 'CONSISTENCY', weight: 20, col: c.blue },
-                { name: 'ADAPTABILITY', weight: 10, col: '#FFD700' },
-                { name: 'COMMUNITY', weight: 10, col: c.red },
-              ].map(p => (
-                <div key={p.name} style={{
-                  background: `${p.col}08`, border: `1px solid ${p.col}18`, borderRadius: radius.sm,
-                  padding: '10px 8px', textAlign: 'center',
-                }}>
-                  <div style={{ fontFamily: font.mono, fontSize: 8, fontWeight: 700, color: `${p.col}AA`, letterSpacing: '.04em', marginBottom: 4 }}>{p.name}</div>
-                  <div style={{ height: 3, background: `${p.col}15`, borderRadius: 2, overflow: 'hidden', marginBottom: 4 }}>
-                    <div style={{ width: `${p.weight}%`, height: '100%', background: p.col, borderRadius: 2, transition: 'width .4s ease' }} />
-                  </div>
-                  <div style={{ fontFamily: font.mono, fontSize: 13, fontWeight: 700, color: p.col }}>{p.weight}%</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Row 4: Stats — the proof */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 1, background: c.border, borderRadius: radius.sm, overflow: 'hidden' }}>
-              {[
-                { value: pnlPos ? `+${displayPnl >= 1000 ? `${(displayPnl/1000).toFixed(1)}K` : Math.round(displayPnl)}` : `${displayPnl <= -1000 ? `${(displayPnl/1000).toFixed(1)}K` : Math.round(displayPnl)}`, label: 'TOTAL P&L', color: pnlPos ? c.green : c.red },
-                { value: `${((winRate) * 100).toFixed(0)}%`, label: 'WIN RATE', color: winRate >= 0.5 ? c.green : c.text },
-                { value: `${pastBattles.length}`, label: 'BATTLES', color: c.text },
-                { value: `${profile?.total_wins ?? 0}`, label: 'WINS', color: c.green },
-                { value: streak > 0 ? `${streak}` : '0', label: 'STREAK', color: streak >= 3 ? c.gold : streak > 0 ? '#FF8C00' : c.text4 },
-                { value: (profile?.best_return ?? 0) > 0 ? `+${(profile!.best_return).toFixed(0)}%` : '-', label: 'BEST', color: (profile?.best_return ?? 0) > 0 ? c.green : c.text4 },
-              ].map(s => (
-                <div key={s.label} style={{ background: c.surface, padding: '12px 0', textAlign: 'center' }}>
-                  <div style={{ fontFamily: font.mono, fontSize: 18, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</div>
-                  <div style={{ fontFamily: font.sans, fontSize: 8, fontWeight: 600, color: c.text4, letterSpacing: '.08em', marginTop: 4 }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
-
-            {streak >= 2 && (
-              <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center' }}>
-                <StreakBadge streak={streak} />
               </div>
             )}
           </div>

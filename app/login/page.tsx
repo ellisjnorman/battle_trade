@@ -17,10 +17,16 @@ function LoginInner() {
     if (!ready) return
     if (authenticated && user) {
       getOrCreateProfile(user).then(profile => {
-        if (profile) localStorage.setItem('bt_profile_id', profile.id)
+        if (profile) {
+          localStorage.setItem('bt_profile_id', profile.id)
+          console.log('[auth] profile ready:', profile.id, profile.display_name)
+        } else {
+          console.warn('[auth] getOrCreateProfile returned null — profile may not be saved')
+        }
         router.replace(redirect)
       }).catch(err => {
         console.error('[auth] getOrCreateProfile failed:', err)
+        // Still redirect — user is authenticated, just no profile yet
         router.replace(redirect)
       })
     }

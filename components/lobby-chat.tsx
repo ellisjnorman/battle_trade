@@ -157,9 +157,20 @@ export default function LobbyChat({ lobbyId, userId, userName, userRole, collaps
     if (!text.trim() || sending) return;
     setSending(true);
     try {
-      await fetch(`/api/lobby/${lobbyId}/chat`, {
+      // Build auth headers — include trader code + guest ID if available
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const traderCode = params.get('code');
+        if (traderCode) headers['X-Trader-Code'] = traderCode;
+        try {
+          const g = JSON.parse(localStorage.getItem('bt_guest') ?? '{}');
+          if (g?.guest_id) headers['X-Guest-Id'] = g.guest_id;
+        } catch {}
+      }
+      const res = await fetch(`/api/lobby/${lobbyId}/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           sender_id: userId,
           sender_name: userName,
@@ -167,8 +178,11 @@ export default function LobbyChat({ lobbyId, userId, userName, userRole, collaps
           content: text.trim(),
         }),
       });
-    } catch {
-      // Silently fail — message won't persist but chat stays functional
+      if (!res.ok) {
+        console.error('[chat] send failed:', res.status, await res.text().catch(() => ''));
+      }
+    } catch (err) {
+      console.error('[chat] send error:', err);
     }
     setSending(false);
   }, [lobbyId, userId, userName, userRole, sending]);
@@ -288,7 +302,7 @@ export default function LobbyChat({ lobbyId, userId, userName, userRole, collaps
   // ─── Embedded mode: inline in sidebar ───
   if (embedded) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: 220 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
         <div style={{ padding: '6px 14px', borderBottom: '1px solid #1A1A1A', display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontFamily: "var(--font-bebas, 'Bebas Neue'), sans-serif", fontSize: 12, color: '#777', letterSpacing: '0.05em' }}>CHAT</span>
           <span style={{ fontFamily: "var(--font-jetbrains, 'JetBrains Mono'), monospace", fontSize: 9, color: '#555' }}>{messages.length}</span>
