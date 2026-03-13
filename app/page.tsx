@@ -204,7 +204,7 @@ export default function LandingPage() {
           .h1-size{font-size:clamp(44px,14vw,72px)!important}
           .section-pad{padding:64px 20px!important}
           .steps-grid{grid-template-columns:1fr 1fr!important}
-          .problem-grid{grid-template-columns:1fr!important}
+          .problem-grid{grid-template-columns:1fr 1fr!important}
           .pillar-grid{grid-template-columns:1fr!important}
           .copy-layout{flex-direction:column!important}
           .spec-layout{flex-direction:column!important}
@@ -215,6 +215,7 @@ export default function LandingPage() {
         @media(max-width:480px){
           .h1-size{font-size:clamp(36px,13vw,56px)!important}
           .steps-grid{grid-template-columns:1fr!important}
+          .problem-grid{grid-template-columns:1fr!important}
         }
       `}</style>
 
@@ -255,7 +256,7 @@ export default function LandingPage() {
         <div className="hero-grid" style={{maxWidth:1200,width:'100%',margin:'0 auto',padding:'100px 32px 60px',display:'flex',alignItems:'center',gap:80}}>
           <div className="hero-left" style={{flex:1,maxWidth:560}}>
             <div className="anim-up" style={{animationDelay:'.1s',marginBottom:20}}>
-              <span style={{fontFamily:M,fontSize:12,color:'#F5A0D0',letterSpacing:'.08em',fontWeight:500}}>YOUR RANK IS YOUR REPUTATION</span>
+              <span style={{fontFamily:M,fontSize:12,color:'#F5A0D0',letterSpacing:'.08em',fontWeight:500}}>LEARN TO TRADE · COMPETE TO PROVE IT</span>
             </div>
 
             <h1 className="anim-up h1-size" style={{
@@ -272,7 +273,7 @@ export default function LandingPage() {
             </h1>
 
             <p className="anim-up" style={{animationDelay:'.4s',fontFamily:S,fontSize:17,color:'#666',lineHeight:1.7,marginBottom:36,maxWidth:440}}>
-              Build a verified trading rank through live competition. Prove your skill under real market conditions. Top traders unlock copy trading and earn real income.
+              Learn to trade by actually trading — risk-free. Compete in live battles with real market data, build real skills through play, and earn a verified rank that proves what you know.
             </p>
 
             <div className="anim-up cta-stack" style={{animationDelay:'.55s',display:'flex',gap:12,marginBottom:48}}>
@@ -286,8 +287,8 @@ export default function LandingPage() {
 
             <div className="anim-up" style={{animationDelay:'.7s',display:'flex',gap:36,flexWrap:'wrap'}}>
               {[
-                { v: '5', l: 'rank pillars' },
-                { v: '60+', l: 'assets' },
+                { v: '$0', l: 'risk to start' },
+                { v: '60+', l: 'real assets' },
                 { v: 'Top 20', l: 'earn income' },
               ].map(s => (
                 <div key={s.l}>
@@ -352,7 +353,7 @@ export default function LandingPage() {
               </div>
 
               <div style={{padding:'8px 20px',borderTop:'1px solid rgba(255,255,255,.04)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                <span style={{fontFamily:M,fontSize:9,color:'#444'}}>Every trade builds your rank</span>
+                <span style={{fontFamily:M,fontSize:9,color:'#444'}}>Learn by competing — every trade builds your rank</span>
                 <button onClick={login} style={{fontFamily:S,fontSize:11,fontWeight:600,color:'#0A0A0A',background:'#F5A0D0',border:'none',padding:'6px 16px',borderRadius:6,cursor:'pointer',transition:'all .15s'}}>Start Now</button>
               </div>
             </div>
@@ -397,10 +398,19 @@ export default function LandingPage() {
               YOUR TRADING RECORD IS INVISIBLE
             </h2>
           </Reveal>
-          <div className="problem-grid" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:24}}>
+          <div className="problem-grid" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:24}}>
             <Reveal delay={.05}>
               <div className="card" style={{padding:'32px 28px',height:'100%'}}>
                 <div style={{fontFamily:M,fontSize:48,lineHeight:1,color:'#FF4466',marginBottom:16,opacity:.3}}>01</div>
+                <div style={{fontFamily:S,fontSize:20,fontWeight:700,color:'#FFF',marginBottom:12}}>Learning is boring</div>
+                <div style={{fontFamily:S,fontSize:14,color:'#555',lineHeight:1.7}}>
+                  Trading courses charge thousands and teach theory. Simulators have no stakes. Nobody actually learns to manage risk until they lose real money.
+                </div>
+              </div>
+            </Reveal>
+            <Reveal delay={.1}>
+              <div className="card" style={{padding:'32px 28px',height:'100%'}}>
+                <div style={{fontFamily:M,fontSize:48,lineHeight:1,color:'#FF4466',marginBottom:16,opacity:.3}}>02</div>
                 <div style={{fontFamily:S,fontSize:20,fontWeight:700,color:'#FFF',marginBottom:12}}>Identity is trapped</div>
                 <div style={{fontFamily:S,fontSize:14,color:'#555',lineHeight:1.7}}>
                   50-100M crypto traders globally. Zero portable proof of skill. Switch exchanges, start from zero. Your reputation belongs to the platform, not you.
@@ -409,10 +419,10 @@ export default function LandingPage() {
             </Reveal>
             <Reveal delay={.15}>
               <div className="card" style={{padding:'32px 28px',height:'100%'}}>
-                <div style={{fontFamily:M,fontSize:48,lineHeight:1,color:'#FF4466',marginBottom:16,opacity:.3}}>02</div>
+                <div style={{fontFamily:M,fontSize:48,lineHeight:1,color:'#FF4466',marginBottom:16,opacity:.3}}>03</div>
                 <div style={{fontFamily:S,fontSize:20,fontWeight:700,color:'#FFF',marginBottom:12}}>Copy trading is broken</div>
                 <div style={{fontFamily:S,fontSize:14,color:'#555',lineHeight:1.7}}>
-                  $50B+ in copy trading volume. Anyone can self-select as a &ldquo;lead trader.&rdquo; Fake records, cherry-picked accounts, followers losing money. No verification layer exists.
+                  $50B+ in copy trading volume. Anyone can self-select as a &ldquo;lead trader.&rdquo; Fake records, cherry-picked accounts. No verification layer exists.
                 </div>
               </div>
             </Reveal>
@@ -420,7 +430,7 @@ export default function LandingPage() {
           <Reveal delay={.25}>
             <div style={{marginTop:32,padding:'20px 28px',background:'rgba(245,160,208,.04)',border:'1px solid rgba(245,160,208,.08)',borderRadius:12,textAlign:'center'}}>
               <span style={{fontFamily:S,fontSize:15,color:'#999',lineHeight:1.7}}>
-                The market needs a <span style={{color:'#F5A0D0',fontWeight:700}}>reputation system for traders</span> — verified, portable, and impossible to fake.
+                The best way to learn trading is by doing it — with <span style={{color:'#F5A0D0',fontWeight:700}}>real competition, real market data, and zero financial risk</span>. Your skills become a verified rank that follows you everywhere.
               </span>
             </div>
           </Reveal>
@@ -440,10 +450,10 @@ export default function LandingPage() {
           </Reveal>
           <div className="steps-grid" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:20}}>
             {[
-              { n: '01', t: 'Compete', d: 'Join a live battle. Trade 60+ assets with real market prices. Free to start.', c: '#F5A0D0' },
-              { n: '02', t: 'Survive', d: 'Market events stress-test your strategy. Exchange outages, flash crashes, margin calls.', c: '#FF4466' },
-              { n: '03', t: 'Rank Up', d: '5-pillar composite score. Performance, risk, consistency, adaptability, community.', c: '#00DC82' },
-              { n: '04', t: 'Get Copied', d: 'Top 20 unlock copy trading. Followers mirror your trades. Earn 15% of their profits.', c: '#FFD700' },
+              { n: '01', t: 'Practice Free', d: 'Start with paper money and real market data. Learn longs, shorts, leverage, and risk management — zero cost, zero risk.', c: '#F5A0D0' },
+              { n: '02', t: 'Battle Live', d: 'Compete against real traders. Survive flash crashes, exchange outages, and margin calls. Every event teaches you something.', c: '#FF4466' },
+              { n: '03', t: 'Build Your Rank', d: 'Your rank reflects real skill — performance, risk management, consistency, adaptability. You can\'t fake it.', c: '#00DC82' },
+              { n: '04', t: 'Earn From Skill', d: 'Top 20 unlock copy trading. Followers mirror your trades. You earn 15% of their profits.', c: '#FFD700' },
             ].map((step, i) => (
               <Reveal key={i} delay={i * .08}>
                 <div className="card" style={{padding:'28px 24px',height:'100%',position:'relative'}}>
@@ -469,7 +479,7 @@ export default function LandingPage() {
               FIVE PILLARS. ONE SCORE.
             </h2>
             <p style={{fontFamily:S,fontSize:15,color:'#555',maxWidth:500,lineHeight:1.7,marginBottom:56}}>
-              Your rank is built from dozens of live battles, stress-tested by simulated market events. You cannot fake it. You cannot buy it. You earn it.
+              Each battle teaches you something new. Your rank reflects real skills earned through practice — risk management, market reading, and discipline. You cannot fake it. You earn it.
             </p>
           </Reveal>
 
@@ -609,12 +619,12 @@ export default function LandingPage() {
       <section className="section-pad" style={{padding:'100px 32px'}}>
         <div style={{maxWidth:1000,margin:'0 auto'}}>
           <Reveal>
-            <p style={{fontFamily:S,fontSize:14,fontWeight:500,color:'#F5A0D0',marginBottom:12}}>The game</p>
+            <p style={{fontFamily:S,fontSize:14,fontWeight:500,color:'#F5A0D0',marginBottom:12}}>Learn by playing</p>
             <h2 style={{fontFamily:B,fontSize:'clamp(32px,5vw,56px)',lineHeight:.92,letterSpacing:'-.01em',marginBottom:20}}>
-              THE GAME IS THE EXAM
+              THE GAME TEACHES YOU
             </h2>
             <p style={{fontFamily:S,fontSize:15,color:'#555',maxWidth:520,lineHeight:1.7,marginBottom:48}}>
-              Every battle generates verified data points: entries, exits, drawdowns, leverage usage, event response times. Simulated market events stress-test what matters most — your risk management under pressure.
+              Every battle is a trading lesson disguised as competition. Learn entries, exits, leverage, risk management, and how to stay cool during market chaos — all with zero financial risk.
             </p>
           </Reveal>
 
@@ -699,23 +709,21 @@ export default function LandingPage() {
       <section className="section-pad" style={{padding:'120px 32px',textAlign:'center',borderTop:'1px solid rgba(255,255,255,.04)'}}>
         <Reveal>
           <h2 style={{fontFamily:B,fontSize:'clamp(40px,7vw,88px)',lineHeight:.9,letterSpacing:'-.02em',marginBottom:20}}>
-            YOUR RANK<br/>STARTS AT <span style={{color:'#F5A0D0'}}>ZERO</span>
+            START LEARNING<br/><span style={{color:'#F5A0D0'}}>START TRADING</span>
           </h2>
         </Reveal>
         <Reveal delay={.1}>
           <p style={{fontFamily:S,fontSize:17,color:'#555',marginBottom:36,maxWidth:480,margin:'0 auto 36px'}}>
-            Free to compete. Verified by competition. Top traders earn real income through copy trading.
+            Free to start. Practice with paper money and real market data. Compete to build real skills and a verified rank. Top traders earn income through copy trading.
           </p>
         </Reveal>
         <Reveal delay={.2}>
           <button onClick={login} className="btn-primary" style={{fontSize:20,padding:'18px 56px'}}>
-            Prove It
+            Start Free
           </button>
           <div style={{fontFamily:S,fontSize:12,color:'#333',marginTop:20}}>Google · X · Email · WalletConnect</div>
         </Reveal>
       </section>
-
-      {/* Mobile CTA removed — inline CTAs are sufficient, fixed bar blocks scroll content */}
 
       {/* FOOTER */}
       <footer style={{borderTop:'1px solid rgba(255,255,255,.04)',padding:'32px'}}>
@@ -723,7 +731,7 @@ export default function LandingPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/brand/logo-main.png" alt="" style={{height:20,width:'auto',opacity:.2}} onError={e=>{(e.target as HTMLImageElement).style.display='none'}} />
           <span style={{fontFamily:S,fontSize:11,color:'#222',maxWidth:440,lineHeight:1.5}}>
-            Battle Trade builds verified trader identity through live competition. The game is the verification engine. Copy trading is the business.
+            Learn to trade through live competition. Build real skills with zero risk. Your rank is your verified trading resume.
           </span>
           <div style={{display:'flex',gap:20}}>
             <Link href="/markets" style={{fontFamily:S,fontSize:12,color:'#333',textDecoration:'none'}}>Battles</Link>
@@ -731,7 +739,6 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
-      <div className="mob-only" style={{height:72}} />
     </div>
   )
 }
