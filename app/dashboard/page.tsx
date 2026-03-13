@@ -85,6 +85,90 @@ function lobbyGrad(name: string): string {
 
 const FALLBACK_EVENTS = ['Loading activity...']
 
+// ─── Profile Card Skins ─────────────────────────────────────
+interface CardSkin {
+  id: string; name: string; price: number // 0 = free
+  bg: string; border: string; accent: string; glow: string
+  avatarBorder: string; avatarBg: string
+  textPrimary: string; textSecondary: string
+  barBg: string; barFill: string
+  pillarBg: string; statBg: string
+  preview: string // gradient for selector thumbnail
+}
+
+const CARD_SKINS: CardSkin[] = [
+  {
+    id: 'default', name: 'Default', price: 0,
+    bg: c.surface, border: c.border, accent: '', glow: '',
+    avatarBorder: '', avatarBg: '', textPrimary: c.text, textSecondary: c.text3,
+    barBg: c.hover, barFill: '', pillarBg: '', statBg: c.surface,
+    preview: `linear-gradient(135deg, ${c.surface}, #1A1A1A)`,
+  },
+  {
+    id: 'neon_pink', name: 'Neon Pink', price: 500,
+    bg: 'linear-gradient(135deg, #1A0A14, #0D0D0D)', border: '#F5A0D040', accent: '#F5A0D0', glow: '0 0 30px rgba(245,160,208,0.15)',
+    avatarBorder: '#F5A0D0', avatarBg: 'rgba(245,160,208,0.1)',
+    textPrimary: '#FFF', textSecondary: '#F5A0D088',
+    barBg: '#F5A0D020', barFill: 'linear-gradient(90deg, #F5A0D0, #FF69B4)',
+    pillarBg: 'rgba(245,160,208,0.06)', statBg: 'rgba(245,160,208,0.05)',
+    preview: 'linear-gradient(135deg, #F5A0D0, #1A0A14)',
+  },
+  {
+    id: 'cyber_green', name: 'Matrix', price: 500,
+    bg: 'linear-gradient(135deg, #0A1A0A, #0D0D0D)', border: '#00FF8840', accent: '#00FF88', glow: '0 0 30px rgba(0,255,136,0.12)',
+    avatarBorder: '#00FF88', avatarBg: 'rgba(0,255,136,0.1)',
+    textPrimary: '#E0FFE0', textSecondary: '#00FF8888',
+    barBg: '#00FF8820', barFill: 'linear-gradient(90deg, #00CC66, #00FF88)',
+    pillarBg: 'rgba(0,255,136,0.06)', statBg: 'rgba(0,255,136,0.05)',
+    preview: 'linear-gradient(135deg, #00FF88, #0A1A0A)',
+  },
+  {
+    id: 'gold_rush', name: 'Gold Rush', price: 1000,
+    bg: 'linear-gradient(135deg, #1A1500, #0D0D0D)', border: '#FFD70040', accent: '#FFD700', glow: '0 0 30px rgba(255,215,0,0.12)',
+    avatarBorder: '#FFD700', avatarBg: 'rgba(255,215,0,0.1)',
+    textPrimary: '#FFFDE0', textSecondary: '#FFD70088',
+    barBg: '#FFD70020', barFill: 'linear-gradient(90deg, #DAA520, #FFD700)',
+    pillarBg: 'rgba(255,215,0,0.06)', statBg: 'rgba(255,215,0,0.05)',
+    preview: 'linear-gradient(135deg, #FFD700, #1A1500)',
+  },
+  {
+    id: 'ice_blue', name: 'Arctic', price: 1000,
+    bg: 'linear-gradient(135deg, #0A0F1A, #0D0D0D)', border: '#00BFFF40', accent: '#00BFFF', glow: '0 0 30px rgba(0,191,255,0.12)',
+    avatarBorder: '#00BFFF', avatarBg: 'rgba(0,191,255,0.1)',
+    textPrimary: '#E0F4FF', textSecondary: '#00BFFF88',
+    barBg: '#00BFFF20', barFill: 'linear-gradient(90deg, #0088CC, #00BFFF)',
+    pillarBg: 'rgba(0,191,255,0.06)', statBg: 'rgba(0,191,255,0.05)',
+    preview: 'linear-gradient(135deg, #00BFFF, #0A0F1A)',
+  },
+  {
+    id: 'blood_red', name: 'Bloodline', price: 1500,
+    bg: 'linear-gradient(135deg, #1A0A0A, #0D0D0D)', border: '#FF333340', accent: '#FF3333', glow: '0 0 30px rgba(255,51,51,0.15)',
+    avatarBorder: '#FF3333', avatarBg: 'rgba(255,51,51,0.1)',
+    textPrimary: '#FFE0E0', textSecondary: '#FF333388',
+    barBg: '#FF333320', barFill: 'linear-gradient(90deg, #CC0000, #FF3333)',
+    pillarBg: 'rgba(255,51,51,0.06)', statBg: 'rgba(255,51,51,0.05)',
+    preview: 'linear-gradient(135deg, #FF3333, #1A0A0A)',
+  },
+  {
+    id: 'purple_haze', name: 'Purple Haze', price: 1500,
+    bg: 'linear-gradient(135deg, #140A1A, #0D0D0D)', border: '#A855F740', accent: '#A855F7', glow: '0 0 30px rgba(168,85,247,0.15)',
+    avatarBorder: '#A855F7', avatarBg: 'rgba(168,85,247,0.1)',
+    textPrimary: '#F0E0FF', textSecondary: '#A855F788',
+    barBg: '#A855F720', barFill: 'linear-gradient(90deg, #7C3AED, #A855F7)',
+    pillarBg: 'rgba(168,85,247,0.06)', statBg: 'rgba(168,85,247,0.05)',
+    preview: 'linear-gradient(135deg, #A855F7, #140A1A)',
+  },
+  {
+    id: 'diamond', name: 'Diamond', price: 3000,
+    bg: 'linear-gradient(135deg, #141418, #0D0D0D 40%, #18181C)', border: 'linear-gradient(135deg, #B9F2FF, #E5E4E2, #FFD700) 1', accent: '#B9F2FF', glow: '0 0 40px rgba(185,242,255,0.1), 0 0 80px rgba(255,215,0,0.05)',
+    avatarBorder: '#B9F2FF', avatarBg: 'linear-gradient(135deg, rgba(185,242,255,0.1), rgba(255,215,0,0.05))',
+    textPrimary: '#FAFAFA', textSecondary: '#B9F2FF88',
+    barBg: 'rgba(185,242,255,0.15)', barFill: 'linear-gradient(90deg, #B9F2FF, #FFD700)',
+    pillarBg: 'rgba(185,242,255,0.04)', statBg: 'rgba(185,242,255,0.04)',
+    preview: 'linear-gradient(135deg, #B9F2FF, #FFD700, #141418)',
+  },
+]
+
 // Placeholder leaderboard data shown when no real data exists yet
 const PLACEHOLDER_TRADERS = [
   { id: 'p1', display_name: 'SatoshiSniper', tr_score: 87, rank_tier: 'whale', return_pct: 42.3, payout: 12400, wins: 18, battles: 24 },
@@ -118,6 +202,11 @@ export default function DashboardPage() {
   const [editingLobby, setEditingLobby] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [showMyBattles, setShowMyBattles] = useState(false)
+  const [selectedSkin, setSelectedSkin] = useState<string>(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem('bt_card_skin') ?? 'default'
+    return 'default'
+  })
+  const [showSkinPicker, setShowSkinPicker] = useState(false)
   const [lbPeriod, setLbPeriod] = useState<'daily' | 'weekly' | 'all'>('daily')
   const [topTraders, setTopTraders] = useState<{ id: string; display_name: string; tr_score: number; rank_tier: string; return_pct?: number; payout?: number; wins?: number; battles?: number }[]>([])
   const [topLoading, setTopLoading] = useState(false)
@@ -126,6 +215,11 @@ export default function DashboardPage() {
   const animFrame = useRef<number>(0)
 
   const streak = useMemo(() => calcStreak(pastBattles), [pastBattles])
+  const skin = CARD_SKINS.find(s => s.id === selectedSkin) ?? CARD_SKINS[0]
+  const applySkin = (skinId: string) => {
+    setSelectedSkin(skinId)
+    localStorage.setItem('bt_card_skin', skinId)
+  }
   const totalPnl = useMemo(() => pastBattles.reduce((sum, b) => {
     if (b.final_balance != null && b.starting_balance != null) return sum + (b.final_balance - b.starting_balance)
     return sum
@@ -433,7 +527,7 @@ export default function DashboardPage() {
 
       {/* ══ TOP NAV ══ */}
       <nav style={{
-        position: 'sticky', top: 0, zIndex: 100, height: 48, display: 'flex', alignItems: 'center',
+        position: 'sticky', top: 0, zIndex: 100, height: 80, display: 'flex', alignItems: 'center',
         justifyContent: 'space-between', padding: '0 16px',
         background: 'rgba(10,10,10,.94)', backdropFilter: 'blur(20px)',
         borderBottom: `1px solid ${c.border}`,
@@ -441,7 +535,7 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Link href="/" style={{ display: 'flex', alignItems: 'center' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/logo-main.png" alt="Battle Trade" style={{ height: 56, width: 'auto' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+            <img src="/brand/logo-main.png" alt="Battle Trade" style={{ height: 100, width: 'auto' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
           </Link>
           <div style={{ fontFamily: font.sans, fontSize: 11, color: c.text3, maxWidth: 260, overflow: 'hidden', whiteSpace: 'nowrap' }}>
             <span key={liveEventIdx} style={{ animation: 'tickerSlide .3s ease', display: 'inline-block' }}>
@@ -525,56 +619,90 @@ export default function DashboardPage() {
           {/* RANK HERO — The ONE number. The dopamine.              */}
           {/* ═══════════════════════════════════════════════════════ */}
           <div className="fu" style={{
-            background: c.surface, border: `1px solid ${c.border}`, borderRadius: radius.xl,
+            background: skin.id === 'default' ? c.surface : skin.bg, border: `1px solid ${skin.id === 'default' ? c.border : skin.border}`, borderRadius: radius.xl,
             padding: '14px 16px', marginBottom: 16, position: 'relative', overflow: 'hidden',
+            boxShadow: skin.glow || 'none',
           }}>
             {/* Top accent line */}
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${tier.color}, ${tier.color}40 40%, transparent 80%)` }} />
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${skin.accent || tier.color}, ${(skin.accent || tier.color)}40 40%, transparent 80%)` }} />
+
+            {/* Skin customize button */}
+            <button onClick={() => setShowSkinPicker(!showSkinPicker)} style={{
+              position: 'absolute', top: 8, right: 10, fontFamily: font.mono, fontSize: 9, fontWeight: 600,
+              color: skin.accent || c.text4, background: 'rgba(255,255,255,0.04)', border: `1px solid ${skin.accent || c.border}40`,
+              padding: '2px 8px', borderRadius: 4, cursor: 'pointer', zIndex: 2, letterSpacing: '.04em',
+            }}>🎨 SKIN</button>
 
             {/* Row 1: Avatar + Name + Score + Rank */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
               <div style={{
                 width: 38, height: 38, borderRadius: 10, flexShrink: 0,
-                background: `${tier.color}15`, border: `2px solid ${tier.color}`,
+                background: skin.avatarBg || `${tier.color}15`, border: `2px solid ${skin.avatarBorder || tier.color}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontFamily: font.mono, fontSize: 17, color: tier.color, fontWeight: 700,
-                boxShadow: `0 0 20px ${tier.color}20`,
+                fontFamily: font.mono, fontSize: 17, color: skin.avatarBorder || tier.color, fontWeight: 700,
+                boxShadow: `0 0 20px ${(skin.avatarBorder || tier.color)}20`,
               }}>{profile?.display_name?.[0]?.toUpperCase() ?? '?'}</div>
 
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                  <div style={{ fontFamily: font.sans, fontSize: 14, fontWeight: 700, color: c.text, lineHeight: 1 }}>
+                  <div style={{ fontFamily: font.sans, fontSize: 14, fontWeight: 700, color: skin.textPrimary || c.text, lineHeight: 1 }}>
                     {profileLoading ? '...' : profile?.display_name ?? 'Trader'}
                   </div>
                   <div style={{
-                    fontFamily: font.mono, fontSize: 9, fontWeight: 700, color: tier.color,
+                    fontFamily: font.mono, fontSize: 9, fontWeight: 700, color: skin.accent || tier.color,
                     letterSpacing: '.06em',
                     display: 'inline-block', padding: '1px 6px',
-                    background: `${tier.color}12`, border: `1px solid ${tier.color}25`, borderRadius: 3,
+                    background: `${(skin.accent || tier.color)}12`, border: `1px solid ${(skin.accent || tier.color)}25`, borderRadius: 3,
                   }}>{tier.name}</div>
                 </div>
               </div>
 
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontFamily: font.mono, fontSize: 36, fontWeight: 700, color: tier.color, lineHeight: 1, letterSpacing: '-.02em', animation: 'countUp .5s ease both', animationDelay: '.2s' }}>{btr}</div>
-                <div style={{ fontFamily: font.sans, fontSize: 8, fontWeight: 600, color: c.text4, letterSpacing: '.1em', marginTop: 2 }}>TRADER RANK</div>
+                <div style={{ fontFamily: font.mono, fontSize: 36, fontWeight: 700, color: skin.accent || tier.color, lineHeight: 1, letterSpacing: '-.02em', animation: 'countUp .5s ease both', animationDelay: '.2s' }}>{btr}</div>
+                <div style={{ fontFamily: font.sans, fontSize: 8, fontWeight: 600, color: skin.textSecondary || c.text4, letterSpacing: '.1em', marginTop: 2 }}>TRADER RANK</div>
               </div>
             </div>
+
+            {/* Skin Picker */}
+            {showSkinPicker && (
+              <div style={{ marginBottom: 12, padding: 10, background: 'rgba(0,0,0,0.3)', borderRadius: 8, border: `1px solid ${c.border}` }}>
+                <div style={{ fontFamily: font.sans, fontSize: 10, fontWeight: 600, color: c.text3, marginBottom: 8, letterSpacing: '.06em' }}>CHOOSE SKIN</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+                  {CARD_SKINS.map(s => {
+                    const owned = s.price === 0 || (profile?.credits ?? 0) >= s.price
+                    const active = selectedSkin === s.id
+                    return (
+                      <button key={s.id} onClick={() => { if (owned) applySkin(s.id) }}
+                        style={{
+                          padding: '6px 4px', borderRadius: 6, cursor: owned ? 'pointer' : 'not-allowed',
+                          background: s.preview, border: active ? `2px solid ${s.accent || '#FFF'}` : '2px solid transparent',
+                          opacity: owned ? 1 : 0.4, transition: 'all 150ms', textAlign: 'center',
+                          boxShadow: active ? `0 0 12px ${s.accent || '#FFF'}40` : 'none',
+                        }}>
+                        <div style={{ fontFamily: font.sans, fontSize: 9, fontWeight: 700, color: '#FFF', textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>{s.name}</div>
+                        {s.price > 0 && !active && <div style={{ fontFamily: font.mono, fontSize: 8, color: owned ? '#00FF88' : '#FF3333', marginTop: 2 }}>{owned ? '✓' : `${s.price}CR`}</div>}
+                        {active && <div style={{ fontFamily: font.mono, fontSize: 8, color: '#F5A0D0', marginTop: 2 }}>ACTIVE</div>}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Row 2: Progress bar */}
             <div style={{ marginBottom: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                <span style={{ fontFamily: font.mono, fontSize: 9, color: c.text3 }}>{tier.name} · {btr}</span>
-                <span style={{ fontFamily: font.mono, fontSize: 9, color: tier.color }}>
+                <span style={{ fontFamily: font.mono, fontSize: 9, color: skin.textSecondary || c.text3 }}>{tier.name} · {btr}</span>
+                <span style={{ fontFamily: font.mono, fontSize: 9, color: skin.accent || tier.color }}>
                   {tier.next - btr} pts to {btrTier(tier.next).name}
                 </span>
               </div>
-              <div style={{ height: 5, background: c.hover, borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{ height: 5, background: skin.barBg || c.hover, borderRadius: 3, overflow: 'hidden' }}>
                 <div style={{
                   width: `${btrProg}%`, height: '100%', borderRadius: 3,
-                  background: `linear-gradient(90deg, ${tier.color}, ${tier.color}CC)`,
+                  background: skin.barFill || `linear-gradient(90deg, ${tier.color}, ${tier.color}CC)`,
                   transition: 'width .6s cubic-bezier(.25,.1,.25,1)',
-                  boxShadow: `0 0 8px ${tier.color}40`,
+                  boxShadow: `0 0 8px ${(skin.accent || tier.color)}40`,
                 }} />
               </div>
             </div>
@@ -589,7 +717,7 @@ export default function DashboardPage() {
                 { name: 'SOCIAL', weight: 10, col: c.red },
               ].map(p => (
                 <div key={p.name} style={{
-                  background: `${p.col}08`, border: `1px solid ${p.col}18`, borderRadius: 4,
+                  background: skin.pillarBg || `${p.col}08`, border: `1px solid ${p.col}18`, borderRadius: 4,
                   padding: '5px 4px', textAlign: 'center',
                 }}>
                   <div style={{ fontFamily: font.mono, fontSize: 7, fontWeight: 700, color: `${p.col}AA`, letterSpacing: '.03em', marginBottom: 2 }}>{p.name}</div>
@@ -602,18 +730,18 @@ export default function DashboardPage() {
             </div>
 
             {/* Row 4: Stats — compact */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 1, background: c.border, borderRadius: 4, overflow: 'hidden' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 1, background: skin.id === 'default' ? c.border : 'rgba(255,255,255,0.05)', borderRadius: 4, overflow: 'hidden' }}>
               {[
                 { value: pnlPos ? `+${displayPnl >= 1000 ? `${(displayPnl/1000).toFixed(1)}K` : Math.round(displayPnl)}` : `${displayPnl <= -1000 ? `${(displayPnl/1000).toFixed(1)}K` : Math.round(displayPnl)}`, label: 'TOTAL P&L', color: pnlPos ? c.green : c.red },
-                { value: `${((winRate) * 100).toFixed(0)}%`, label: 'WIN RATE', color: winRate >= 0.5 ? c.green : c.text },
-                { value: `${pastBattles.length}`, label: 'BATTLES', color: c.text },
+                { value: `${((winRate) * 100).toFixed(0)}%`, label: 'WIN RATE', color: winRate >= 0.5 ? c.green : skin.textPrimary || c.text },
+                { value: `${pastBattles.length}`, label: 'BATTLES', color: skin.textPrimary || c.text },
                 { value: `${profile?.total_wins ?? 0}`, label: 'WINS', color: c.green },
-                { value: streak > 0 ? `${streak}` : '0', label: 'STREAK', color: streak >= 3 ? c.gold : streak > 0 ? '#FF8C00' : c.text4 },
-                { value: (profile?.best_return ?? 0) > 0 ? `+${(profile!.best_return).toFixed(0)}%` : '-', label: 'BEST', color: (profile?.best_return ?? 0) > 0 ? c.green : c.text4 },
+                { value: streak > 0 ? `${streak}` : '0', label: 'STREAK', color: streak >= 3 ? c.gold : streak > 0 ? '#FF8C00' : skin.textSecondary || c.text4 },
+                { value: (profile?.best_return ?? 0) > 0 ? `+${(profile!.best_return).toFixed(0)}%` : '-', label: 'BEST', color: (profile?.best_return ?? 0) > 0 ? c.green : skin.textSecondary || c.text4 },
               ].map(s => (
-                <div key={s.label} style={{ background: c.surface, padding: '6px 0', textAlign: 'center' }}>
+                <div key={s.label} style={{ background: skin.statBg || c.surface, padding: '6px 0', textAlign: 'center' }}>
                   <div style={{ fontFamily: font.mono, fontSize: 13, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</div>
-                  <div style={{ fontFamily: font.sans, fontSize: 7, fontWeight: 600, color: c.text4, letterSpacing: '.06em', marginTop: 2 }}>{s.label}</div>
+                  <div style={{ fontFamily: font.sans, fontSize: 7, fontWeight: 600, color: skin.textSecondary || c.text4, letterSpacing: '.06em', marginTop: 2 }}>{s.label}</div>
                 </div>
               ))}
             </div>
