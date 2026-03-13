@@ -96,24 +96,28 @@ export async function POST(
     const standings = await getStandings(lobbyId, round.id, startingBalance);
     const alive = standings.filter(s => !s.is_eliminated);
 
-    if (alive.length <= 1) {
-      // Game over
+    const maxRounds = Number(config.num_rounds ?? 0);
+    const reachedMaxRounds = maxRounds > 0 && round.round_number >= maxRounds;
+
+    if (alive.length <= 1 || reachedMaxRounds) {
+      // Game over — either one player left, or reached max rounds
       gameOver = true;
       await sb.from('lobbies').update({ status: 'completed' }).eq('id', lobbyId);
 
-      if (alive.length === 1) {
-        winner = { name: alive[0].name, return_pct: alive[0].returnPct };
-        // Update winner profile stats
-        const { data: winTrader } = await sb.from('traders').select('profile_id').eq('id', alive[0].id).single();
+      // Winner is top of standings
+      const topPlayer = alive[0] ?? standings[0];
+      if (topPlayer) {
+        winner = { name: topPlayer.name, return_pct: topPlayer.returnPct };
+        const { data: winTrader } = await sb.from('traders').select('profile_id').eq('id', topPlayer.id).single();
         if (winTrader?.profile_id) {
           const { data: prof } = await sb.from('profiles').select('total_wins').eq('id', winTrader.profile_id).single();
           if (prof) await sb.from('profiles').update({ total_wins: (prof.total_wins ?? 0) + 1 }).eq('id', winTrader.profile_id);
         }
       }
     } else {
-      // Eliminate bottom X%
-      const elimCount = Math.max(1, Math.floor(alive.length * eliminationPct / 100));
-      const toElim = alive.slice(-elimCount);
+      // Eliminate bottom X% (skip if elimination_pct is 0)
+      const elimCount = eliminationPct > 0 ? Math.max(1, Math.floor(alive.length * eliminationPct / 100)) : 0;
+      const toElim = elimCount > 0 ? alive.slice(-elimCount) : [];
 
       for (const t of toElim) {
         await sb.from('traders').update({

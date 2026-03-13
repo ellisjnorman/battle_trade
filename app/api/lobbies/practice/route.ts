@@ -52,15 +52,23 @@ async function insertTrader(
   return { data: null, error: 'All trader insert attempts failed', errors };
 }
 
+// Game modes — scoring and rule variations
+const GAME_MODES: Record<string, { label: string; scoring_mode: string; elimination_pct_override?: number; desc: string }> = {
+  classic:      { label: 'Classic', scoring_mode: 'best_round', desc: 'Best single-round return wins' },
+  elimination:  { label: 'Elimination', scoring_mode: 'best_round', elimination_pct_override: 50, desc: 'Bottom 50% eliminated each round' },
+  cumulative:   { label: 'Marathon', scoring_mode: 'cumulative', desc: 'Total return across all rounds' },
+  last_round:   { label: 'Final Round', scoring_mode: 'last_round', desc: 'Only your last round counts' },
+};
+
 /**
  * POST /api/lobbies/practice
  * Creates a practice lobby with NPC bot traders + auto-admin.
- * Body: { profile_id, display_name, bot_count?: number, difficulty?: string }
+ * Body: { profile_id, display_name, bot_count?, difficulty?, num_rounds?, round_duration?, game_mode? }
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { profile_id, display_name, bot_count: rawBotCount, difficulty: rawDifficulty } = body;
+    const { profile_id, display_name, bot_count: rawBotCount, difficulty: rawDifficulty, num_rounds: rawNumRounds, round_duration: rawRoundDuration, game_mode: rawGameMode } = body;
 
     if (!profile_id || !display_name) {
       return NextResponse.json({ error: 'profile_id and display_name required' }, { status: 400 });
@@ -69,6 +77,10 @@ export async function POST(request: NextRequest) {
     const difficulty = rawDifficulty && DIFFICULTY_PRESETS[rawDifficulty] ? rawDifficulty : 'medium';
     const preset = DIFFICULTY_PRESETS[difficulty];
     const botCount = rawBotCount != null ? Math.min(Math.max(rawBotCount, 1), 7) : preset.bot_count;
+    const numRounds = rawNumRounds != null ? Math.min(Math.max(Math.round(rawNumRounds), 1), 10) : 1;
+    const roundDuration = rawRoundDuration != null ? Math.min(Math.max(Math.round(rawRoundDuration), 30), 600) : preset.round_duration;
+    const gameMode = rawGameMode && GAME_MODES[rawGameMode] ? rawGameMode : 'classic';
+    const gameModeConfig = GAME_MODES[gameMode];
     const sb = getServerSupabase();
     const inviteCode = crypto.randomBytes(4).toString('base64url').slice(0, 6).toUpperCase();
 
@@ -85,18 +97,21 @@ export async function POST(request: NextRequest) {
       status: 'waiting',
       config: {
         starting_balance: preset.starting_balance,
-        round_duration_seconds: preset.round_duration,
-        lobby_duration_minutes: 10,
+        round_duration_seconds: roundDuration,
+        lobby_duration_minutes: Math.max(10, Math.ceil(numRounds * roundDuration / 60) + 2),
+        num_rounds: numRounds,
         entry_fee: 0,
-        scoring_mode: 'best_round',
+        scoring_mode: gameModeConfig.scoring_mode,
+        game_mode: gameMode,
         volatility_engine: 'algorithmic',
         credit_source: 'sponsor_funded',
         leverage_tiers: preset.leverage_tiers,
         is_practice: true,
         auto_admin: true,
         difficulty,
+        elimination_pct: gameModeConfig.elimination_pct_override ?? preset.elimination_pct,
         rank_multiplier: difficulty === 'easy' ? 0.5 : difficulty === 'medium' ? 0.75 : difficulty === 'hard' ? 1.0 : 1.25,
-        practice_rank_cap: 100, // Cannot break into top 100 with practice-only
+        practice_rank_cap: 100,
       },
     };
 
@@ -188,9 +203,9 @@ export async function POST(request: NextRequest) {
         round_number: 1,
         status: 'active',
         started_at: new Date().toISOString(),
-        duration_seconds: preset.round_duration,
+        duration_seconds: roundDuration,
         starting_balance: preset.starting_balance,
-        elimination_pct: preset.elimination_pct,
+        elimination_pct: gameModeConfig.elimination_pct_override ?? preset.elimination_pct,
       };
       let { error: roundErr } = await sb.from('rounds').insert({ ...roundRow, event_id: lobbyId });
       if (roundErr) {

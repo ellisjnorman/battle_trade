@@ -197,6 +197,9 @@ export default function DashboardPage() {
   const [showPracticeModal, setShowPracticeModal] = useState(false)
   const [practiceDifficulty, setPracticeDifficulty] = useState<string>('medium')
   const [practiceBotCount, setPracticeBotCount] = useState(4)
+  const [practiceNumRounds, setPracticeNumRounds] = useState(1)
+  const [practiceRoundDuration, setPracticeRoundDuration] = useState(120)
+  const [practiceGameMode, setPracticeGameMode] = useState('classic')
   const [saving, setSaving] = useState(false)
   const [selectedLobby, setSelectedLobby] = useState<string | null>(null)
   const [editingLobby, setEditingLobby] = useState<string | null>(null)
@@ -334,7 +337,7 @@ export default function DashboardPage() {
   }, [authReady, lbPeriod])
 
   // ─── Play Actions ─────────────────────────────────────────
-  const play = useCallback(async (mode: string, opts?: { difficulty?: string; botCount?: number }) => {
+  const play = useCallback(async (mode: string, opts?: { difficulty?: string; botCount?: number; numRounds?: number; roundDuration?: number; gameMode?: string }) => {
     setPlayLoading(mode)
     let pid = localStorage.getItem('bt_profile_id')
     if (!pid) {
@@ -350,6 +353,9 @@ export default function DashboardPage() {
             profile_id: pid, display_name: name,
             bot_count: opts?.botCount ?? practiceBotCount,
             difficulty: opts?.difficulty ?? practiceDifficulty,
+            num_rounds: opts?.numRounds ?? practiceNumRounds,
+            round_duration: opts?.roundDuration ?? practiceRoundDuration,
+            game_mode: opts?.gameMode ?? practiceGameMode,
           }),
         })
         if (r.ok) { const d = await r.json(); router.push(`/lobby/${d.lobby_id}/trade?code=${d.code}`) }
@@ -369,7 +375,7 @@ export default function DashboardPage() {
         router.push('/create')
       }
     } catch {} finally { setPlayLoading(null) }
-  }, [router, profile, practiceDifficulty, practiceBotCount])
+  }, [router, profile, practiceDifficulty, practiceBotCount, practiceNumRounds, practiceRoundDuration, practiceGameMode])
 
   const deleteLobby = useCallback(async (lobbyId: string) => {
     setSaving(true)
@@ -1367,7 +1373,7 @@ export default function DashboardPage() {
               ] as const).map(d => (
                 <button
                   key={d.id}
-                  onClick={() => { setPracticeDifficulty(d.id); setPracticeBotCount(d.id === 'easy' ? 2 : d.id === 'medium' ? 4 : d.id === 'hard' ? 6 : 7) }}
+                  onClick={() => { setPracticeDifficulty(d.id); setPracticeBotCount(d.id === 'easy' ? 2 : d.id === 'medium' ? 4 : d.id === 'hard' ? 6 : 7); setPracticeRoundDuration(d.id === 'easy' ? 180 : d.id === 'medium' ? 120 : d.id === 'hard' ? 60 : 45) }}
                   style={{
                     padding: '16px 14px', textAlign: 'left', cursor: 'pointer', transition: 'all .15s',
                     border: practiceDifficulty === d.id ? `2px solid ${d.color}` : `1px solid ${c.border}`,
@@ -1393,6 +1399,75 @@ export default function DashboardPage() {
               ))}
             </div>
 
+            {/* Game Mode */}
+            <div style={{ marginBottom: 16 }}>
+              <span style={{ fontFamily: font.sans, fontSize: 12, fontWeight: 600, color: c.text2, display: 'block', marginBottom: 8 }}>Game Mode</span>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                {([
+                  { id: 'classic', label: 'Classic', desc: 'Best round wins', icon: '🏆' },
+                  { id: 'elimination', label: 'Elimination', desc: 'Bottom 50% cut each round', icon: '💀' },
+                  { id: 'cumulative', label: 'Marathon', desc: 'Total return across rounds', icon: '📊' },
+                  { id: 'last_round', label: 'Final Round', desc: 'Only last round counts', icon: '🎯' },
+                ] as const).map(gm => (
+                  <button
+                    key={gm.id}
+                    onClick={() => setPracticeGameMode(gm.id)}
+                    style={{
+                      padding: '10px 12px', textAlign: 'left', cursor: 'pointer', transition: 'all .15s',
+                      border: practiceGameMode === gm.id ? `2px solid ${c.pink}` : `1px solid ${c.border}`,
+                      borderRadius: radius.sm, background: practiceGameMode === gm.id ? `${c.pink}08` : c.surface,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                      <span style={{ fontSize: 14 }}>{gm.icon}</span>
+                      <span style={{ fontFamily: font.sans, fontSize: 13, fontWeight: 700, color: practiceGameMode === gm.id ? c.text : c.text2 }}>{gm.label}</span>
+                    </div>
+                    <div style={{ fontFamily: font.sans, fontSize: 10, color: c.text4 }}>{gm.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Rounds & Duration */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+              {/* Round count */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontFamily: font.sans, fontSize: 12, fontWeight: 600, color: c.text2 }}>Rounds</span>
+                  <span style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 700, color: c.text }}>{practiceNumRounds}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {[1, 3, 5, 10].map(n => (
+                    <button key={n} onClick={() => setPracticeNumRounds(n)} style={{
+                      flex: 1, padding: '8px 0', fontFamily: font.mono, fontSize: 13, fontWeight: 700,
+                      color: practiceNumRounds === n ? c.bg : c.text3,
+                      background: practiceNumRounds === n ? c.pink : c.surface,
+                      border: practiceNumRounds === n ? 'none' : `1px solid ${c.border}`,
+                      borderRadius: radius.sm, cursor: 'pointer', transition: 'all .15s',
+                    }}>{n}</button>
+                  ))}
+                </div>
+              </div>
+              {/* Round duration */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontFamily: font.sans, fontSize: 12, fontWeight: 600, color: c.text2 }}>Duration</span>
+                  <span style={{ fontFamily: font.mono, fontSize: 14, fontWeight: 700, color: c.text }}>{practiceRoundDuration >= 60 ? `${practiceRoundDuration / 60}m` : `${practiceRoundDuration}s`}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {[{ label: '45s', val: 45 }, { label: '1m', val: 60 }, { label: '2m', val: 120 }, { label: '5m', val: 300 }].map(d => (
+                    <button key={d.val} onClick={() => setPracticeRoundDuration(d.val)} style={{
+                      flex: 1, padding: '8px 0', fontFamily: font.mono, fontSize: 13, fontWeight: 700,
+                      color: practiceRoundDuration === d.val ? c.bg : c.text3,
+                      background: practiceRoundDuration === d.val ? c.pink : c.surface,
+                      border: practiceRoundDuration === d.val ? 'none' : `1px solid ${c.border}`,
+                      borderRadius: radius.sm, cursor: 'pointer', transition: 'all .15s',
+                    }}>{d.label}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             {/* Bot count slider */}
             <div style={{ marginBottom: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -1413,7 +1488,7 @@ export default function DashboardPage() {
             {/* Launch button */}
             <button
               className={playLoading === 'practice' ? 'loading' : ''}
-              onClick={() => { setShowPracticeModal(false); play('practice', { difficulty: practiceDifficulty, botCount: practiceBotCount }) }}
+              onClick={() => { setShowPracticeModal(false); play('practice', { difficulty: practiceDifficulty, botCount: practiceBotCount, numRounds: practiceNumRounds, roundDuration: practiceRoundDuration, gameMode: practiceGameMode }) }}
               disabled={!!playLoading}
               style={{
                 width: '100%', padding: '14px 0', fontFamily: font.display, fontSize: 20,

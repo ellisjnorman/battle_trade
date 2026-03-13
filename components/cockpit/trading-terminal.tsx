@@ -1906,31 +1906,115 @@ export default function TradingTerminal() {
 
             {/* CENTER: Ticker + Chart + Order Book + Full Position Strip */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: '#0A0A0A', overflow: 'hidden' }}>
-              {/* Desktop ticker bar */}
-              <div className="hidden md:flex" style={{ alignItems: 'center', minHeight: 48, borderBottom: '1px solid #1A1A1A', background: '#0D0D0D', flexShrink: 0, padding: '0 4px' }}>
-                <button
-                  onClick={() => { setShowMoreAssets(!showMoreAssets); setAssetSearch(''); setAssetTab('all'); setTimeout(() => assetSearchRef.current?.focus(), 50); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', minHeight: 48, ...B, fontSize: 20, color: '#FFF', background: showMoreAssets ? 'rgba(245,160,208,0.06)' : 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }}
-                >
-                  <span style={{ width: 10, height: 10, background: '#F5A0D0', display: 'block', boxShadow: '0 0 8px rgba(245,160,208,0.5)', flexShrink: 0, borderRadius: 2 }} />
-                  <span style={{ ...B, fontSize: 20, color: '#FFF' }}>{selectedSymbol}</span>
-                  <span style={{ ...M, fontSize: 16, color: '#F5A0D0' }}>${selectedPrice > 100 ? selectedPrice.toLocaleString(undefined, { maximumFractionDigits: 2 }) : fmtP(selectedPrice)}</span>
-                  <span style={{ ...S, fontSize: 13, color: '#555', transition: 'transform 150ms', transform: showMoreAssets ? 'rotate(180deg)' : 'none' }}>▼</span>
-                </button>
-                <div style={{ flex: 1, display: 'flex', gap: 2, overflowX: 'auto', paddingRight: 8, minWidth: 0, scrollbarWidth: 'none' }}>
-                  {CORE_ASSETS.filter(s => s !== selectedSymbol).map(sym => {
-                    const p = prices[`${sym}USDT`] ?? prices[`${sym}USD`] ?? prices[sym] ?? 0;
-                    const md = marketData[sym];
-                    const chg = md?.change24h;
-                    return (
-                      <button key={sym} onClick={() => setSelectedSymbol(sym)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0, minHeight: 42 }}>
-                        <span style={{ ...B, fontSize: 14, color: '#888' }}>{sym}</span>
-                        {p > 0 && <span style={{ ...M, fontSize: 12, color: '#666' }}>${p > 100 ? p.toLocaleString(undefined, { maximumFractionDigits: 0 }) : fmtP(p)}</span>}
-                        {chg !== null && chg !== undefined && <span style={{ ...M, fontSize: 11, color: chg >= 0 ? '#00FF88' : '#FF3333' }}>{chg >= 0 ? '+' : ''}{chg.toFixed(1)}%</span>}
-                      </button>
-                    );
-                  })}
+              {/* Desktop ticker bar + dropdown */}
+              <div ref={assetDropdownRef} className="hidden md:flex" style={{ position: 'relative', flexDirection: 'column', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', minHeight: 48, borderBottom: '1px solid #1A1A1A', background: '#0D0D0D', padding: '0 4px' }}>
+                  <button
+                    onClick={() => { setShowMoreAssets(!showMoreAssets); setAssetSearch(''); setAssetTab('all'); setTimeout(() => assetSearchRef.current?.focus(), 50); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', minHeight: 48, ...B, fontSize: 20, color: '#FFF', background: showMoreAssets ? 'rgba(245,160,208,0.06)' : 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    <span style={{ width: 10, height: 10, background: '#F5A0D0', display: 'block', boxShadow: '0 0 8px rgba(245,160,208,0.5)', flexShrink: 0, borderRadius: 2 }} />
+                    <span style={{ ...B, fontSize: 20, color: '#FFF' }}>{selectedSymbol}</span>
+                    <span style={{ ...M, fontSize: 16, color: '#F5A0D0' }}>${selectedPrice > 100 ? selectedPrice.toLocaleString(undefined, { maximumFractionDigits: 2 }) : fmtP(selectedPrice)}</span>
+                    <span style={{ ...S, fontSize: 13, color: '#555', transition: 'transform 150ms', transform: showMoreAssets ? 'rotate(180deg)' : 'none' }}>▼</span>
+                  </button>
+                  <div style={{ flex: 1, display: 'flex', gap: 2, overflowX: 'auto', paddingRight: 8, minWidth: 0, scrollbarWidth: 'none' }}>
+                    {CORE_ASSETS.filter(s => s !== selectedSymbol).map(sym => {
+                      const p = prices[`${sym}USDT`] ?? prices[`${sym}USD`] ?? prices[sym] ?? 0;
+                      const md = marketData[sym];
+                      const chg = md?.change24h;
+                      return (
+                        <button key={sym} onClick={() => setSelectedSymbol(sym)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0, minHeight: 42 }}>
+                          <span style={{ ...B, fontSize: 14, color: '#888' }}>{sym}</span>
+                          {p > 0 && <span style={{ ...M, fontSize: 12, color: '#666' }}>${p > 100 ? p.toLocaleString(undefined, { maximumFractionDigits: 0 }) : fmtP(p)}</span>}
+                          {chg !== null && chg !== undefined && <span style={{ ...M, fontSize: 11, color: chg >= 0 ? '#00FF88' : '#FF3333' }}>{chg >= 0 ? '+' : ''}{chg.toFixed(1)}%</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
+                {/* Desktop asset dropdown panel */}
+                {showMoreAssets && (
+                  <>
+                    <div onClick={() => setShowMoreAssets(false)} style={{ position: 'fixed', inset: 0, zIndex: 49 }} />
+                    <div style={{ position: 'absolute', top: '100%', left: 0, width: 480, zIndex: 50, maxHeight: 520, display: 'flex', flexDirection: 'column', background: '#0A0A0A', border: '1px solid #333', borderTop: '2px solid #F5A0D0', boxShadow: '0 12px 48px rgba(0,0,0,0.9)' }}>
+                      <div style={{ padding: '8px 12px', borderBottom: '1px solid #1A1A1A', flexShrink: 0 }}>
+                        <input
+                          ref={assetSearchRef}
+                          value={assetSearch}
+                          onChange={(e) => setAssetSearch(e.target.value.toUpperCase())}
+                          placeholder="SEARCH ASSETS..."
+                          style={{ width: '100%', ...M, fontSize: 16, color: '#FFF', background: '#111', border: '1px solid #222', padding: '10px 12px', minHeight: 44, outline: 'none' }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') setShowMoreAssets(false);
+                            if (e.key === 'Enter') {
+                              const match = allSymbols.find(s => s.startsWith(assetSearch));
+                              if (match) { setSelectedSymbol(match); setShowMoreAssets(false); }
+                            }
+                          }}
+                        />
+                      </div>
+                      {!assetSearch && (
+                        <div style={{ display: 'flex', borderBottom: '1px solid #1A1A1A', flexShrink: 0 }}>
+                          <button onClick={() => setAssetTab('all')} style={{ flex: 1, padding: '8px 0', ...B, fontSize: 13, color: assetTab === 'all' ? '#0A0A0A' : '#666', background: assetTab === 'all' ? '#F5A0D0' : 'transparent', border: 'none', borderBottom: assetTab === 'all' ? '2px solid #F5A0D0' : '2px solid transparent', cursor: 'pointer' }}>ALL</button>
+                          {MARKET_TYPES.map(mt => (
+                            <button key={mt.key} onClick={() => setAssetTab(mt.key)} style={{ flex: 1, padding: '8px 0', ...B, fontSize: 13, color: assetTab === mt.key ? '#0A0A0A' : '#666', background: assetTab === mt.key ? '#F5A0D0' : 'transparent', border: 'none', borderBottom: assetTab === mt.key ? '2px solid #F5A0D0' : '2px solid transparent', cursor: 'pointer' }}>{mt.label}</button>
+                          ))}
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', padding: '4px 12px', borderBottom: '1px solid #111', flexShrink: 0 }}>
+                        <span style={{ ...S, fontSize: 9, color: '#444', flex: 1 }}>ASSET</span>
+                        <span style={{ ...S, fontSize: 9, color: '#444', width: 80, textAlign: 'right' }}>PRICE</span>
+                        <span style={{ ...S, fontSize: 9, color: '#444', width: 52, textAlign: 'right' }}>24H</span>
+                        <span style={{ ...S, fontSize: 9, color: '#444', width: 52, textAlign: 'right' }}>VOL</span>
+                      </div>
+                      <div style={{ flex: 1, overflowY: 'auto' }}>
+                        {(() => {
+                          let items: string[];
+                          if (assetSearch) {
+                            items = allSymbols.filter(s => s.includes(assetSearch) || (PYTH_FEEDS[`${s}USD`]?.label ?? '').toUpperCase().includes(assetSearch));
+                          } else if (assetTab === 'all') {
+                            items = allSymbols;
+                          } else {
+                            items = _fbm[assetTab as keyof typeof _fbm]?.map(f => f.symbol).filter(isSymbolAllowed) ?? [];
+                          }
+                          if (items.length === 0) return <div style={{ padding: 24, textAlign: 'center', ...M, fontSize: 12, color: '#444' }}>NO ASSETS FOUND</div>;
+                          return items.map(sym => {
+                            const p = prices[`${sym}USDT`] ?? prices[`${sym}USD`] ?? 0;
+                            const feed = PYTH_FEEDS[`${sym}USD`];
+                            const md = marketData[sym];
+                            const chg = md?.change24h;
+                            const vol = md?.volume24h;
+                            const isSel = sym === selectedSymbol;
+                            const chgColor = chg === null || chg === undefined ? '#444' : chg >= 0 ? '#00FF88' : '#FF3333';
+                            const fmtVol = (v: number) => v >= 1e9 ? `${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `${(v / 1e6).toFixed(0)}M` : v >= 1e3 ? `${(v / 1e3).toFixed(0)}K` : v.toFixed(0);
+                            return (
+                              <button key={sym} onClick={() => { setSelectedSymbol(sym); setShowMoreAssets(false); setAssetSearch(''); }}
+                                style={{ width: '100%', display: 'flex', alignItems: 'center', padding: '7px 12px', background: isSel ? 'rgba(245,160,208,0.08)' : 'transparent', border: 'none', borderBottom: '1px solid #111', borderLeft: isSel ? '3px solid #F5A0D0' : '3px solid transparent', cursor: 'pointer', transition: 'background 100ms' }}>
+                                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                                  <span style={{ width: 6, height: 6, background: isSel ? '#F5A0D0' : feed?.market === 'rwa' ? '#FFD700' : '#555', flexShrink: 0 }} />
+                                  <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                    <span style={{ ...B, fontSize: 14, color: isSel ? '#F5A0D0' : '#FFF', lineHeight: 1 }}>{sym}</span>
+                                    {feed && <span style={{ ...S, fontSize: 9, color: '#444', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>{feed.label}</span>}
+                                  </div>
+                                </div>
+                                <span style={{ ...M, fontSize: 11, color: isSel ? '#F5A0D0' : '#888', width: 80, textAlign: 'right', flexShrink: 0 }}>
+                                  {p > 0 ? `$${p > 100 ? p.toLocaleString(undefined, { maximumFractionDigits: 2 }) : p < 0.01 ? p.toFixed(6) : p.toFixed(2)}` : '—'}
+                                </span>
+                                <span style={{ ...M, fontSize: 10, fontWeight: 700, color: chgColor, width: 52, textAlign: 'right', flexShrink: 0 }}>
+                                  {chg !== null && chg !== undefined ? `${chg >= 0 ? '+' : ''}${chg.toFixed(1)}%` : '—'}
+                                </span>
+                                <span style={{ ...M, fontSize: 9, color: '#555', width: 52, textAlign: 'right', flexShrink: 0 }}>
+                                  {vol ? `$${fmtVol(vol)}` : '—'}
+                                </span>
+                              </button>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
                 <div style={{ flex: 1 }}>{priceHero}</div>
