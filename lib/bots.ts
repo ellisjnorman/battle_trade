@@ -122,11 +122,19 @@ export async function tickBots(lobbyId: string, roundId: string): Promise<void> 
     .single();
 
   const config = lobby?.config as Record<string, unknown> | null;
-  const availableSymbols = (config?.available_symbols as string[]) ?? Object.keys(priceMap);
+  // Only trade major liquid assets (bots should not trade obscure symbols)
+  const MAJOR_SYMBOLS = ['BTC', 'ETH', 'SOL', 'DOGE', 'AVAX', 'LINK', 'XRP', 'ADA', 'DOT', 'UNI', 'AAVE', 'ARB', 'OP'];
+  const MAJOR_USDT = MAJOR_SYMBOLS.map(s => `${s}USDT`);
+  const configSymbols = config?.available_symbols as string[] | undefined;
+  const availableSymbols = configSymbols?.length
+    ? configSymbols.filter(s => priceMap[s] != null)
+    : [...MAJOR_SYMBOLS, ...MAJOR_USDT].filter(s => priceMap[s] != null);
   const leverageTiers = (config?.leverage_tiers as number[]) ?? [5, 10, 20];
 
   // Filter to symbols that have prices
-  const tradableSymbols = availableSymbols.filter(s => priceMap[s] != null);
+  const tradableSymbols = availableSymbols.length > 0
+    ? availableSymbols
+    : Object.keys(priceMap).filter(s => MAJOR_SYMBOLS.includes(s) || MAJOR_USDT.includes(s));
   if (tradableSymbols.length === 0) return;
 
   // Process each bot concurrently

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSupabase } from '@/lib/supabase-server';
 import { calcUnrealizedPnl } from '@/lib/pnl';
+import { startPriceFeed } from '@/lib/prices';
 import type { Position } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -23,6 +24,9 @@ export async function POST(
 ) {
   const { id: lobbyId } = await params;
   const sb = getServerSupabase();
+
+  // Ensure real-time Pyth price feed is running (idempotent, persists in warm instances)
+  startPriceFeed();
 
   // Load lobby
   const { data: lobby } = await sb
@@ -147,8 +151,8 @@ export async function POST(
     try {
       const { data: prices } = await sb.from('prices').select('symbol, price');
       for (const p of prices ?? []) {
-        // Random walk: +-0.3% per tick
-        const drift = 1 + (Math.random() - 0.5) * 0.006;
+        // Random walk: +-1.5% per tick for visible PnL in practice
+        const drift = 1 + (Math.random() - 0.5) * 0.03;
         const newPrice = Math.round(p.price * drift * 100) / 100;
         await sb.from('prices').update({ price: newPrice, updated_at: new Date().toISOString() }).eq('symbol', p.symbol);
       }

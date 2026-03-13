@@ -38,7 +38,7 @@ const AVATARS = [
   '🎯', '💎', '🔥', '⚡', '🚀', '💀', '👑', '🎰',
 ]
 
-const TABS = ['overview', 'wallets', 'history', 'settings'] as const
+const TABS = ['overview', 'customize', 'wallets', 'history', 'settings'] as const
 type Tab = typeof TABS[number]
 
 const TIER_LABELS: Record<string, { label: string; color: string }> = {
@@ -50,6 +50,26 @@ const TIER_LABELS: Record<string, { label: string; color: string }> = {
   degen_king: { label: 'Degen King', color: c.tierDegen },
   legendary: { label: 'Legendary', color: c.tierLegend },
 }
+
+// ---------------------------------------------------------------------------
+// Card Skins
+// ---------------------------------------------------------------------------
+
+interface CardSkin {
+  id: string; name: string; price: number
+  accent: string; preview: string; desc: string
+}
+
+const CARD_SKINS: CardSkin[] = [
+  { id: 'default', name: 'Default', price: 0, accent: '#888', preview: 'linear-gradient(135deg, #1A1A1A, #111)', desc: 'Standard dark theme' },
+  { id: 'neon_pink', name: 'Neon Pink', price: 500, accent: '#F5A0D0', preview: 'linear-gradient(135deg, #F5A0D0, #1A0A14)', desc: 'Pink glow, pink accents' },
+  { id: 'cyber_green', name: 'Matrix', price: 500, accent: '#00FF88', preview: 'linear-gradient(135deg, #00FF88, #0A1A0A)', desc: 'Green hacker aesthetic' },
+  { id: 'gold_rush', name: 'Gold Rush', price: 1000, accent: '#FFD700', preview: 'linear-gradient(135deg, #FFD700, #1A1500)', desc: 'Gold luxury vibes' },
+  { id: 'ice_blue', name: 'Arctic', price: 1000, accent: '#00BFFF', preview: 'linear-gradient(135deg, #00BFFF, #0A0F1A)', desc: 'Ice blue frost' },
+  { id: 'blood_red', name: 'Bloodline', price: 1500, accent: '#FF3333', preview: 'linear-gradient(135deg, #FF3333, #1A0A0A)', desc: 'Crimson aggression' },
+  { id: 'purple_haze', name: 'Purple Haze', price: 1500, accent: '#A855F7', preview: 'linear-gradient(135deg, #A855F7, #140A1A)', desc: 'Purple gradient flex' },
+  { id: 'diamond', name: 'Diamond', price: 3000, accent: '#B9F2FF', preview: 'linear-gradient(135deg, #B9F2FF, #FFD700, #141418)', desc: 'Platinum shimmer — the ultimate flex' },
+]
 
 // ---------------------------------------------------------------------------
 // Component
@@ -74,7 +94,7 @@ export default function ProfilePage() {
   const [notifyChat, setNotifyChat] = useState(false)
   const [profilePublic, setProfilePublic] = useState(true)
   const [showStats, setShowStats] = useState(true)
-  const { user: privyUser, linkWallet, logout } = usePrivy()
+  const { user: privyUser, linkWallet, logout, getAccessToken } = usePrivy()
   const addToast = useToastStore((s) => s.addToast)
 
   const [profileId, setProfileId] = useState<string | null>(null)
@@ -155,9 +175,11 @@ export default function ProfilePage() {
     if (!profileId || !editName.trim()) return
     setSaving(true)
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      try { const token = await getAccessToken(); if (token) headers['Authorization'] = `Bearer ${token}`; } catch {}
       const res = await fetch(`/api/profile/${profileId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           display_name: editName.trim(),
           handle: editHandle.trim() || null,
@@ -191,25 +213,32 @@ export default function ProfilePage() {
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !profileId) return
+    if (file.size > 2 * 1024 * 1024) { addToast('Image must be under 2MB', 'error'); return }
     setUploadingAvatar(true)
     try {
-      const fd = new FormData()
-      fd.append('file', file)
-      const res = await fetch(`/api/profile/${profileId}/avatar`, { method: 'POST', body: fd })
-      if (!res.ok) {
-        const d = await res.json()
-        addToast(d.error ?? 'Upload failed', 'error')
-        return
-      }
-      const d = await res.json()
-      setEditAvatar(d.avatar_url)
-      setProfile(p => p ? { ...p, avatar_url: d.avatar_url } : p)
+      // Convert to data URL client-side, then save via PATCH
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+      setEditAvatar(dataUrl)
+      setProfile(p => p ? { ...p, avatar_url: dataUrl } : p)
+      // Auto-save avatar immediately
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      try { const token = await getAccessToken(); if (token) headers['Authorization'] = `Bearer ${token}`; } catch {}
+      const res = await fetch(`/api/profile/${profileId}`, {
+        method: 'PATCH', headers,
+        body: JSON.stringify({ avatar_url: dataUrl }),
+      })
+      if (!res.ok) { addToast('Failed to save avatar', 'error'); return }
       addToast('Profile picture updated', 'success')
     } catch {
       addToast('Upload failed', 'error')
     } finally {
       setUploadingAvatar(false)
-      e.target.value = '' // reset input
+      e.target.value = ''
     }
   }
 
@@ -272,11 +301,11 @@ export default function ProfilePage() {
               fontSize: 40, cursor: 'pointer', boxShadow: `0 0 20px ${tier.color}30`,
               transition: 'all 200ms', overflow: 'hidden',
             }}>
-              {editAvatar && editAvatar.startsWith('http') ? (
+              {editAvatar && (editAvatar.startsWith('http') || editAvatar.startsWith('data:image/')) ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={editAvatar} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
-                editAvatar || '🎮'
+                (editAvatar && editAvatar.length <= 4) ? editAvatar : '🎮'
               )}
             </div>
             {/* Upload photo button */}

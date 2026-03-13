@@ -626,12 +626,7 @@ export default function DashboardPage() {
             {/* Top accent line */}
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${skin.accent || tier.color}, ${(skin.accent || tier.color)}40 40%, transparent 80%)` }} />
 
-            {/* Skin customize button */}
-            <button onClick={() => setShowSkinPicker(!showSkinPicker)} style={{
-              position: 'absolute', top: 8, right: 10, fontFamily: font.mono, fontSize: 9, fontWeight: 600,
-              color: skin.accent || c.text4, background: 'rgba(255,255,255,0.04)', border: `1px solid ${skin.accent || c.border}40`,
-              padding: '2px 8px', borderRadius: 4, cursor: 'pointer', zIndex: 2, letterSpacing: '.04em',
-            }}>🎨 SKIN</button>
+            {/* Skin customize — now in profile page */}
 
             {/* Row 1: Avatar + Name + Score + Rank */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
