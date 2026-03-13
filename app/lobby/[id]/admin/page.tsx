@@ -238,6 +238,10 @@ export default function AdminPanel() {
   // Revenue
   const [revenue, setRevenue] = useState<{ predictionRake: number; entryRake: number; purchases: number; prizePool: number; prizeStatus: string } | null>(null);
 
+  // Lobby config (game mode, speed, etc.)
+  const [lobbyConfig, setLobbyConfig] = useState<Record<string, unknown>>({});
+  const [configSaving, setConfigSaving] = useState(false);
+
   // All lobbies (for lobby switcher)
   const [allLobbies, setAllLobbies] = useState<{ id: string; name: string; status: string; player_count: number }[]>([]);
 
@@ -292,6 +296,7 @@ export default function AdminPanel() {
     try {
       const data = await adminGet('status');
       if (data.round) setRound(data.round);
+      if (data.lobby?.config) setLobbyConfig(data.lobby.config as Record<string, unknown>);
       if (data.traders) {
         setTraders(data.traders);
         const names: Record<string, string> = {};
@@ -580,6 +585,26 @@ export default function AdminPanel() {
   // ---------------------------------------------------------------------------
   // Actions
   // ---------------------------------------------------------------------------
+
+  const updateLobbyConfig = async (updates: Record<string, unknown>) => {
+    setConfigSaving(true);
+    try {
+      const res = await fetch(`/api/lobby/${lobbyId}/manage`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: authToken },
+        body: JSON.stringify({ config: updates }),
+      });
+      const data = await res.json();
+      if (res.ok && data.lobby?.config) {
+        setLobbyConfig(data.lobby.config as Record<string, unknown>);
+      } else {
+        console.error('[admin] config update:', data.error);
+      }
+    } catch (err) {
+      console.error('[admin] config update:', err);
+    }
+    setConfigSaving(false);
+  };
 
   const handleStartRound = async () => {
     // If no round or round is completed/frozen, create via API then start
@@ -1339,6 +1364,90 @@ export default function AdminPanel() {
                     </button>
                   ))}
                 </div>
+              </div>
+            </div>
+
+            {/* ── LOBBY CONFIG — game mode, speed, features ── */}
+            <div style={{ borderTop: '1px solid #1A1A1A', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ fontFamily: sans, fontSize: 8, color: '#666', textTransform: 'uppercase', letterSpacing: '0.08em' }}>LOBBY CONFIG</div>
+              {/* Game Mode */}
+              <div>
+                <div style={{ fontFamily: sans, fontSize: 7, color: '#555', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>GAME MODE</div>
+                <div style={{ display: 'flex', gap: 2 }}>
+                  {([
+                    { key: 'paper', label: 'PAPER' },
+                    { key: 'classic', label: 'CLASSIC' },
+                    { key: 'elimination', label: 'ELIM' },
+                    { key: 'cumulative', label: 'MARATHON' },
+                    { key: 'last_round', label: 'FINAL' },
+                  ] as const).map(m => {
+                    const current = (lobbyConfig.game_mode as string) || 'classic';
+                    const active = current === m.key;
+                    return (
+                      <button key={m.key} disabled={configSaving} onClick={() => {
+                        const updates: Record<string, unknown> = { game_mode: m.key };
+                        if (m.key === 'paper') { updates.no_bots = true; updates.no_weapons = true; }
+                        else { updates.no_bots = false; updates.no_weapons = false; }
+                        if (m.key === 'elimination') updates.elimination_pct = 50;
+                        else if (m.key !== 'paper') updates.elimination_pct = 0;
+                        updateLobbyConfig(updates);
+                      }} style={{
+                        flex: 1, height: 26,
+                        background: active ? '#F5A0D0' : 'transparent',
+                        color: active ? '#0A0A0A' : '#555',
+                        border: `1px solid ${active ? '#F5A0D0' : '#222'}`,
+                        fontFamily: mono, fontSize: 9, fontWeight: 700, cursor: configSaving ? 'not-allowed' : 'pointer',
+                      }}>
+                        {m.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {/* Game Speed */}
+              <div>
+                <div style={{ fontFamily: sans, fontSize: 7, color: '#555', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>GAME SPEED</div>
+                <div style={{ display: 'flex', gap: 2 }}>
+                  {([
+                    { val: 1, label: '1x' },
+                    { val: 2, label: '2x' },
+                    { val: 5, label: '5x' },
+                  ] as const).map(s => {
+                    const current = Number(lobbyConfig.game_speed ?? 1);
+                    const active = current === s.val;
+                    return (
+                      <button key={s.val} disabled={configSaving} onClick={() => updateLobbyConfig({ game_speed: s.val })} style={{
+                        flex: 1, height: 26,
+                        background: active ? '#00FF88' : 'transparent',
+                        color: active ? '#0A0A0A' : '#555',
+                        border: `1px solid ${active ? '#00FF88' : '#222'}`,
+                        fontFamily: mono, fontSize: 10, fontWeight: 700, cursor: configSaving ? 'not-allowed' : 'pointer',
+                      }}>
+                        {s.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {/* Feature toggles */}
+              <div style={{ display: 'flex', gap: 4 }}>
+                {([
+                  { key: 'no_bots', label: 'NO BOTS', color: '#FF8C00' },
+                  { key: 'no_weapons', label: 'NO WEAPONS', color: '#FF8C00' },
+                ] as const).map(f => {
+                  const active = !!(lobbyConfig[f.key]);
+                  return (
+                    <button key={f.key} disabled={configSaving} onClick={() => updateLobbyConfig({ [f.key]: !active })} style={{
+                      flex: 1, height: 24,
+                      background: active ? 'rgba(255,140,0,0.15)' : 'transparent',
+                      color: active ? f.color : '#444',
+                      border: `1px solid ${active ? f.color : '#222'}`,
+                      fontFamily: mono, fontSize: 8, fontWeight: 700, cursor: configSaving ? 'not-allowed' : 'pointer',
+                    }}>
+                      {active ? '✓ ' : ''}{f.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

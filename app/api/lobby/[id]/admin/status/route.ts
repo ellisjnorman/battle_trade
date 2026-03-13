@@ -24,8 +24,15 @@ export async function GET(
     .limit(1)
     .single();
 
+  // Fetch lobby config for admin panel
+  const { data: lobbyRow } = await supabase
+    .from('lobbies')
+    .select('config, status, name')
+    .eq('id', lobbyId)
+    .single();
+
   if (!round) {
-    return NextResponse.json({ error: 'No rounds found' }, { status: 404 });
+    return NextResponse.json({ error: 'No rounds found', lobby: lobbyRow ? { config: lobbyRow.config, status: lobbyRow.status, name: lobbyRow.name } : null }, { status: 404 });
   }
 
   // Get traders, positions, prices, and profiles in parallel
@@ -154,5 +161,6 @@ export async function GET(
   return NextResponse.json({
     round,
     traders: [...traderDetails, ...eliminated],
+    lobby: lobbyRow ? { config: lobbyRow.config, status: lobbyRow.status, name: lobbyRow.name } : null,
   });
 }
