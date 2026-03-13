@@ -8,7 +8,7 @@ function makePosition(overrides: Partial<Position> = {}): Position {
     round_id: 'round-1',
     symbol: 'BTCUSDT',
     direction: 'long',
-    size: 1,
+    size: 1000,
     leverage: 1,
     entry_price: 50000,
     exit_price: null,
@@ -26,46 +26,58 @@ function makePosition(overrides: Partial<Position> = {}): Position {
 }
 
 describe('calcUnrealizedPnl', () => {
+  // Formula: direction * ((currentPrice - entryPrice) / entryPrice) * size_usd * leverage
+
   test('long position in profit', () => {
-    const pos = makePosition({ direction: 'long', size: 2, leverage: 1, entry_price: 50000 });
-    expect(calcUnrealizedPnl(pos, 55000)).toBe(10000);
+    // 10% price increase on $2000 position, 1x leverage = $200
+    const pos = makePosition({ direction: 'long', size: 2000, leverage: 1, entry_price: 50000 });
+    expect(calcUnrealizedPnl(pos, 55000)).toBe(200);
   });
 
   test('long position in loss', () => {
-    const pos = makePosition({ direction: 'long', size: 1, leverage: 1, entry_price: 50000 });
-    expect(calcUnrealizedPnl(pos, 45000)).toBe(-5000);
+    // 10% price decrease on $1000 position, 1x leverage = -$100
+    const pos = makePosition({ direction: 'long', size: 1000, leverage: 1, entry_price: 50000 });
+    expect(calcUnrealizedPnl(pos, 45000)).toBe(-100);
   });
 
   test('short position in profit', () => {
-    const pos = makePosition({ direction: 'short', size: 1, leverage: 1, entry_price: 50000 });
-    expect(calcUnrealizedPnl(pos, 45000)).toBe(5000);
+    // 10% price decrease on $1000 short, 1x leverage = $100
+    const pos = makePosition({ direction: 'short', size: 1000, leverage: 1, entry_price: 50000 });
+    expect(calcUnrealizedPnl(pos, 45000)).toBe(100);
   });
 
   test('short position in loss', () => {
-    const pos = makePosition({ direction: 'short', size: 1, leverage: 1, entry_price: 50000 });
-    expect(calcUnrealizedPnl(pos, 55000)).toBe(-5000);
+    // 10% price increase on $1000 short, 1x leverage = -$100
+    const pos = makePosition({ direction: 'short', size: 1000, leverage: 1, entry_price: 50000 });
+    expect(calcUnrealizedPnl(pos, 55000)).toBe(-100);
   });
 
   test('with leverage multiplier', () => {
-    const pos = makePosition({ direction: 'long', size: 1, leverage: 10, entry_price: 50000 });
-    expect(calcUnrealizedPnl(pos, 51000)).toBe(10000);
+    // 2% price increase on $1000 position, 10x leverage = $200
+    const pos = makePosition({ direction: 'long', size: 1000, leverage: 10, entry_price: 50000 });
+    expect(calcUnrealizedPnl(pos, 51000)).toBe(200);
   });
 
   test('max leverage (100x) edge case', () => {
-    const pos = makePosition({ direction: 'long', size: 0.1, leverage: 100, entry_price: 50000 });
-    // 1 * (51000 - 50000) * 0.1 * 100 = 10000
-    expect(calcUnrealizedPnl(pos, 51000)).toBe(10000);
+    // 2% price increase on $500 position, 100x leverage = $1000
+    const pos = makePosition({ direction: 'long', size: 500, leverage: 100, entry_price: 50000 });
+    expect(calcUnrealizedPnl(pos, 51000)).toBe(1000);
   });
 
   test('max leverage short in profit', () => {
-    const pos = makePosition({ direction: 'short', size: 0.5, leverage: 100, entry_price: 50000 });
-    // -1 * (49000 - 50000) * 0.5 * 100 = 50000
-    expect(calcUnrealizedPnl(pos, 49000)).toBe(50000);
+    // 2% price decrease on $500 short, 100x leverage = $1000
+    const pos = makePosition({ direction: 'short', size: 500, leverage: 100, entry_price: 50000 });
+    expect(calcUnrealizedPnl(pos, 49000)).toBe(1000);
   });
 
   test('zero price change returns zero', () => {
-    const pos = makePosition({ direction: 'long', size: 5, leverage: 20, entry_price: 50000 });
+    const pos = makePosition({ direction: 'long', size: 5000, leverage: 20, entry_price: 50000 });
     expect(calcUnrealizedPnl(pos, 50000)).toBe(0);
+  });
+
+  test('pending position returns zero', () => {
+    const pos = makePosition({ status: 'pending', size: 5000, leverage: 10, entry_price: 50000 });
+    expect(calcUnrealizedPnl(pos, 60000)).toBe(0);
   });
 });
 
@@ -80,32 +92,36 @@ describe('calcPortfolioValue', () => {
   });
 
   test('with open position unrealized PnL', () => {
-    const open = makePosition({ direction: 'long', size: 1, leverage: 1, entry_price: 50000 });
+    // 4% increase on $1000 position = $40 unrealized
+    const open = makePosition({ direction: 'long', size: 1000, leverage: 1, entry_price: 50000 });
     const prices = { BTCUSDT: 52000 };
-    expect(calcPortfolioValue(10000, [open], [], prices)).toBe(12000);
+    expect(calcPortfolioValue(10000, [open], [], prices)).toBe(10040);
   });
 
   test('with both open and closed positions', () => {
-    const open = makePosition({ direction: 'long', size: 1, leverage: 1, entry_price: 50000 });
+    // 6% increase on $1000 = $60 unrealized, -$1000 realized
+    const open = makePosition({ direction: 'long', size: 1000, leverage: 1, entry_price: 50000 });
     const closed = makePosition({ realized_pnl: -1000, closed_at: '2026-01-01T01:00:00Z' });
     const prices = { BTCUSDT: 53000 };
-    // 10000 + (-1000) + 3000 = 12000
-    expect(calcPortfolioValue(10000, [open], [closed], prices)).toBe(12000);
+    expect(calcPortfolioValue(10000, [open], [closed], prices)).toBe(9060);
   });
 
   test('open position with missing price is skipped', () => {
-    const open = makePosition({ symbol: 'XYZUSDT', direction: 'long', size: 1, leverage: 1, entry_price: 100 });
+    const open = makePosition({ symbol: 'XYZUSDT', direction: 'long', size: 1000, leverage: 1, entry_price: 100 });
     expect(calcPortfolioValue(10000, [open], [], {})).toBe(10000);
   });
 
   test('multiple open positions across symbols', () => {
-    const btcPos = makePosition({ symbol: 'BTCUSDT', direction: 'long', size: 1, leverage: 1, entry_price: 50000 });
-    const ethPos = makePosition({ id: 'pos-2', symbol: 'ETHUSDT', direction: 'short', size: 10, leverage: 2, entry_price: 3000 });
+    // BTC: 2% up on $1000 = $20
+    // ETH: 3.33% down on $2000 short at 2x = -1 * (-3.33%) * 2000 * 2 = $133.33
+    const btcPos = makePosition({ symbol: 'BTCUSDT', direction: 'long', size: 1000, leverage: 1, entry_price: 50000 });
+    const ethPos = makePosition({ id: 'pos-2', symbol: 'ETHUSDT', direction: 'short', size: 2000, leverage: 2, entry_price: 3000 });
     const prices = { BTCUSDT: 51000, ETHUSDT: 2900 };
-    // BTC: 1 * 1000 * 1 * 1 = 1000
-    // ETH: -1 * (2900 - 3000) * 10 * 2 = 2000
-    // total: 10000 + 1000 + 2000 = 13000
-    expect(calcPortfolioValue(10000, [btcPos, ethPos], [], prices)).toBe(13000);
+    // BTC PnL: 1 * (1000/50000) * 1000 * 1 = 20
+    // ETH PnL: -1 * (-100/3000) * 2000 * 2 = 133.33
+    // total: 10000 + 20 + 133.33 = 10153.33
+    const result = calcPortfolioValue(10000, [btcPos, ethPos], [], prices);
+    expect(result).toBeCloseTo(10153.33, 1);
   });
 });
 

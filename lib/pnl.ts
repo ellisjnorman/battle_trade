@@ -3,8 +3,8 @@ import type { Position } from '@/types';
 export function calcUnrealizedPnl(position: Position, currentPrice: number): number {
   if (position.entry_price === 0 || position.status === 'pending') return 0;
   const direction = position.direction === 'long' ? 1 : -1;
-  const priceDelta = currentPrice - position.entry_price;
-  return direction * priceDelta * position.size * position.leverage;
+  const pctChange = (currentPrice - position.entry_price) / position.entry_price;
+  return direction * pctChange * position.size * position.leverage;
 }
 
 export function calcPortfolioValue(
