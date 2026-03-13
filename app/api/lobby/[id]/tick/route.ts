@@ -168,7 +168,25 @@ export async function POST(
     }
   }
 
-  // Get current standings for response
+  // Get current prices for client
+  const { data: latestPrices } = await sb.from('prices').select('symbol, price');
+  const priceMap: Record<string, number> = {};
+  for (const p of latestPrices ?? []) priceMap[p.symbol] = p.price;
+
+  // Get fresh standings for client
+  const activeRoundForStandings = roundEnded && !gameOver ? null : round.id;
+  let standingsData: Array<{ trader_id: string; name: string; portfolio_value: number; return_pct: number; is_eliminated: boolean }> = [];
+  if (activeRoundForStandings) {
+    const rawStandings = await getStandings(lobbyId, activeRoundForStandings, startingBalance);
+    standingsData = rawStandings.map(s => ({
+      trader_id: s.id,
+      name: s.name,
+      portfolio_value: s.portfolioValue,
+      return_pct: s.returnPct,
+      is_eliminated: s.is_eliminated,
+    }));
+  }
+
   const currentRound = roundEnded && !gameOver
     ? { round_number: nextRoundNumber, status: 'active' as const, time_remaining: roundDuration }
     : { round_number: round.round_number, status: round.status as string, time_remaining: timeRemaining };
@@ -180,6 +198,8 @@ export async function POST(
     eliminated,
     game_over: gameOver,
     winner,
+    prices: priceMap,
+    standings: standingsData,
   });
 }
 

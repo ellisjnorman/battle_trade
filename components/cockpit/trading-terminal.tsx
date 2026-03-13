@@ -122,7 +122,13 @@ export default function TradingTerminal() {
   const [leverageTiers, setLeverageTiers] = useState<number[]>(LEVS);
   const [orderBook, setOrderBook] = useState<{ bids: { price: number; size: number; total?: number }[]; asks: { price: number; size: number; total?: number }[]; spread: number; spreadPct: number; midPrice: number } | null>(null);
   const [showOrderBook, setShowOrderBook] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const [showTutorial, setShowTutorial] = useState(0); // increment to re-trigger
+  const [globalRank, setGlobalRank] = useState<number | null>(null);
+  const [totalPlayers, setTotalPlayers] = useState<number | null>(null);
+  const [cameraOn, setCameraOn] = useState(false);
+  const cameraRef = useRef<HTMLVideoElement>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
   const [tradeFlashId, setTradeFlashId] = useState<string | null>(null);
   const prevRpRef = useRef(0);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -300,9 +306,54 @@ export default function TradingTerminal() {
       const t = await lookupTrader();
       if (t) {
         await fetchInitialData(t);
+        // Fetch global rank from profile
+        if (t.profile_id) {
+          try {
+            const r = await fetch(`/api/profile/${t.profile_id}`);
+            if (r.ok) {
+              const p = await r.json();
+              setGlobalRank(p.global_rank ?? null);
+            }
+          } catch {}
+          // Get total players count
+          try {
+            const { count } = await supabase.from('profiles').select('id', { count: 'exact', head: true });
+            setTotalPlayers(count ?? null);
+          } catch {}
+        }
       }
     })();
   }, [lookupTrader, fetchInitialData, lobbyId]);
+
+  // Camera auto-display (preview only, no recording)
+  useEffect(() => {
+    let cancelled = false;
+    if (cameraOn) {
+      navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, facingMode: 'user' }, audio: false })
+        .then(stream => {
+          if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
+          cameraStreamRef.current = stream;
+          if (cameraRef.current) {
+            cameraRef.current.srcObject = stream;
+            cameraRef.current.play().catch(() => {});
+          }
+        })
+        .catch(() => { if (!cancelled) setCameraOn(false); });
+    } else {
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(t => t.stop());
+        cameraStreamRef.current = null;
+      }
+      if (cameraRef.current) cameraRef.current.srcObject = null;
+    }
+    return () => {
+      cancelled = true;
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(t => t.stop());
+        cameraStreamRef.current = null;
+      }
+    };
+  }, [cameraOn]);
 
   // ── Auto-admin tick loop (drives bot trading + round transitions for practice lobbies) ──
   useEffect(() => {
@@ -315,23 +366,32 @@ export default function TradingTerminal() {
         const d = await r.json();
         if (!d.auto) return; // Not an auto-admin lobby
 
-        // Update round info if returned
+        // Update round info
         if (d.round) {
           setRound(prev => prev ? { ...prev, round_number: d.round.round_number, status: d.round.status } : prev);
           setTimeRemaining(Math.round(d.round.time_remaining ?? 0));
         }
-        if (d.game_over || d.status === 'completed') {
-          // Show battle end overlay
-          const myRank = standings.findIndex(s => s.trader?.id === trader?.id) + 1;
-          const myReturn = standings.find(s => s.trader?.id === trader?.id)?.returnPct ?? 0;
-          setBattleEndData({ rank: myRank || 1, totalPlayers: standings.length || 2, returnPct: myReturn });
+
+        // Update prices from tick (keeps chart + PnL live)
+        if (d.prices && typeof d.prices === 'object') {
+          setPrices(prev => ({ ...prev, ...d.prices }));
         }
-        // Refresh standings after eliminations or round changes
-        if (d.eliminated?.length > 0 || d.round?.status === 'active') {
-          try {
-            const sr = await fetch(`/api/lobby/${lobbyId}/leaderboard`);
-            if (sr.ok) { const sd = await sr.json(); setStandings(sd.standings ?? sd.leaderboard ?? []); }
-          } catch {}
+
+        // Update standings from tick (includes live PnL)
+        if (d.standings && Array.isArray(d.standings) && d.standings.length > 0) {
+          setStandings(d.standings.map((s: { trader_id: string; name: string; portfolio_value: number; return_pct: number; is_eliminated: boolean }, i: number) => ({
+            trader: { id: s.trader_id, name: s.name },
+            portfolioValue: s.portfolio_value,
+            returnPct: s.return_pct,
+            rank: i + 1,
+            teamName: null,
+          })));
+        }
+
+        if (d.game_over || d.status === 'completed') {
+          const myRank = (d.standings ?? []).findIndex((s: { trader_id: string }) => s.trader_id === trader?.id) + 1;
+          const myReturn = (d.standings ?? []).find((s: { trader_id: string }) => s.trader_id === trader?.id)?.return_pct ?? 0;
+          setBattleEndData({ rank: myRank || 1, totalPlayers: (d.standings ?? []).length || 2, returnPct: myReturn });
         }
       } catch {}
     };
@@ -871,24 +931,24 @@ export default function TradingTerminal() {
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       {/* RANK HERO — Mario Kart position indicator */}
       <div style={{
-        padding: '10px 14px', borderBottom: `2px solid ${rankColor}40`,
+        padding: '6px 12px', borderBottom: `2px solid ${rankColor}40`,
         background: `linear-gradient(180deg, ${pnlColor}06, transparent)`,
         animation: rankFlash === 'up' ? 'rankUpFlash 1.5s ease-out' : rankFlash === 'down' ? 'rankDownFlash 1.5s ease-out' : 'none',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{
-              ...B, fontSize: 36, lineHeight: 1, color: rankColor,
-              textShadow: `0 0 16px ${rankColor}50`,
+              ...B, fontSize: 24, lineHeight: 1, color: rankColor,
+              textShadow: `0 0 12px ${rankColor}50`,
               animation: myRank === 1 ? 'glowPulse 3s ease-in-out infinite' : 'none',
               transition: 'all 400ms',
             }}>#{myRank || '—'}</span>
             <div>
-              <span style={{ ...B, fontSize: 28, color: pnlColor, lineHeight: 1, display: 'block', textShadow: rp !== 0 ? `0 0 12px ${pnlColor}40` : 'none' }}>{rp >= 0 ? '+' : ''}{rp.toFixed(1)}%</span>
-              <span style={{ ...M, fontSize: 10, color: '#666', marginTop: 2, display: 'block' }}>${pv.toLocaleString(undefined, { maximumFractionDigits: 0 })} · {openPos.length} open</span>
+              <span style={{ ...B, fontSize: 18, color: pnlColor, lineHeight: 1, display: 'block', textShadow: rp !== 0 ? `0 0 10px ${pnlColor}40` : 'none' }}>{rp >= 0 ? '+' : ''}{rp.toFixed(1)}%</span>
+              <span style={{ ...M, fontSize: 9, color: '#666', marginTop: 1, display: 'block' }}>${pv.toLocaleString(undefined, { maximumFractionDigits: 0 })} · {openPos.length} open</span>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             {winStreak >= 2 && <StreakBadge streak={winStreak} />}
             <span style={{ ...M, fontSize: 9, color: '#555' }}>{myRank}/{totalTraders}</span>
           </div>
@@ -900,19 +960,19 @@ export default function TradingTerminal() {
         )}
       </div>
       {/* Direction: LONG / SPOT / SHORT */}
-      <div style={{ display: 'flex', minHeight: 56, borderBottom: '1px solid #1A1A1A' }}>
-        <button onClick={() => setSelectedDirection('long')} style={{ flex: 1, minHeight: 56, ...B, fontSize: 22, borderRadius: 0, background: selectedDirection === 'long' ? '#00FF88' : '#0D0D0D', color: selectedDirection === 'long' ? '#0A0A0A' : '#00FF88', border: 'none', borderBottom: selectedDirection === 'long' ? '3px solid #00FF88' : '3px solid transparent', cursor: 'pointer', transition: 'all 150ms' }}>LONG</button>
-        <button onClick={() => setSelectedDirection('spot')} style={{ flex: 1, minHeight: 56, ...B, fontSize: 22, borderRadius: 0, background: selectedDirection === 'spot' ? '#00BFFF' : '#0D0D0D', color: selectedDirection === 'spot' ? '#0A0A0A' : '#00BFFF', border: 'none', borderLeft: '1px solid #1A1A1A', borderRight: '1px solid #1A1A1A', borderBottom: selectedDirection === 'spot' ? '3px solid #00BFFF' : '3px solid transparent', cursor: 'pointer', transition: 'all 150ms' }}>SPOT</button>
-        <button onClick={() => setSelectedDirection('short')} style={{ flex: 1, minHeight: 56, ...B, fontSize: 22, borderRadius: 0, background: selectedDirection === 'short' ? '#FF3333' : '#0D0D0D', color: selectedDirection === 'short' ? '#FFF' : '#FF3333', border: 'none', borderBottom: selectedDirection === 'short' ? '3px solid #FF3333' : '3px solid transparent', cursor: 'pointer', transition: 'all 150ms' }}>SHORT</button>
+      <div style={{ display: 'flex', minHeight: 38, borderBottom: '1px solid #1A1A1A' }}>
+        <button onClick={() => setSelectedDirection('long')} style={{ flex: 1, minHeight: 38, ...B, fontSize: 14, borderRadius: 0, background: selectedDirection === 'long' ? '#00FF88' : '#0D0D0D', color: selectedDirection === 'long' ? '#0A0A0A' : '#00FF88', border: 'none', borderBottom: selectedDirection === 'long' ? '2px solid #00FF88' : '2px solid transparent', cursor: 'pointer', transition: 'all 150ms' }}>LONG</button>
+        <button onClick={() => setSelectedDirection('spot')} style={{ flex: 1, minHeight: 38, ...B, fontSize: 14, borderRadius: 0, background: selectedDirection === 'spot' ? '#00BFFF' : '#0D0D0D', color: selectedDirection === 'spot' ? '#0A0A0A' : '#00BFFF', border: 'none', borderLeft: '1px solid #1A1A1A', borderRight: '1px solid #1A1A1A', borderBottom: selectedDirection === 'spot' ? '2px solid #00BFFF' : '2px solid transparent', cursor: 'pointer', transition: 'all 150ms' }}>SPOT</button>
+        <button onClick={() => setSelectedDirection('short')} style={{ flex: 1, minHeight: 38, ...B, fontSize: 14, borderRadius: 0, background: selectedDirection === 'short' ? '#FF3333' : '#0D0D0D', color: selectedDirection === 'short' ? '#FFF' : '#FF3333', border: 'none', borderBottom: selectedDirection === 'short' ? '2px solid #FF3333' : '2px solid transparent', cursor: 'pointer', transition: 'all 150ms' }}>SHORT</button>
       </div>
       {/* Strategy Presets — 2x2 grid */}
       {canTrade && (
-        <div style={{ padding: '8px 12px', borderBottom: '1px solid #1A1A1A', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+        <div style={{ padding: '4px 10px', borderBottom: '1px solid #1A1A1A', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
           {STRATEGY_PRESETS.map(s => (
             <button key={s.id} onClick={() => executeStrategy(s.id)} disabled={actionLoading === 'strategy'}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 6px', minHeight: 40, background: '#0A0A0A', border: '1px solid #1A1A1A', borderTop: `2px solid ${s.color}`, borderRadius: 6, cursor: actionLoading === 'strategy' ? 'wait' : 'pointer', transition: 'all 150ms', gap: 6 }}>
-              <span style={{ fontSize: 16 }}>{s.icon}</span>
-              <span style={{ ...B, fontSize: 12, color: '#FFF', lineHeight: 1 }}>{actionLoading === 'strategy' ? '...' : s.label}</span>
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 4px', minHeight: 30, background: '#0A0A0A', border: '1px solid #1A1A1A', borderTop: `2px solid ${s.color}`, borderRadius: 4, cursor: actionLoading === 'strategy' ? 'wait' : 'pointer', transition: 'all 150ms', gap: 4 }}>
+              <span style={{ fontSize: 13 }}>{s.icon}</span>
+              <span style={{ ...B, fontSize: 10, color: '#FFF', lineHeight: 1 }}>{actionLoading === 'strategy' ? '...' : s.label}</span>
             </button>
           ))}
         </div>
@@ -920,7 +980,7 @@ export default function TradingTerminal() {
       {/* Order type tabs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', borderBottom: '1px solid #1A1A1A' }}>
         {ORDER_TYPES.map(ot => (
-          <button key={ot.id} onClick={() => setOrderType(ot.id)} style={{ minHeight: 42, ...B, fontSize: 12, background: orderType === ot.id ? '#1A1A1A' : 'transparent', color: orderType === ot.id ? '#F5A0D0' : '#555', border: 'none', borderBottom: orderType === ot.id ? '2px solid #F5A0D0' : '2px solid transparent', cursor: 'pointer', transition: 'all 100ms' }}>{ot.label}</button>
+          <button key={ot.id} onClick={() => setOrderType(ot.id)} style={{ minHeight: 30, ...B, fontSize: 10, background: orderType === ot.id ? '#1A1A1A' : 'transparent', color: orderType === ot.id ? '#F5A0D0' : '#555', border: 'none', borderBottom: orderType === ot.id ? '2px solid #F5A0D0' : '2px solid transparent', cursor: 'pointer', transition: 'all 100ms' }}>{ot.label}</button>
         ))}
       </div>
       {/* Conditional price inputs */}
@@ -962,19 +1022,19 @@ export default function TradingTerminal() {
       {/* Size */}
       <div style={{ padding: '10px 14px', borderBottom: '1px solid #1A1A1A' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-          <span style={{ ...B, fontSize: 14, color: '#777' }}>SIZE</span>
-          <span style={{ ...M, fontSize: 12, color: '#999' }}>BAL: ${pv.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+          <span style={{ ...B, fontSize: 11, color: '#777' }}>SIZE</span>
+          <span style={{ ...M, fontSize: 10, color: '#999' }}>BAL: ${pv.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 3 }}>
           {SIZES.map(s => (
-            <button key={s} onClick={() => setSelectedSize(s)} style={{ minHeight: 48, ...B, fontSize: 20, borderRadius: 8, background: selectedSize === s ? '#1A1A1A' : '#0D0D0D', color: selectedSize === s ? '#FFF' : '#555', border: selectedSize === s ? '1px solid #F5A0D0' : '1px solid #111', cursor: 'pointer', transition: 'all 100ms' }}>
+            <button key={s} onClick={() => setSelectedSize(s)} style={{ minHeight: 34, ...B, fontSize: 13, borderRadius: 6, background: selectedSize === s ? '#1A1A1A' : '#0D0D0D', color: selectedSize === s ? '#FFF' : '#555', border: selectedSize === s ? '1px solid #F5A0D0' : '1px solid #111', cursor: 'pointer', transition: 'all 100ms' }}>
               ${s >= 1000 ? `${s/1000}K` : s}
             </button>
           ))}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, marginTop: 4 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 3, marginTop: 3 }}>
           {[10, 25, 50, 100].map(pct => (
-            <button key={pct} onClick={() => setSelectedSize(Math.floor(pv * pct / 100))} style={{ minHeight: 38, ...B, fontSize: 14, borderRadius: 6, background: pct === 100 ? 'rgba(255,51,51,0.15)' : '#0D0D0D', color: pct === 100 ? '#FF3333' : '#444', border: pct === 100 ? '1px solid #FF3333' : '1px solid #111', cursor: 'pointer', transition: 'all 100ms' }}>
+            <button key={pct} onClick={() => setSelectedSize(Math.floor(pv * pct / 100))} style={{ minHeight: 28, ...B, fontSize: 11, borderRadius: 4, background: pct === 100 ? 'rgba(255,51,51,0.15)' : '#0D0D0D', color: pct === 100 ? '#FF3333' : '#444', border: pct === 100 ? '1px solid #FF3333' : '1px solid #111', cursor: 'pointer', transition: 'all 100ms' }}>
               {pct === 100 ? 'ALL IN' : `${pct}%`}
             </button>
           ))}
@@ -984,41 +1044,30 @@ export default function TradingTerminal() {
       {selectedDirection !== 'spot' ? (
         <div style={{ padding: '10px 14px', borderBottom: '1px solid #1A1A1A' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-          <span style={{ ...B, fontSize: 14, color: '#777' }}>LEVERAGE</span>
-          <span style={{ ...M, fontSize: 24, color: '#F5A0D0', textShadow: leverage >= leverageTiers[leverageTiers.length - 1] ? '0 0 12px rgba(245,160,208,0.6)' : 'none' }}>{leverage}x</span>
+          <span style={{ ...B, fontSize: 11, color: '#777' }}>LEVERAGE</span>
+          <span style={{ ...M, fontSize: 16, color: '#F5A0D0', textShadow: leverage >= leverageTiers[leverageTiers.length - 1] ? '0 0 12px rgba(245,160,208,0.6)' : 'none' }}>{leverage}x</span>
         </div>
         {(() => {
+          const minLev = leverageTiers[0] ?? 1;
           const maxLev = leverageTiers[leverageTiers.length - 1] ?? 50;
-          const steps = 4;
-          const stepValues = Array.from({ length: steps + 1 }, (_, i) => {
-            const pct = i / steps;
-            const raw = Math.round(maxLev * pct);
-            if (raw === 0) return leverageTiers[0] ?? 1;
-            const nearest = leverageTiers.reduce((prev, curr) => Math.abs(curr - raw) < Math.abs(prev - raw) ? curr : prev);
-            return nearest;
-          });
-          const uniqueSteps = [...new Set(stepValues)].sort((a, b) => a - b);
-          const currentIdx = uniqueSteps.indexOf(leverage);
-          const sliderIdx = currentIdx >= 0 ? currentIdx : uniqueSteps.reduce((prev, curr, i) => Math.abs(curr - leverage) < Math.abs(uniqueSteps[prev] - leverage) ? i : prev, 0);
-          const pct = uniqueSteps.length > 1 ? (sliderIdx / (uniqueSteps.length - 1)) * 100 : 0;
+          const pct = maxLev > minLev ? ((leverage - minLev) / (maxLev - minLev)) * 100 : 0;
           const dangerZone = pct > 75;
+          // Quick-pick buttons at key tiers
+          const quickPicks = [...new Set([minLev, ...leverageTiers.filter(t => t <= maxLev), maxLev])].sort((a, b) => a - b).slice(0, 6);
           return (
             <>
               <div style={{ position: 'relative', height: 36, display: 'flex', alignItems: 'center', padding: '0 2px' }}>
                 <div style={{ position: 'absolute', left: 0, right: 0, height: 6, borderRadius: 3, background: '#1A1A1A', overflow: 'hidden' }}>
-                  <div style={{ width: `${pct}%`, height: '100%', borderRadius: 3, background: dangerZone ? 'linear-gradient(90deg, #F5A0D0, #FF3333)' : 'linear-gradient(90deg, #F5A0D060, #F5A0D0)', transition: 'width 100ms, background 200ms' }} />
+                  <div style={{ width: `${pct}%`, height: '100%', borderRadius: 3, background: dangerZone ? 'linear-gradient(90deg, #F5A0D0, #FF3333)' : 'linear-gradient(90deg, #F5A0D060, #F5A0D0)', transition: 'width 50ms, background 200ms' }} />
                 </div>
-                {uniqueSteps.map((_, i) => (
-                  <div key={i} style={{ position: 'absolute', left: `${(i / (uniqueSteps.length - 1)) * 100}%`, top: '50%', transform: 'translate(-50%, -50%)', width: 3, height: 12, background: i <= sliderIdx ? '#F5A0D0' : '#333', transition: 'background 100ms' }} />
-                ))}
-                <input type="range" min={0} max={uniqueSteps.length - 1} step={1} value={sliderIdx}
-                  onChange={(e) => setLeverage(uniqueSteps[parseInt(e.target.value)])}
+                <input type="range" min={minLev} max={maxLev} step={1} value={leverage}
+                  onChange={(e) => setLeverage(parseInt(e.target.value))}
                   style={{ position: 'absolute', left: 0, right: 0, width: '100%', height: 36, opacity: 0, cursor: 'pointer', zIndex: 2, margin: 0 }} />
-                <div style={{ position: 'absolute', left: `${pct}%`, top: '50%', transform: 'translate(-50%, -50%)', width: 20, height: 20, borderRadius: 10, background: dangerZone ? '#FF3333' : '#F5A0D0', border: '1px solid rgba(255,255,255,0.3)', transition: 'left 100ms, background 200ms', pointerEvents: 'none' }} />
+                <div style={{ position: 'absolute', left: `${pct}%`, top: '50%', transform: 'translate(-50%, -50%)', width: 20, height: 20, borderRadius: 10, background: dangerZone ? '#FF3333' : '#F5A0D0', border: '1px solid rgba(255,255,255,0.3)', transition: 'left 50ms, background 200ms', pointerEvents: 'none' }} />
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
-                {uniqueSteps.map((v, i) => (
-                  <button key={v} onClick={() => setLeverage(v)} style={{ ...B, fontSize: 13, color: i === sliderIdx ? '#F5A0D0' : '#444', background: 'none', border: 'none', cursor: 'pointer', padding: '3px 0', transition: 'color 100ms' }}>{v}x</button>
+                {quickPicks.map(v => (
+                  <button key={v} onClick={() => setLeverage(v)} style={{ ...B, fontSize: 13, color: leverage === v ? '#F5A0D0' : '#444', background: 'none', border: 'none', cursor: 'pointer', padding: '3px 0', transition: 'color 100ms' }}>{v}x</button>
                 ))}
               </div>
               {dangerZone && <div style={{ ...B, fontSize: 8, color: '#FF3333', textAlign: 'center', marginTop: 2, animation: 'pulse 1.5s infinite' }}>HIGH RISK</div>}
@@ -1038,7 +1087,7 @@ export default function TradingTerminal() {
       <div style={{ padding: '10px 14px' }}>
         <button onClick={() => { if (canTrade && selectedDirection) openPosition(selectedDirection, selectedSize); }} disabled={!canExec || actionLoading === 'trade'}
           style={{
-            width: '100%', minHeight: 58, ...B, fontSize: 26, borderRadius: 10,
+            width: '100%', minHeight: 40, ...B, fontSize: 16, borderRadius: 8,
             background: isLockedOut ? '#0D0D0D' : !selectedDirection ? '#111' : !canExec ? '#1A1A1A' : selectedDirection === 'spot' ? '#00BFFF' : selectedDirection === 'long' ? '#00FF88' : '#FF3333',
             color: isLockedOut ? '#FF3333' : !selectedDirection ? '#555' : !canExec ? '#333' : selectedDirection === 'short' ? '#FFF' : '#0A0A0A',
             border: isLockedOut ? '2px solid #FF3333' : !selectedDirection ? '2px solid #333' : canExec ? `2px solid ${selectedDirection === 'spot' ? '#00BFFF' : selectedDirection === 'long' ? '#00FF88' : '#FF3333'}` : '2px solid #1A1A1A',
@@ -1131,9 +1180,9 @@ export default function TradingTerminal() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <span style={{ width: 2, height: 10, background: '#00BFFF', display: 'block' }} />
-          <span style={{ ...B, fontSize: 10, color: '#00BFFF' }}>DEFENSE</span>
+          <span style={{ ...B, fontSize: 14, color: '#00BFFF' }}>DEFENSE</span>
         </div>
-        <span style={{ ...M, fontSize: 9, color: '#00BFFF' }}>{credits.balance}CR</span>
+        <span style={{ ...M, fontSize: 12, color: '#00BFFF' }}>{credits.balance}CR</span>
       </div>
 
       {defenseCooldown > 0 && (
@@ -1155,13 +1204,13 @@ export default function TradingTerminal() {
               title={d.desc}
               style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 5px', minHeight: 32, background: locked ? '#0D0D0D' : isLoading ? 'rgba(0,191,255,0.1)' : '#0A0A0A', border: `1px solid ${locked ? '#1A1A1A' : '#1A1A1A'}`, borderLeft: `2px solid ${locked ? '#333' : canAfford ? '#00BFFF' : '#222'}`, borderRadius: 4, opacity: canAfford ? 1 : 0.6, cursor: locked ? 'not-allowed' : ok ? 'pointer' : 'not-allowed', transition: 'all 150ms', textAlign: 'left', WebkitTapHighlightColor: 'transparent', position: 'relative', overflow: 'hidden' }}>
               {locked && <div style={{ position: 'absolute', top: 1, right: 3, zIndex: 1 }}><span style={{ ...M, fontSize: 7, color: '#555', background: '#1A1A1A', padding: '0 4px', borderRadius: 2 }}>🔒{reqRank}</span></div>}
-              <span style={{ fontSize: 13, flexShrink: 0, width: 18, textAlign: 'center', filter: locked ? 'grayscale(1) brightness(0.5)' : 'none' }}>{d.icon}</span>
+              <span style={{ fontSize: 16, flexShrink: 0, width: 22, textAlign: 'center', filter: locked ? 'grayscale(1) brightness(0.5)' : 'none' }}>{d.icon}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-                  <span style={{ ...B, fontSize: 9, color: locked ? '#444' : '#FFF', lineHeight: 1 }}>{isLoading ? '...' : d.name}</span>
-                  <span style={{ ...M, fontSize: 8, color: locked ? '#333' : canAfford ? '#00BFFF' : '#444', flexShrink: 0 }}>{d.cost}CR</span>
+                  <span style={{ ...B, fontSize: 12, color: locked ? '#444' : '#FFF', lineHeight: 1 }}>{isLoading ? '...' : d.name}</span>
+                  <span style={{ ...M, fontSize: 11, color: locked ? '#333' : canAfford ? '#00BFFF' : '#444', flexShrink: 0 }}>{d.cost}CR</span>
                 </div>
-                <span style={{ ...S, fontSize: 8, color: locked ? '#333' : '#666', lineHeight: 1.1, display: 'block', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.desc}</span>
+                <span style={{ ...S, fontSize: 10, color: locked ? '#333' : '#666', lineHeight: 1.2, display: 'block', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.desc}</span>
               </div>
             </button>
           );
@@ -1176,21 +1225,21 @@ export default function TradingTerminal() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <span style={{ width: 2, height: 10, background: '#F5A0D0', display: 'block' }} />
-          <span style={{ ...B, fontSize: 10, color: '#F5A0D0' }}>MARKET EVENTS</span>
+          <span style={{ ...B, fontSize: 14, color: '#F5A0D0' }}>MARKET EVENTS</span>
         </div>
-        <span style={{ ...M, fontSize: 9, color: '#F5A0D0' }}>{credits.balance}CR</span>
+        <span style={{ ...M, fontSize: 12, color: '#F5A0D0' }}>{credits.balance}CR</span>
       </div>
 
       {/* Target indicator */}
       <div style={{ marginBottom: 3, padding: '2px 6px', border: `1px solid ${selectedTarget ? '#F5A0D0' : '#1A1A1A'}`, background: selectedTarget ? 'rgba(245,160,208,0.05)' : '#0D0D0D', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ ...S, fontSize: 8, color: '#999' }}>TARGET</span>
+        <span style={{ ...S, fontSize: 11, color: '#999' }}>TARGET</span>
         {selectedTarget ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ ...B, fontSize: 9, color: '#F5A0D0' }}>{allTraders.find(t => t.id === selectedTarget)?.name ?? '???'}</span>
+            <span style={{ ...B, fontSize: 12, color: '#F5A0D0' }}>{allTraders.find(t => t.id === selectedTarget)?.name ?? '???'}</span>
             <button onClick={() => setSelectedTarget(null)} style={{ ...S, fontSize: 8, color: '#999', background: 'none', border: 'none', cursor: 'pointer' }}>x</button>
           </div>
         ) : (
-          <span style={{ ...S, fontSize: 8, color: '#666', fontStyle: 'italic' }}>Tap a rival above</span>
+          <span style={{ ...S, fontSize: 11, color: '#666', fontStyle: 'italic' }}>Tap a rival above</span>
         )}
       </div>
 
@@ -1213,13 +1262,13 @@ export default function TradingTerminal() {
               title={a.desc}
               style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 5px', minHeight: 32, background: locked ? '#0D0D0D' : isLoading ? 'rgba(245,160,208,0.1)' : '#0A0A0A', border: `1px solid ${locked ? '#1A1A1A' : '#1A1A1A'}`, borderLeft: `2px solid ${locked ? '#333' : canAfford ? '#F5A0D0' : '#222'}`, borderRadius: 4, opacity: canAfford ? 1 : 0.6, cursor: locked ? 'not-allowed' : ok ? 'pointer' : 'not-allowed', transition: 'all 150ms', textAlign: 'left', WebkitTapHighlightColor: 'transparent', position: 'relative', overflow: 'hidden' }}>
               {locked && <div style={{ position: 'absolute', top: 1, right: 3, zIndex: 1 }}><span style={{ ...M, fontSize: 7, color: '#555', background: '#1A1A1A', padding: '0 4px', borderRadius: 2 }}>🔒{reqRank}</span></div>}
-              <span style={{ fontSize: 13, flexShrink: 0, width: 18, textAlign: 'center', filter: locked ? 'grayscale(1) brightness(0.5)' : 'none' }}>{a.icon}</span>
+              <span style={{ fontSize: 16, flexShrink: 0, width: 22, textAlign: 'center', filter: locked ? 'grayscale(1) brightness(0.5)' : 'none' }}>{a.icon}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-                  <span style={{ ...B, fontSize: 9, color: locked ? '#444' : '#FFF', lineHeight: 1 }}>{isLoading ? '...' : a.name}</span>
-                  <span style={{ ...M, fontSize: 8, color: locked ? '#333' : canAfford ? '#F5A0D0' : '#444', flexShrink: 0 }}>{a.cost}CR</span>
+                  <span style={{ ...B, fontSize: 12, color: locked ? '#444' : '#FFF', lineHeight: 1 }}>{isLoading ? '...' : a.name}</span>
+                  <span style={{ ...M, fontSize: 11, color: locked ? '#333' : canAfford ? '#F5A0D0' : '#444', flexShrink: 0 }}>{a.cost}CR</span>
                 </div>
-                <span style={{ ...S, fontSize: 8, color: locked ? '#333' : '#666', lineHeight: 1.1, display: 'block', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.desc}</span>
+                <span style={{ ...S, fontSize: 10, color: locked ? '#333' : '#666', lineHeight: 1.2, display: 'block', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.desc}</span>
               </div>
             </button>
           );
@@ -1230,12 +1279,12 @@ export default function TradingTerminal() {
 
   const roundHistoryPanel = roundResults.length > 0 ? (
     <div style={{ padding: '8px 14px', borderBottom: '1px solid #1A1A1A' }}>
-      <span style={{ ...B, fontSize: 10, color: '#666', display: 'block', marginBottom: 4 }}>ROUND HISTORY</span>
+      <span style={{ ...B, fontSize: 14, color: '#666', display: 'block', marginBottom: 4 }}>ROUND HISTORY</span>
       {roundResults.map(r => (
-        <div key={r.round_number} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', borderBottom: '1px solid #0D0D0D' }}>
-          <span style={{ ...B, fontSize: 10, color: '#777', width: 20 }}>R{r.round_number}</span>
-          <span style={{ ...B, fontSize: 11, color: '#F5A0D0', flex: 1 }}>{r.winner_name}</span>
-          <span style={{ ...M, fontSize: 10, color: '#00FF88' }}>+{r.winner_return?.toFixed(1)}%</span>
+        <div key={r.round_number} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0', borderBottom: '1px solid #0D0D0D' }}>
+          <span style={{ ...B, fontSize: 13, color: '#777', width: 24 }}>R{r.round_number}</span>
+          <span style={{ ...B, fontSize: 14, color: '#F5A0D0', flex: 1 }}>{r.winner_name}</span>
+          <span style={{ ...M, fontSize: 13, color: '#00FF88' }}>+{r.winner_return?.toFixed(1)}%</span>
         </div>
       ))}
     </div>
@@ -1244,8 +1293,8 @@ export default function TradingTerminal() {
   const leaderboardPanel = (
     <div style={{ padding: '6px 10px', borderBottom: '1px solid #1A1A1A' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-        <span style={{ ...B, fontSize: 10, color: '#777' }}>STANDINGS</span>
-        {myRank > 0 && <span style={{ ...M, fontSize: 10, color: '#F5A0D0' }}>#{myRank}/{totalTraders}</span>}
+        <span style={{ ...B, fontSize: 14, color: '#777' }}>STANDINGS</span>
+        {myRank > 0 && <span style={{ ...M, fontSize: 12, color: '#F5A0D0' }}>#{myRank}/{totalTraders}</span>}
       </div>
       {standings.length === 0 ? (
         <div style={{ padding: '8px 0', textAlign: 'center' }}>
@@ -1279,18 +1328,18 @@ export default function TradingTerminal() {
                 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
-                    <span style={{ ...B, fontSize: 10, color: s.rank === 1 ? '#FFD700' : s.rank === 2 ? '#C0C0C0' : s.rank === 3 ? '#CD7F32' : '#444', width: 18, flexShrink: 0 }}>#{s.rank}</span>
-                    <span style={{ ...S, fontSize: 10, color: me ? '#F5A0D0' : isKO ? '#555' : '#FFF', maxWidth: 70, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: isKO ? 'line-through' : 'none' }}>
+                    <span style={{ ...B, fontSize: 13, color: s.rank === 1 ? '#FFD700' : s.rank === 2 ? '#C0C0C0' : s.rank === 3 ? '#CD7F32' : '#444', width: 22, flexShrink: 0 }}>#{s.rank}</span>
+                    <span style={{ ...S, fontSize: 13, color: me ? '#F5A0D0' : isKO ? '#555' : '#FFF', maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: isKO ? 'line-through' : 'none' }}>
                       {s.teamName ?? s.trader.name}{me ? ' (YOU)' : ''}
                     </span>
-                    {rankDiff > 0 && <span style={{ ...M, fontSize: 8, color: '#00FF88' }}>▲{rankDiff}</span>}
-                    {rankDiff < 0 && <span style={{ ...M, fontSize: 8, color: '#FF3333' }}>▼{Math.abs(rankDiff)}</span>}
-                    {isTarget && <span style={{ ...B, fontSize: 7, color: '#F5A0D0', padding: '0 3px', border: '1px solid #F5A0D0' }}>TGT</span>}
+                    {rankDiff > 0 && <span style={{ ...M, fontSize: 10, color: '#00FF88' }}>▲{rankDiff}</span>}
+                    {rankDiff < 0 && <span style={{ ...M, fontSize: 10, color: '#FF3333' }}>▼{Math.abs(rankDiff)}</span>}
+                    {isTarget && <span style={{ ...B, fontSize: 9, color: '#F5A0D0', padding: '0 3px', border: '1px solid #F5A0D0' }}>TGT</span>}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    {isKO && <span style={{ ...B, fontSize: 8, color: '#FF3333' }}>KO</span>}
-                    <span style={{ ...M, fontSize: 10, color: '#FFF' }}>${s.portfolioValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-                    <span style={{ ...M, fontSize: 9, color: s.returnPct >= 0 ? '#00FF88' : '#FF3333' }}>{s.returnPct >= 0 ? '+' : ''}{s.returnPct.toFixed(1)}%</span>
+                    {isKO && <span style={{ ...B, fontSize: 10, color: '#FF3333' }}>KO</span>}
+                    <span style={{ ...M, fontSize: 12, color: '#FFF' }}>${s.portfolioValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                    <span style={{ ...M, fontSize: 11, color: s.returnPct >= 0 ? '#00FF88' : '#FF3333' }}>{s.returnPct >= 0 ? '+' : ''}{s.returnPct.toFixed(1)}%</span>
                   </div>
                 </div>
                 <div style={{ width: '100%', height: 3, background: '#1A1A1A', overflow: 'hidden' }}>
@@ -1351,16 +1400,16 @@ export default function TradingTerminal() {
     <div style={{ padding: '4px 10px', borderBottom: '1px solid #1A1A1A' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
         <span style={{ width: 4, height: 4, background: '#F5A0D0', display: 'block', animation: 'pulse 2s infinite' }} />
-        <span style={{ ...B, fontSize: 9, color: '#F5A0D0' }}>LIVE FEED</span>
+        <span style={{ ...B, fontSize: 13, color: '#F5A0D0' }}>LIVE FEED</span>
       </div>
-      <div style={{ maxHeight: 60, overflowY: 'auto' }}>
+      <div style={{ maxHeight: 80, overflowY: 'auto' }}>
         {feedItems.length === 0 ? (
-          <span style={{ ...S, fontSize: 9, color: '#222', fontStyle: 'italic' }}>Waiting for action...</span>
+          <span style={{ ...S, fontSize: 12, color: '#222', fontStyle: 'italic' }}>Waiting for action...</span>
         ) : feedItems.slice(0, 4).map(f => (
-          <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 0', borderBottom: '1px solid #0D0D0D' }}>
-            <span style={{ fontSize: 10 }}>{f.icon}</span>
-            <span style={{ ...S, fontSize: 9, color: f.color, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.text}</span>
-            <span style={{ ...M, fontSize: 8, color: '#666' }}>{Math.floor((Date.now() - f.time) / 1000)}s</span>
+          <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 0', borderBottom: '1px solid #0D0D0D' }}>
+            <span style={{ fontSize: 13 }}>{f.icon}</span>
+            <span style={{ ...S, fontSize: 12, color: f.color, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.text}</span>
+            <span style={{ ...M, fontSize: 10, color: '#666' }}>{Math.floor((Date.now() - f.time) / 1000)}s</span>
           </div>
         ))}
       </div>
@@ -1375,7 +1424,7 @@ export default function TradingTerminal() {
   const quickPositions = openPos.length > 0 ? (
     <div style={{ padding: '4px 10px', borderBottom: '1px solid #1A1A1A' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-        <span style={{ ...B, fontSize: 10, color: '#777' }}>POSITIONS</span>
+        <span style={{ ...B, fontSize: 13, color: '#777' }}>POSITIONS</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <button onClick={closeAllPositions} style={{ ...B, fontSize: 8, color: '#FF3333', background: 'none', border: '1px solid #FF3333', padding: '1px 5px', cursor: 'pointer', letterSpacing: '0.05em' }}>CLOSE ALL</button>
           <span style={{ ...B, fontSize: 10, color: openPos.length >= 3 ? '#FF3333' : '#F5A0D0' }}>{openPos.length}/3</span>
@@ -1425,7 +1474,10 @@ export default function TradingTerminal() {
           <span style={{ width: 8, height: 8, background: openPos.length > 0 ? '#F5A0D0' : '#333', display: 'block' }} />
           <span style={{ ...B, fontSize: 15, color: openPos.length > 0 ? '#FFF' : '#555' }}>OPEN POSITIONS</span>
         </div>
-        <span style={{ ...B, fontSize: 15, color: openPos.length >= 3 ? '#FF3333' : openPos.length > 0 ? '#F5A0D0' : '#333' }}>{openPos.length} / 3</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {openPos.length > 0 && <button onClick={closeAllPositions} style={{ ...B, fontSize: 11, color: '#FF3333', background: 'none', border: '1px solid #FF3333', padding: '2px 10px', cursor: 'pointer', letterSpacing: '0.05em' }}>CLOSE ALL</button>}
+          <span style={{ ...B, fontSize: 15, color: openPos.length >= 3 ? '#FF3333' : openPos.length > 0 ? '#F5A0D0' : '#333' }}>{openPos.length} / 3</span>
+        </div>
       </div>
       {openPos.length === 0 ? (
         <div style={{ padding: '24px 20px', textAlign: 'center', background: 'linear-gradient(180deg, rgba(245,160,208,0.03), transparent)' }}>
@@ -1580,7 +1632,7 @@ export default function TradingTerminal() {
         .price-ticker-scroll::-webkit-scrollbar { display: none; }
         @media (max-width: 767px) {
           .top-bar { padding: 0 8px !important; }
-          .top-bar-logo { height: 24px !important; }
+          .top-bar-logo { height: 40px !important; }
           .top-bar-lobby-name { display: none !important; }
           .top-bar-user { max-width: 60px !important; }
           .top-bar-pnl { font-size: 11px !important; }
@@ -1652,7 +1704,7 @@ export default function TradingTerminal() {
         {/* TOP BAR */}
         <div className="top-bar" style={{ minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 10px', borderBottom: '2px solid #1A1A1A', background: 'linear-gradient(180deg, #111, #0D0D0D)', flexShrink: 0, gap: 6, flexWrap: 'nowrap', overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flexShrink: 1 }}>
-            <img src="/brand/logo-main.png" alt="Battle Trade" className="top-bar-logo" style={{ height: 28, width: 'auto', flexShrink: 0 }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <img src="/brand/logo-main.png" alt="Battle Trade" className="top-bar-logo" style={{ height: 56, width: 'auto', flexShrink: 0 }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
             <span className="top-bar-lobby-name" style={{ ...B, fontSize: 12, color: '#555', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lobbyName || 'LOBBY'}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
@@ -1671,23 +1723,19 @@ export default function TradingTerminal() {
                 <div style={{ width: `${Math.max(0, Math.min(100, (pv / startingBalance) * 100))}%`, height: '100%', borderRadius: 3, background: pv >= startingBalance * 0.6 ? '#00FF88' : pv >= startingBalance * 0.3 ? '#F5A0D0' : '#FF3333', transition: 'width 500ms' }} />
               </div>
             </div>
-            {/* RANK — clean pill */}
-            <div className="rank-badge" style={{
-              display: 'flex', alignItems: 'center', gap: 3, padding: '0 10px', minHeight: 34, flexShrink: 0,
-              borderRadius: 8,
-              background: `${rankColor}12`,
-              border: `1px solid ${rankColor}40`,
-              animation: rankFlash === 'up' ? 'rankUpFlash 1.5s ease-out' : rankFlash === 'down' ? 'rankDownFlash 1.5s ease-out' : 'none',
-            }}>
-              <span style={{
-                ...B, fontSize: 22, lineHeight: 1, color: rankColor,
-                textShadow: `0 0 10px ${rankColor}40`,
-              }}>#{myRank || '—'}</span>
-              <span style={{ ...M, fontSize: 10, color: '#555', lineHeight: 1 }}>/{totalTraders}</span>
+            {/* Lobby rank (small) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px', minHeight: 26, flexShrink: 0, background: `${rankColor}08`, border: `1px solid ${rankColor}25`, borderRadius: 6, animation: rankFlash === 'up' ? 'rankUpFlash 1.5s ease-out' : rankFlash === 'down' ? 'rankDownFlash 1.5s ease-out' : 'none' }}>
+              <span style={{ ...B, fontSize: 14, color: rankColor }}>#{myRank || '—'}</span>
+              <span style={{ ...M, fontSize: 8, color: '#444' }}>/{totalTraders}</span>
             </div>
-            <div className="top-bar-user" style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+            {/* Account + Global Rank */}
+            <div className="top-bar-user" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
               <span style={{ width: 6, height: 6, background: '#F5A0D0', display: 'block', animation: 'liveDot 2s ease-in-out infinite', flexShrink: 0 }} />
               <span style={{ ...B, fontSize: 11, color: '#FFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 80 }}>{trader?.name}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 4, background: globalRank ? 'rgba(245,160,208,0.1)' : 'rgba(255,255,255,0.03)', border: `1px solid ${globalRank ? '#F5A0D030' : '#22222280'}` }}>
+                <span style={{ ...S, fontSize: 7, color: '#777', textTransform: 'uppercase', letterSpacing: '0.04em' }}>WORLD</span>
+                <span style={{ ...B, fontSize: 13, color: globalRank ? '#F5A0D0' : '#444' }}>#{globalRank || '—'}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -1856,7 +1904,7 @@ export default function TradingTerminal() {
 
           {/* ═══ DESKTOP (>= 768px) ═══ */}
           <div className="hidden md:flex" style={{ flex: 1, overflow: 'hidden' }}>
-            {/* LEFT: P&L + Standings + Positions + Feed + History + Arsenal + Chat */}
+            {/* LEFT: P&L + Standings + Positions + Feed + History + Arsenal + Camera */}
             <div style={{ width: 310, flexShrink: 0, borderRight: '1px solid #1A1A1A', display: 'flex', flexDirection: 'column', background: '#0A0A0A', overflow: 'hidden' }}>
               {/* Top fixed: Effects */}
               <div style={{ flexShrink: 0 }}>
@@ -1870,6 +1918,36 @@ export default function TradingTerminal() {
                 {roundHistoryPanel}
                 {arsenalPanel}
                 {defensePanel}
+              </div>
+              {/* Bottom: Camera / Stream */}
+              <div style={{ flexShrink: 0, borderTop: '1px solid #1A1A1A' }}>
+                {cameraOn ? (
+                  <div style={{ position: 'relative', background: '#000' }}>
+                    <video ref={cameraRef} autoPlay playsInline muted style={{ width: '100%', height: 'auto', display: 'block', transform: 'scaleX(-1)' }} />
+                    <div style={{ position: 'absolute', top: 6, left: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ width: 8, height: 8, background: '#FF3333', borderRadius: '50%', animation: 'liveDot 1.5s ease-in-out infinite' }} />
+                      <span style={{ ...B, fontSize: 10, color: '#FFF', textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>LIVE</span>
+                    </div>
+                    <button
+                      onClick={() => setCameraOn(false)}
+                      style={{ position: 'absolute', top: 6, right: 8, ...B, fontSize: 9, color: '#FF3333', background: 'rgba(0,0,0,0.6)', border: '1px solid #FF3333', padding: '2px 8px', cursor: 'pointer' }}
+                    >STOP</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setCameraOn(true)}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      padding: '12px 16px', background: '#111', border: 'none', cursor: 'pointer',
+                      ...B, fontSize: 12, color: '#555', transition: 'all 200ms',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = '#F5A0D0'; e.currentTarget.style.background = 'rgba(245,160,208,0.06)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = '#555'; e.currentTarget.style.background = '#111'; }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m23 7-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                    <span>START CAMERA</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1972,48 +2050,11 @@ export default function TradingTerminal() {
                   </div>
                 )}
               </div>
-              {/* Bottom: Open Positions + Chat */}
-              <div style={{ flexShrink: 0, borderTop: '2px solid #333', display: 'flex', flexDirection: 'column', maxHeight: 280, minHeight: 160 }}>
-                {/* Compact positions row */}
-                {openPos.length > 0 && (
-                  <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #1A1A1A', flexShrink: 0, overflowX: 'auto', background: '#0D0D0D' }}>
-                    <div style={{ padding: '4px 12px', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, borderRight: '1px solid #1A1A1A' }}>
-                      <span style={{ ...B, fontSize: 10, color: '#555' }}>POSITIONS</span>
-                      <span style={{ ...M, fontSize: 9, color: openPos.length >= 3 ? '#FF3333' : '#F5A0D0' }}>{openPos.length}/3</span>
-                    </div>
-                    {openPos.map(p => {
-                      const cp = prices[p.symbol] ?? 0;
-                      const pnl = cp > 0 && p.entry_price > 0 ? (p.direction === 'long' ? (cp - p.entry_price) / p.entry_price * p.size * p.leverage : (p.entry_price - cp) / p.entry_price * p.size * p.leverage) : 0;
-                      const pct = p.size > 0 ? (pnl / p.size) * 100 : 0;
-                      const dc = p.direction === 'long' ? '#00FF88' : '#FF3333';
-                      const sym = p.symbol.replace('USDT', '').replace('USD', '');
-                      const isClosing = actionLoading === p.id;
-                      return (
-                        <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderRight: '1px solid #111', flexShrink: 0 }}>
-                          <span style={{ ...B, fontSize: 10, color: dc }}>{p.direction === 'long' ? 'L' : 'S'}</span>
-                          <span style={{ ...M, fontSize: 11, color: '#FFF' }}>{sym}</span>
-                          <span style={{ ...M, fontSize: 11, fontWeight: 700, color: pnl >= 0 ? '#00FF88' : '#FF3333' }}>{pnl >= 0 ? '+' : ''}{pct.toFixed(1)}%</span>
-                          <span style={{ ...M, fontSize: 9, color: '#666' }}>${p.size} @ {p.leverage}x</span>
-                          <button onClick={() => closePosition(p.id)} disabled={isClosing} style={{ ...B, fontSize: 9, color: '#FF3333', background: 'none', border: '1px solid #FF333333', padding: '2px 6px', cursor: isClosing ? 'not-allowed' : 'pointer', opacity: isClosing ? 0.4 : 1 }}>{isClosing ? '...' : '✕'}</button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {/* Chat */}
-                <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-                  {trader ? (
-                    <LobbyChat lobbyId={lobbyId} userId={trader.id} userName={trader.name} userRole="competitor" bottomPanel onCommand={handleChatCommand} />
-                  ) : (
-                    <div style={{ padding: '20px', textAlign: 'center' }}>
-                      <span style={{ ...S, fontSize: 12, color: '#333' }}>Join to chat</span>
-                    </div>
-                  )}
-                </div>
-              </div>
+              {/* Bottom: Open Positions */}
+              {bottomPositionStrip}
             </div>
 
-            {/* RIGHT: Quick Positions + Order Entry + Defense */}
+            {/* RIGHT: Quick Positions + Order Entry + Chat Toggle */}
             <div style={{ width: 310, flexShrink: 0, borderLeft: '1px solid #1A1A1A', display: 'flex', flexDirection: 'column', background: '#0A0A0A', overflow: 'hidden' }}>
               {/* Positions strip (compact, fixed) */}
               <div style={{ flexShrink: 0, maxHeight: 120, overflowY: 'auto' }}>
@@ -2023,6 +2064,45 @@ export default function TradingTerminal() {
               <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, WebkitOverflowScrolling: 'touch' }}>
                 {orderPanel}
               </div>
+              {/* Chat toggle button — fixed at bottom of right column */}
+              <button
+                onClick={() => setShowChat(!showChat)}
+                style={{
+                  ...B, fontSize: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  padding: '10px 16px', background: showChat ? 'rgba(245,160,208,0.1)' : '#111',
+                  color: showChat ? '#F5A0D0' : '#666', border: 'none', borderTop: '1px solid #1A1A1A',
+                  cursor: 'pointer', transition: 'all 200ms',
+                }}
+              >
+                <span style={{ fontSize: 14 }}>💬</span>
+                <span>{showChat ? 'HIDE CHAT' : 'OPEN CHAT'}</span>
+              </button>
+            </div>
+
+            {/* CHAT SLIDE-OUT — slides in from right */}
+            <div style={{
+              width: showChat ? 320 : 0, flexShrink: 0, overflow: 'hidden',
+              borderLeft: showChat ? '1px solid #1A1A1A' : 'none',
+              transition: 'width 250ms cubic-bezier(0.4, 0, 0.2, 1)',
+              display: 'flex', flexDirection: 'column', background: '#0A0A0A',
+            }}>
+              {showChat && (
+                <>
+                  <div style={{ padding: '8px 12px', borderBottom: '1px solid #1A1A1A', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+                    <span style={{ ...B, fontSize: 14, color: '#FFF' }}>LOBBY CHAT</span>
+                    <button onClick={() => setShowChat(false)} style={{ ...B, fontSize: 10, color: '#555', background: 'none', border: '1px solid #333', padding: '2px 8px', cursor: 'pointer' }}>✕</button>
+                  </div>
+                  <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                    {trader ? (
+                      <LobbyChat lobbyId={lobbyId} userId={trader.id} userName={trader.name} userRole="competitor" bottomPanel onCommand={handleChatCommand} />
+                    ) : (
+                      <div style={{ padding: '20px', textAlign: 'center' }}>
+                        <span style={{ ...S, fontSize: 12, color: '#333' }}>Join to chat</span>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
